@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import { resolve } from 'path'
-import { copyFileSync, mkdirSync } from 'fs'
+import { copyFileSync, mkdirSync, readFileSync } from 'fs'
 
 export default defineConfig({
   plugins: [
@@ -9,6 +9,11 @@ export default defineConfig({
       closeBundle() {
         mkdirSync('dist', { recursive: true })
         copyFileSync('public/manifest.json', 'dist/manifest.json')
+
+        const contentScript = readFileSync('dist/content.js', 'utf8')
+        if (/^\s*import\s/.test(contentScript)) {
+          throw new Error('dist/content.js must be self-contained because Chrome content_scripts are not ES modules')
+        }
       }
     }
   ],
