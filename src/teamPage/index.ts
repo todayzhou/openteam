@@ -273,9 +273,20 @@ function renderMessages(): void {
     body.className = 'message-body'
     body.textContent = message.content
 
-    article.append(meta)
-    if (message.references?.length) article.append(referenceBox(message.references[0]))
-    article.append(body)
+    if (message.type === 'system') {
+      article.append(meta, body)
+      messagesEl.append(article)
+      continue
+    }
+
+    const avatar = document.createElement('div')
+    avatar.className = `message-avatar ${messageToneClass(message)}`
+    avatar.textContent = messageAvatarLabel(message)
+
+    const content = document.createElement('div')
+    content.className = 'message-content'
+    content.append(meta, body)
+    if (message.references?.length) content.append(referenceBox(message.references[0]))
 
     if (message.type === 'assistant') {
       const tools = document.createElement('div')
@@ -286,9 +297,10 @@ function renderMessages(): void {
       quote.textContent = '引用'
       quote.addEventListener('click', () => setReference(message))
       tools.append(quote)
-      article.append(tools)
+      content.append(tools)
     }
 
+    article.append(avatar, content)
     messagesEl.append(article)
   }
   messagesEl.scrollTop = messagesEl.scrollHeight
@@ -369,8 +381,13 @@ function renderMentionPanel(): void {
     const option = document.createElement('button')
     option.type = 'button'
     option.className = `mention-option${index === mentionIndex ? ' active' : ''}`
-    option.textContent = `@${role.name}`
+    const avatar = document.createElement('span')
+    avatar.className = `mention-avatar ${roleToneClass(role.name)}`
+    avatar.textContent = roleAvatarLabel(role.name)
+    const name = document.createElement('span')
+    name.textContent = role.name
     option.addEventListener('click', () => insertMention(role))
+    option.append(avatar, name)
     mentionPanelEl.append(option)
   })
 }
@@ -428,6 +445,13 @@ function roleCard(role: GroupRole): HTMLElement {
     renderRolePanel()
   })
 
+  const avatar = document.createElement('div')
+  avatar.className = `role-avatar ${roleToneClass(role.name)}`
+  avatar.textContent = roleAvatarLabel(role.name)
+
+  const main = document.createElement('div')
+  main.className = 'role-card-main'
+
   const row = document.createElement('div')
   row.className = 'role-row'
   const name = document.createElement('div')
@@ -442,13 +466,18 @@ function roleCard(role: GroupRole): HTMLElement {
   const meta = document.createElement('div')
   meta.className = 'chat-row tiny'
   meta.append(textNode(`cursor ${role.contextCursor}`), textNode(role.geminiConversationUrl ? '已有会话' : '未绑定会话'))
-  card.append(row, description, meta)
+  main.append(row, description, meta)
+
+  const more = document.createElement('div')
+  more.className = 'role-more'
+  more.textContent = '···'
+  card.append(avatar, main, more)
 
   if (role.status === 'error') {
     const error = document.createElement('div')
     error.className = 'reference-box'
     error.textContent = '角色异常。若 Gemini 未登录，请打开登录页后点击恢复角色。'
-    card.append(error)
+    main.append(error)
   }
   return card
 }
@@ -511,6 +540,29 @@ function statusPill(status: string, label: string): HTMLElement {
   pill.className = `status-pill status-${status}`
   pill.textContent = label
   return pill
+}
+
+function roleToneClass(seed: string | undefined): string {
+  const source = seed || 'OpenTeam'
+  let hash = 0
+  for (let index = 0; index < source.length; index += 1) hash = (hash + source.charCodeAt(index) * (index + 1)) % 6
+  return `role-tone-${hash}`
+}
+
+function roleAvatarLabel(name: string | undefined): string {
+  const trimmed = name?.trim()
+  if (!trimmed) return 'AI'
+  return trimmed.slice(0, Math.min(2, trimmed.length)).toUpperCase()
+}
+
+function messageAvatarLabel(message: GroupMessage): string {
+  if (message.type === 'user') return '你'
+  return roleAvatarLabel(message.roleName)
+}
+
+function messageToneClass(message: GroupMessage): string {
+  if (message.type === 'user') return 'role-tone-5'
+  return roleToneClass(message.roleName)
 }
 
 function textNode(content: string): Text {
@@ -587,7 +639,7 @@ function chatStatusLabel(status: GroupChat['status']): string {
   const labels: Record<GroupChat['status'], string> = {
     draft: '草稿',
     initializing: '初始化中',
-    ready: 'Ready',
+    ready: '进行中',
     running: '运行中',
     error: '异常',
   }
@@ -596,9 +648,9 @@ function chatStatusLabel(status: GroupChat['status']): string {
 
 function roleStatusLabel(status: RoleStatus): string {
   const labels: Record<RoleStatus, string> = {
-    pending: '待初始化',
+    pending: '待唤醒',
     loading: '加载中',
-    ready: 'Ready',
+    ready: '就绪',
     thinking: '回复中',
     error: '异常',
   }
@@ -684,7 +736,7 @@ function clampShellPosition(): void {
 function setWindowMinimized(minimized: boolean): void {
   if (appShellEl.style.transform !== 'none') ensureShellPositioned()
   appShellEl.classList.toggle('minimized', minimized)
-  toggleWindowSizeEl.textContent = minimized ? '展开' : '缩小'
+  toggleWindowSizeEl.textContent = minimized ? '□' : '−'
   toggleWindowSizeEl.setAttribute('aria-expanded', String(!minimized))
   window.requestAnimationFrame(clampShellPosition)
 }
@@ -727,6 +779,15 @@ function registerFloatingWindowControls(): void {
 function registerUi(): void {
   requireElement<HTMLButtonElement>('#refresh-store').addEventListener('click', () => {
     refreshStore().catch(error => showError(error instanceof Error ? error.message : String(error)))
+  })
+
+  requireElement<HTMLButtonElement>('#quick-create-chat').addEventListener('click', () => {
+    const mode = newChatModeEl.value as RoomMode
+    runCommand('GROUP_CHAT_CREATE', { name: '新群聊', mode, roles: [] }).catch(error => showError(error.message))
+  })
+
+  requireElement<HTMLButtonElement>('#close-window').addEventListener('click', () => {
+    window.close()
   })
 
   requireElement<HTMLFormElement>('#create-chat-form').addEventListener('submit', event => {
