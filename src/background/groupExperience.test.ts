@@ -5,17 +5,18 @@ type RuntimeMessage = { type: string; [key: string]: unknown }
 type MessageSender = chrome.runtime.MessageSender
 
 type BackgroundHarness = {
-  stored: Record<string, OpenTeamStore>
+  stored: Record<string, unknown>
   storeKey: string
   tabsSendMessage: ReturnType<typeof vi.fn>
   runtimeSendMessage: ReturnType<typeof vi.fn>
+  getStore: () => Promise<OpenTeamStore>
   invoke: (message: RuntimeMessage, sender?: MessageSender) => Promise<unknown>
 }
 
 async function setupBackground(initialStore?: OpenTeamStore): Promise<BackgroundHarness> {
   vi.resetModules()
-  const { STORE_KEY, createDefaultStore } = await import('../group/store')
-  const stored: Record<string, OpenTeamStore> = {
+  const { STORE_KEY, createDefaultStore, loadStore } = await import('../group/store')
+  const stored: Record<string, unknown> = {
     [STORE_KEY]: structuredClone(initialStore ?? createDefaultStore()),
   }
   const listeners: Array<(message: RuntimeMessage, sender: MessageSender, sendResponse: (response: unknown) => void) => boolean> = []
@@ -31,9 +32,22 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
     },
     storage: {
       local: {
-        get: vi.fn(async (key: string) => ({ [key]: stored[key] })),
-        set: vi.fn(async (items: Record<string, OpenTeamStore>) => {
+        get: vi.fn(async (key?: string | string[] | null) => {
+          if (key === null || typeof key === 'undefined') {
+            return structuredClone(stored)
+          }
+          if (Array.isArray(key)) {
+            return Object.fromEntries(key.map(item => [item, structuredClone(stored[item])]))
+          }
+          return { [key]: structuredClone(stored[key]) }
+        }),
+        set: vi.fn(async (items: Record<string, unknown>) => {
           Object.assign(stored, structuredClone(items))
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            delete stored[key]
+          }
         }),
       },
     },
@@ -55,6 +69,7 @@ async function setupBackground(initialStore?: OpenTeamStore): Promise<Background
     storeKey: STORE_KEY,
     tabsSendMessage,
     runtimeSendMessage,
+    getStore: loadStore,
     invoke: (message, sender = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0, url: 'https://gemini.google.com/app/test' }) =>
       new Promise(resolve => {
         listeners[0](message, sender, resolve)
@@ -82,8 +97,9 @@ describe('background group chat experience handlers', () => {
 
     expect(rejected.ok).toBe(false)
     expect(rejected.error).toBe('人员名称不能为空')
-    expect(harness.stored[harness.storeKey].chatsById['chat-1'].roleIds).toEqual([])
-    expect(harness.stored[harness.storeKey].rolesById).toEqual({})
+    const rejectedStore = await harness.getStore()
+    expect(rejectedStore.chatsById['chat-1'].roleIds).toEqual([])
+    expect(rejectedStore.rolesById).toEqual({})
 
     const accepted = await harness.invoke({
       type: 'GROUP_ROLES_CREATE_BATCH',
@@ -116,7 +132,8 @@ describe('background group chat experience handlers', () => {
     const denied = await harness.invoke({ type: 'ROLE_TEMPLATE_DELETE', templateId: 'template-used' }) as { ok: boolean; error: string }
     expect(denied.ok).toBe(false)
     expect(denied.error).toBe('该人员库人员已被群聊使用，不能删除')
-    expect(harness.stored[harness.storeKey].roleTemplatesById['template-used']).toBeDefined()
+    const deniedStore = await harness.getStore()
+    expect(deniedStore.roleTemplatesById['template-used']).toBeDefined()
 
     const deleted = await harness.invoke({ type: 'ROLE_TEMPLATE_DELETE', templateId: 'template-unused' }) as { ok: boolean; store: OpenTeamStore }
     expect(deleted.ok).toBe(true)
@@ -173,8 +190,9 @@ describe('background group chat experience handlers', () => {
     const prompt = promptCalls[0][1]
     expect(prompt.includesPersona).toBe(true)
     expect(prompt.content).toContain('第一次必须发送的人设')
-    expect(harness.stored[harness.storeKey].rolesById['role-1'].geminiConversationUrl).toBeUndefined()
-    expect(harness.stored[harness.storeKey].rolesById['role-1'].geminiConversationId).toBeUndefined()
+    const storedAfterFirstPrompt = await harness.getStore()
+    expect(storedAfterFirstPrompt.rolesById['role-1'].geminiConversationUrl).toBeUndefined()
+    expect(storedAfterFirstPrompt.rolesById['role-1'].geminiConversationId).toBeUndefined()
   })
 
   it('does not repeat persona after the first prompt is acknowledged', async () => {
@@ -323,7 +341,7 @@ describe('background group chat experience handlers', () => {
     const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请评估这个方案' }) as { ok: boolean; message: { id: string } }
 
     expect(response.ok).toBe(true)
-    const stored = harness.stored[harness.storeKey]
+    const stored = await harness.getStore()
     expect(stored.messagesById[response.message.id].status).toBe('error')
     expect(stored.messagesById[response.message.id].deliveryStatus?.['role-1']).toBe('error')
     expect(stored.rolesById['role-1'].status).toBe('error')
