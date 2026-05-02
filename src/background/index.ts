@@ -321,6 +321,60 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, timestamp: nu
   return chat
 }
 
+function duplicatedChatName(store: OpenTeamStore, sourceName: string): string {
+  const baseName = `${sourceName} 副本`
+  const existingNames = new Set(store.chatOrder.map(chatId => store.chatsById[chatId]?.name).filter(Boolean))
+  if (!existingNames.has(baseName)) return baseName
+
+  let index = 2
+  while (existingNames.has(`${baseName} ${index}`)) index += 1
+  return `${baseName} ${index}`
+}
+
+function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, timestamp: number): { chat: GroupChat; roles: GroupRole[] } {
+  const sourceChat = requireChat(store, sourceChatId)
+  const chat: GroupChat = {
+    id: newId('chat'),
+    name: duplicatedChatName(store, sourceChat.name),
+    ...(sourceChat.description ? { description: sourceChat.description } : {}),
+    mode: sourceChat.mode,
+    roleIds: [],
+    messageIds: [],
+    nextMessageSeq: 1,
+    status: sourceChat.roleIds.length > 0 ? 'initializing' : 'draft',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+  const roles: GroupRole[] = []
+
+  store.chatsById[chat.id] = chat
+  store.chatOrder.unshift(chat.id)
+  store.currentChatId = chat.id
+
+  for (const sourceRoleId of sourceChat.roleIds) {
+    const sourceRole = store.rolesById[sourceRoleId]
+    if (!sourceRole) continue
+    const role: GroupRole = {
+      id: newId('role'),
+      chatId: chat.id,
+      ...(sourceRole.templateId ? { templateId: sourceRole.templateId } : {}),
+      name: sourceRole.name,
+      ...(sourceRole.description ? { description: sourceRole.description } : {}),
+      ...(sourceRole.systemPrompt ? { systemPrompt: sourceRole.systemPrompt } : {}),
+      ...(sourceRole.avatarColor ? { avatarColor: sourceRole.avatarColor } : {}),
+      status: 'pending',
+      contextCursor: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    store.rolesById[role.id] = role
+    chat.roleIds.push(role.id)
+    roles.push(role)
+  }
+
+  return { chat, roles }
+}
+
 async function handleStoreGet(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
   rememberHost(sender, message.hostTabId)
   const store = await loadStore()
@@ -331,6 +385,13 @@ async function handleChatCreate(message: RuntimeMessage) {
   const { store, result } = await mutateStore(store => createChat(store, message, now()))
   await broadcastStoreUpdated(store)
   return { ok: true, chat: result, store }
+}
+
+async function handleChatDuplicate(message: RuntimeMessage) {
+  const { store, result } = await mutateStore(store => duplicateChat(store, message.chatId, now()))
+  log.info('chat-duplicate:stored', { sourceChatId: message.chatId, chatId: result.chat.id, roleCount: result.roles.length })
+  await broadcastStoreUpdated(store)
+  return { ok: true, chat: result.chat, roles: result.roles, store }
 }
 
 async function handleChatSwitch(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
@@ -1052,6 +1113,8 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
         return handleStoreGet(message, sender)
       case 'GROUP_CHAT_CREATE':
         return handleChatCreate(message)
+      case 'GROUP_CHAT_DUPLICATE':
+        return handleChatDuplicate(message)
       case 'GROUP_CHAT_SWITCH':
         return handleChatSwitch(message, sender)
       case 'GROUP_CHAT_UPDATE':

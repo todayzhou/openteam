@@ -106,7 +106,7 @@ describe('team.html chat creation UI', () => {
     expect(source).not.toContain("'#initialize-role'")
   })
 
-  it('renders chat actions through a three-dot menu that updates chat names', () => {
+  it('renders chat actions through a three-dot menu that updates, duplicates, and deletes chats', () => {
     const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
 
@@ -114,8 +114,10 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("menuButton.textContent = '⋯'")
     expect(source).toContain("menu.className = 'chat-action-menu'")
     expect(source).toContain("rename.textContent = '编辑名称'")
+    expect(source).toContain("duplicate.textContent = '复制群聊'")
     expect(source).toContain("remove.textContent = '删除群聊'")
     expect(source).toContain("runCommand('GROUP_CHAT_UPDATE'")
+    expect(source).toContain("runCommand('GROUP_CHAT_DUPLICATE'")
     expect(source).toContain("sendRuntimeMessage('GROUP_CHAT_DELETE'")
     expect(source).toContain("response.error === 'Unknown OpenTeam message'")
     expect(source).toContain('deleteChatFromLocalStore(chatId)')

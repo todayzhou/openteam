@@ -376,6 +376,15 @@ function chatActionMenu(chat: GroupChat): HTMLElement {
     }
     runCommand('GROUP_CHAT_UPDATE', { chatId: chat.id, patch: { name: nextName } }).catch(error => showError(error.message))
   })
+  const duplicate = document.createElement('button')
+  duplicate.type = 'button'
+  duplicate.className = 'btn btn-ghost'
+  duplicate.textContent = '复制群聊'
+  duplicate.addEventListener('click', () => {
+    chatMenuChatId = undefined
+    renderChatList()
+    runCommand('GROUP_CHAT_DUPLICATE', { chatId: chat.id }).catch(error => showError(error.message))
+  })
   const remove = document.createElement('button')
   remove.type = 'button'
   remove.className = 'btn btn-ghost btn-danger'
@@ -386,7 +395,7 @@ function chatActionMenu(chat: GroupChat): HTMLElement {
     if (!window.confirm(`确定删除「${chat.name}」吗？删除后这个群聊的消息和角色都会移除。`)) return
     deleteChat(chat.id).catch(error => showError(error.message))
   })
-  menu.append(rename, remove)
+  menu.append(rename, duplicate, remove)
   return menu
 }
 

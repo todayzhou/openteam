@@ -413,6 +413,77 @@ describe('background group chat experience handlers', () => {
     expect(markedRead.store.viewState?.chatHasNewMessageById?.['chat-2']).toBeUndefined()
   })
 
+  it('duplicates a chat with copied roles but without messages or Gemini conversation bindings', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = {
+      ...makeChat('chat-1', ['role-1', 'role-2']),
+      name: '新闻调查组',
+      description: '用于调查类讨论',
+      mode: 'collaborative',
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+    }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '调查记者', {
+      templateId: 'template-1',
+      description: '查事实',
+      avatarColor: '#123456',
+      contextCursor: 3,
+      geminiConversationId: 'conversation-1',
+      geminiConversationUrl: 'https://gemini.google.com/app/conversation-1',
+      lastPromptMessageId: 'msg-1',
+      lastReplyAt: 20,
+    })
+    store.rolesById['role-2'] = makeRole('chat-1', 'role-2', '财务分析师')
+    store.messagesById['msg-1'] = {
+      id: 'msg-1',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'user',
+      content: '历史问题',
+      createdAt: 1,
+      status: 'sent',
+    }
+    const harness = await setupBackground(store)
+
+    const duplicated = await harness.invoke({ type: 'GROUP_CHAT_DUPLICATE', chatId: 'chat-1' }) as { ok: boolean; chat: GroupChat; roles: GroupRole[]; store: OpenTeamStore }
+
+    expect(duplicated.ok).toBe(true)
+    expect(duplicated.chat).toMatchObject({
+      name: '新闻调查组 副本',
+      description: '用于调查类讨论',
+      mode: 'collaborative',
+      messageIds: [],
+      nextMessageSeq: 1,
+      status: 'initializing',
+    })
+    expect(duplicated.chat.id).not.toBe('chat-1')
+    expect(duplicated.store.currentChatId).toBe(duplicated.chat.id)
+    expect(duplicated.store.chatOrder[0]).toBe(duplicated.chat.id)
+    expect(duplicated.chat.roleIds).toHaveLength(2)
+    expect(duplicated.roles.map(role => role.name)).toEqual(['调查记者', '财务分析师'])
+
+    const copiedReporter = duplicated.roles[0]
+    expect(copiedReporter).toMatchObject({
+      chatId: duplicated.chat.id,
+      templateId: 'template-1',
+      name: '调查记者',
+      description: '查事实',
+      systemPrompt: '调查记者人设',
+      avatarColor: '#123456',
+      status: 'pending',
+      contextCursor: 0,
+    })
+    expect(copiedReporter.id).not.toBe('role-1')
+    expect(copiedReporter.geminiConversationId).toBeUndefined()
+    expect(copiedReporter.geminiConversationUrl).toBeUndefined()
+    expect(copiedReporter.lastPromptMessageId).toBeUndefined()
+    expect(copiedReporter.lastReplyAt).toBeUndefined()
+    expect(duplicated.store.messagesById['msg-1']).toBeDefined()
+    expect(duplicated.store.chatsById['chat-1'].messageIds).toEqual(['msg-1'])
+  })
+
   it('deletes a chat with its roles, messages, read state, and runtime bindings', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'
