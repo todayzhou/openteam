@@ -7,19 +7,12 @@ import type {
   TeamRole,
   TeamRoomState,
 } from '../team/types'
-import { getGeminiConversationLocation } from './geminiConversation'
-import { isClickableButton, readEditorText, setContentEditableText } from './geminiInput'
 import { createReplyTracker } from './replyTracker'
 import { createReplyTimeout } from './replyTimeout'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
 import { keepDeepestResponseContainers } from './responseContainers'
 import { findLatestCompensationReply } from './replyCompensation'
-
-interface SiteConfig {
-  editor: string
-  sendButton: string
-  responseSelector: string
-}
+import { getActiveChatSiteAdapter } from './sites'
 
 type ContentRuntimeMessage =
   | BackgroundToHostMessage
@@ -38,8 +31,8 @@ const PANEL_ID = '__openteam_team_panel__'
 const FRAME_ASSIGN_MESSAGE = 'OPENTEAM_ASSIGN_FRAME_ROLE'
 const RESPONSE_DEBOUNCE_MS = 2500
 const RESPONSE_FINAL_SETTLE_MS = 1500
-const INPUT_TIMEOUT_MS = 9000
 const REPLY_TIMEOUT_MS = 120000
+const siteAdapter = getActiveChatSiteAdapter()
 const log = {
   debug(event: string, details?: Record<string, unknown>): void {
     console.debug('[OpenTeam][content]', event, details || {})
@@ -51,31 +44,6 @@ const log = {
     console.warn('[OpenTeam][content]', event, details || {})
   },
 }
-
-const BLOCK_TAGS = new Set([
-  'P',
-  'DIV',
-  'BR',
-  'LI',
-  'TR',
-  'PRE',
-  'BLOCKQUOTE',
-  'H1',
-  'H2',
-  'H3',
-  'H4',
-  'H5',
-  'H6',
-])
-
-const SKIP_TAGS = new Set([
-  'MAT-ICON',
-  'SCRIPT',
-  'STYLE',
-  'BUTTON',
-  'MS-THOUGHT-CHUNK',
-  'MAT-EXPANSION-PANEL-HEADER',
-])
 
 let assignedRole: AssignedRole | null = null
 let activeMessageId: string | undefined
@@ -97,20 +65,12 @@ const replyTimeout = createReplyTimeout(REPLY_TIMEOUT_MS, messageId => {
   }).catch(error => log.warn('reply-timeout:status-failed', { error: error instanceof Error ? error.message : String(error) }))
 })
 
-function getSiteConfig(): SiteConfig {
-  return {
-    editor: 'div.ql-editor[contenteditable="true"], rich-textarea div[contenteditable="true"]',
-    sendButton: 'button.send-button[aria-label*="发送"], button.send-button[aria-label*="Send"], button[aria-label*="Send message"], button[aria-label*="发送消息"]',
-    responseSelector: 'model-response, .model-response-text, message-content',
-  }
-}
-
 function getConversationId(): string {
-  return getConversationSnapshot().conversationId || '__default__'
+  return siteAdapter.getConversationId()
 }
 
 function getConversationSnapshot() {
-  return getGeminiConversationLocation(location.href)
+  return siteAdapter.getConversationSnapshot()
 }
 
 function getAssignedChatId(role: AssignedRole): string {
@@ -133,156 +93,21 @@ function isDirectEmbeddedFrame(): boolean {
   }
 }
 
-function querySelectorFirst(selectors: string): HTMLElement | null {
-  for (const selector of selectors.split(',').map(item => item.trim())) {
-    const element = document.querySelector(selector) as HTMLElement | null
-    if (element) return element
-  }
-
-  return null
-}
-
-function describeElement(element: Element): Record<string, unknown> {
-  const htmlElement = element as HTMLElement
+function collectPromptDiagnostics(): Record<string, unknown> {
   return {
-    tagName: element.tagName,
-    id: htmlElement.id || undefined,
-    className: typeof htmlElement.className === 'string' ? htmlElement.className.slice(0, 120) : undefined,
-    role: element.getAttribute('role') || undefined,
-    ariaLabel: element.getAttribute('aria-label') || undefined,
-    ariaDisabled: element.getAttribute('aria-disabled') || undefined,
-    disabled: element instanceof HTMLButtonElement ? element.disabled : undefined,
-    contentEditable: htmlElement.contentEditable || undefined,
-  }
-}
-
-function collectPromptDiagnostics(config = getSiteConfig()): Record<string, unknown> {
-  return {
-    href: location.href,
-    readyState: document.readyState,
-    visibilityState: document.visibilityState,
-    title: document.title,
+    site: siteAdapter.id,
     assignedRole,
-    editorMatches: [...document.querySelectorAll(config.editor)].slice(0, 5).map(describeElement),
-    sendButtonMatches: [...document.querySelectorAll(config.sendButton)].slice(0, 5).map(describeElement),
-    visibleButtonSamples: [...document.querySelectorAll('button')].slice(0, 12).map(describeElement),
+    ...siteAdapter.collectPromptDiagnostics(),
   }
-}
-
-function waitForElement(selectors: string, timeoutMs = INPUT_TIMEOUT_MS): Promise<HTMLElement> {
-  const immediate = querySelectorFirst(selectors)
-  if (immediate) {
-    log.debug('wait-element:immediate', { selectors, tagName: immediate.tagName })
-    return Promise.resolve(immediate)
-  }
-
-  return new Promise((resolve, reject) => {
-    const startedAt = Date.now()
-    const timer = window.setInterval(() => {
-      const element = querySelectorFirst(selectors)
-      if (element) {
-        window.clearInterval(timer)
-        log.debug('wait-element:found', { selectors, tagName: element.tagName, elapsedMs: Date.now() - startedAt })
-        resolve(element)
-        return
-      }
-
-      if (Date.now() - startedAt >= timeoutMs) {
-        window.clearInterval(timer)
-        log.warn('wait-element:timeout', { selectors, timeoutMs, diagnostics: collectPromptDiagnostics() })
-        reject(new Error(`Element not found: ${selectors}`))
-      }
-    }, 250)
-  })
-}
-
-function waitForClickableButton(selectors: string, timeoutMs = INPUT_TIMEOUT_MS): Promise<HTMLElement> {
-  return new Promise((resolve, reject) => {
-    const startedAt = Date.now()
-    const timer = window.setInterval(() => {
-      const button = querySelectorFirst(selectors)
-      if (button && isClickableButton(button)) {
-        window.clearInterval(timer)
-        log.debug('wait-button:clickable', {
-          selectors,
-          tagName: button.tagName,
-          ariaDisabled: button.getAttribute('aria-disabled'),
-          elapsedMs: Date.now() - startedAt,
-        })
-        resolve(button)
-        return
-      }
-
-      if (Date.now() - startedAt >= timeoutMs) {
-        window.clearInterval(timer)
-        log.warn('wait-button:timeout', { selectors, timeoutMs, found: Boolean(button), diagnostics: collectPromptDiagnostics() })
-        reject(new Error('Gemini 发送按钮暂不可用，请稍后重试'))
-      }
-    }, 250)
-  })
-}
-
-function extractCleanText(node: Node): string {
-  const buffer: string[] = []
-
-  function visit(current: Node): void {
-    if (current.nodeType === Node.TEXT_NODE) {
-      buffer.push(current.textContent || '')
-      return
-    }
-
-    if (current.nodeType !== Node.ELEMENT_NODE) return
-
-    const element = current as Element
-    if (element.getAttribute('aria-hidden') === 'true') return
-    if (SKIP_TAGS.has(element.tagName)) return
-    if (BLOCK_TAGS.has(element.tagName)) buffer.push('\n')
-
-    for (const child of element.childNodes) {
-      visit(child)
-    }
-  }
-
-  visit(node)
-
-  return buffer
-    .join('')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function findResponseContainer(element: Element | null): Element | null {
-  while (element) {
-    if (element.matches('message-content, model-response, .model-response-text')) {
-      return element
-    }
-
-    element = element.parentElement
-  }
-
-  return null
 }
 
 function getAllAssistantReplies(): string[] {
-  return [...document.querySelectorAll(getSiteConfig().responseSelector)]
-    .map(container => extractCleanText(container))
-    .filter(Boolean)
-}
-
-function isGeminiGenerating(): boolean {
-  return [...document.querySelectorAll('button')].some(button => {
-    const label = [button.getAttribute('aria-label'), button.getAttribute('title'), button.textContent]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-    return /stop|stopping|停止|中止/.test(label) && isClickableButton(button as HTMLElement)
-  })
+  return siteAdapter.getAllAssistantReplies()
 }
 
 function capturePromptReplyBaseline(messageId: string | undefined): void {
-  const containers = [...document.querySelectorAll(getSiteConfig().responseSelector)]
-  const replies = containers.map(container => extractCleanText(container)).filter(Boolean)
+  const containers = siteAdapter.getResponseContainers()
+  const replies = containers.map(container => siteAdapter.readResponseText(container)).filter(Boolean)
   promptBaselineContainers = new Set(containers)
   promptBaselineReplies = new Set(replies.map(reply => reply.trim()).filter(Boolean))
   replyTracker.seed(getConversationId(), replies)
@@ -320,8 +145,8 @@ function isPromptBaselineReply(text: string, element: Element): boolean {
 
 function findCompensationReply(messageId: string): { text: string; element: Element } | undefined {
   return findLatestCompensationReply({
-    containers: [...document.querySelectorAll(getSiteConfig().responseSelector)],
-    readText: extractCleanText,
+    containers: siteAdapter.getResponseContainers(),
+    readText: siteAdapter.readResponseText,
     isBaseline: isPromptBaselineReply,
     consume: text => replyTracker.consumeIfNewForMessage(getConversationId(), text, messageId),
   })
@@ -372,17 +197,17 @@ function observeResponseContainers(onStableText: (text: string, element: Element
     const pendingCount = pendingContainers.size
     const containers = keepDeepestResponseContainers([...pendingContainers])
     const snapshots = containers
-      .map(container => ({ container, text: extractCleanText(container) }))
+      .map(container => ({ container, text: siteAdapter.readResponseText(container) }))
       .filter(snapshot => Boolean(snapshot.text))
     log.debug('observer:flush', { pending: pendingCount, kept: containers.length, snapshots: snapshots.length })
     pendingContainers.clear()
 
     window.setTimeout(() => {
-      const generating = isGeminiGenerating()
+      const generating = siteAdapter.isGenerating()
       for (const snapshot of snapshots) {
         if (!snapshot.container.isConnected) continue
 
-        const text = extractCleanText(snapshot.container)
+        const text = siteAdapter.readResponseText(snapshot.container)
         if (!text) continue
 
         if (generating || text !== snapshot.text) {
@@ -410,7 +235,7 @@ function observeResponseContainers(onStableText: (text: string, element: Element
 
   function inspectNode(node: Node): void {
     if (node.nodeType === Node.TEXT_NODE) {
-      const container = findResponseContainer((node as Text).parentElement)
+      const container = siteAdapter.findResponseContainer((node as Text).parentElement)
       if (container) schedule(container)
       return
     }
@@ -418,13 +243,15 @@ function observeResponseContainers(onStableText: (text: string, element: Element
     if (node.nodeType !== Node.ELEMENT_NODE) return
 
     const element = node as Element
-    const container = findResponseContainer(element)
+    const container = siteAdapter.findResponseContainer(element)
     if (container) {
       schedule(container)
       return
     }
 
-    element.querySelectorAll(getSiteConfig().responseSelector).forEach(schedule)
+    for (const responseContainer of siteAdapter.getResponseContainers()) {
+      if (element.contains(responseContainer)) schedule(responseContainer)
+    }
   }
 
   new MutationObserver(mutations => {
@@ -439,7 +266,7 @@ function observeResponseContainers(onStableText: (text: string, element: Element
   }).observe(document.body, { childList: true, subtree: true, characterData: true })
 
   requestAnimationFrame(() => {
-    document.querySelectorAll(getSiteConfig().responseSelector).forEach(schedule)
+    siteAdapter.getResponseContainers().forEach(schedule)
   })
 }
 
@@ -461,24 +288,9 @@ async function sendRuntimeMessage<T>(message: HostToBackgroundMessage | RoleToBa
 }
 
 async function fillAndSend(content: string, autoSend = true): Promise<void> {
-  const config = getSiteConfig()
-  log.info('fill-send:lookup-start', { contentLength: content.length, autoSend, diagnostics: collectPromptDiagnostics(config) })
-  const editor = await waitForElement(config.editor)
-
-  log.info('fill-send:start', { contentLength: content.length, autoSend, editor: describeElement(editor) })
-  setContentEditableText(editor, content)
-  if (readEditorText(editor) !== content.trim()) {
-    log.warn('fill-send:editor-mismatch', { expectedLength: content.trim().length, actualLength: readEditorText(editor).length })
-    throw new Error('Gemini editor did not accept the prompt text')
-  }
-  log.info('fill-send:editor-written', { contentLength: content.trim().length })
-
-  if (!autoSend) return
-
-  log.info('fill-send:button-lookup-start', { diagnostics: collectPromptDiagnostics(config) })
-  const sendButton = await waitForClickableButton(config.sendButton)
-  sendButton.click()
-  log.info('fill-send:clicked', { button: describeElement(sendButton) })
+  log.info('fill-send:start', { site: siteAdapter.id, contentLength: content.length, autoSend, diagnostics: collectPromptDiagnostics() })
+  await siteAdapter.fillAndSend(content, autoSend)
+  log.info('fill-send:done', { site: siteAdapter.id, contentLength: content.trim().length, autoSend })
 }
 
 function reportConversationUpdate(force = false): void {

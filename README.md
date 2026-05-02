@@ -153,8 +153,8 @@ src/background/
   renderWake.ts        旧 tab 方案的渲染唤醒调度器
 
 src/content/
-  index.ts             Gemini content script 主入口
-  geminiInput.ts       Gemini 输入框写入工具
+  index.ts             content script 主入口，负责 OpenTeam 消息流
+  sites/               站点适配器，封装页面输入、发送、回复读取和会话识别
   replyTracker.ts      回复去重
   replyTimeout.ts      回复超时处理
   responseContainers.ts 回复容器过滤
