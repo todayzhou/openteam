@@ -1,6 +1,7 @@
-import type { GroupChat, GroupRole } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole } from '../group/types'
 
 export const THINKING_TIMEOUT_MS = 120_000
+const MESSAGE_TIME_GAP_MS = 5 * 60_000
 
 export type KeyboardShortcutEvent = Pick<KeyboardEvent, 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>
 
@@ -15,6 +16,10 @@ interface GraphemeSegmenter {
 interface IntlWithSegmenter {
   Segmenter?: new (locale: string | undefined, options: { granularity: 'grapheme' }) => GraphemeSegmenter
 }
+
+export type ChatRenderItem =
+  | { type: 'time'; id: string; label: string }
+  | { type: 'message'; id: string; message: GroupMessage; showName: boolean; showAvatar: boolean }
 
 export function getAvatarInitial(name: string | undefined, fallback = 'AI'): string {
   const trimmed = name?.trim()
@@ -85,4 +90,49 @@ export function formatChatListTime(timestamp: number, now = Date.now()): string 
   const day = String(target.getDate()).padStart(2, '0')
   if (target.getFullYear() === current.getFullYear()) return `${month}/${day}`
   return `${target.getFullYear()}/${month}/${day}`
+}
+
+export function formatMessageTime(timestamp: number): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp))
+}
+
+export function buildChatRenderItems(messages: GroupMessage[], roles: GroupRole[], now = Date.now()): ChatRenderItem[] {
+  void roles
+  const items: ChatRenderItem[] = []
+  let previousMessage: GroupMessage | undefined
+  let previousTimestamp = 0
+
+  for (const message of messages) {
+    if (!previousTimestamp || message.createdAt - previousTimestamp >= MESSAGE_TIME_GAP_MS) {
+      items.push({
+        type: 'time',
+        id: `time-${message.id}`,
+        label: formatMessageTime(message.createdAt || now),
+      })
+    }
+
+    const sameSpeaker =
+      previousMessage?.type === message.type &&
+      previousMessage?.roleId === message.roleId &&
+      message.type !== 'system' &&
+      message.createdAt - previousTimestamp < MESSAGE_TIME_GAP_MS
+    items.push({
+      type: 'message',
+      id: message.id,
+      message,
+      showName: message.type === 'assistant' && !sameSpeaker,
+      showAvatar: message.type === 'user' || message.type === 'assistant' ? !sameSpeaker : false,
+    })
+
+    previousMessage = message
+    previousTimestamp = message.createdAt
+  }
+
+  return items
 }

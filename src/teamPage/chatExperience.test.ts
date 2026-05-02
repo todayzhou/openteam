@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { GroupChat, GroupRole } from '../group/types'
-import { formatChatListTime, getAvatarInitial, getChatStartupNotice, getVisibleThinkingRoles, isThinkingBubbleVisible, isUnavailableRolesError, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter, THINKING_TIMEOUT_MS } from './chatExperience'
+import type { GroupChat, GroupMessage, GroupRole } from '../group/types'
+import { buildChatRenderItems, formatChatListTime, getAvatarInitial, getChatStartupNotice, getVisibleThinkingRoles, isThinkingBubbleVisible, isUnavailableRolesError, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter, THINKING_TIMEOUT_MS } from './chatExperience'
 
 const baseRole: GroupRole = {
   id: 'role-1',
@@ -24,6 +24,18 @@ const baseChat: GroupChat = {
   updatedAt: 1_000,
 }
 
+const baseMessage: GroupMessage = {
+  id: 'msg-1',
+  chatId: 'chat-1',
+  seq: 1,
+  type: 'assistant',
+  roleId: 'role-1',
+  roleName: '工程师',
+  content: '收到',
+  createdAt: 1_000,
+  status: 'sent',
+}
+
 describe('chat experience helpers', () => {
   it('uses one user-perceived character for avatar initials', () => {
     expect(getAvatarInitial('产品经理')).toBe('产')
@@ -38,6 +50,23 @@ describe('chat experience helpers', () => {
     expect(formatChatListTime(new Date(2026, 4, 1, 23, 13).getTime(), now)).toBe('昨天')
     expect(formatChatListTime(new Date(2026, 3, 30, 9, 18).getTime(), now)).toBe('前天')
     expect(formatChatListTime(new Date(2026, 3, 29, 21, 17).getTime(), now)).toBe('04/29')
+  })
+
+  it('builds WeChat-style render items with time dividers and compact repeat messages', () => {
+    const items = buildChatRenderItems(
+      [
+        baseMessage,
+        { ...baseMessage, id: 'msg-2', seq: 2, content: '补充一句', createdAt: 2_000 },
+        { ...baseMessage, id: 'msg-3', seq: 3, type: 'user', roleId: undefined, roleName: undefined, content: '谢谢', createdAt: 400_000 },
+      ],
+      [baseRole],
+      400_000,
+    )
+
+    expect(items.map(item => item.type)).toEqual(['time', 'message', 'message', 'time', 'message'])
+    expect(items[1]).toMatchObject({ type: 'message', showName: true, showAvatar: true })
+    expect(items[2]).toMatchObject({ type: 'message', showName: false, showAvatar: false })
+    expect(items[4]).toMatchObject({ type: 'message', showName: false, showAvatar: true })
   })
 
   it('sends on Enter while leaving Command/Control+Enter for newlines', () => {

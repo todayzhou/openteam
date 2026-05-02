@@ -154,25 +154,75 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toMatch(/\.mention-panel\s*{[^}]*right:\s*78px;/s)
   })
 
-  it('places user messages on the right like a conversation app', () => {
+  it('makes the refresh control sync and recover the current chat', () => {
     const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
 
-    expect(html).toMatch(/\.message\.user\s*{[^}]*align-self:\s*flex-end;/s)
-    expect(html).toMatch(/\.message\.user\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) 42px;/s)
-    expect(html).toMatch(/\.message\.user \.message-avatar\s*{[^}]*grid-column:\s*2;/s)
-    expect(html).toMatch(/\.message\.user \.message-content\s*{[^}]*grid-column:\s*1;/s)
-    expect(html).toMatch(/\.message\.user \.message-meta\s*{[^}]*text-align:\s*right;/s)
+    expect(html).toContain('aria-label="同步并恢复当前群聊"')
+    expect(html).toContain('title="同步并恢复当前群聊"')
+    expect(source).toContain('async function refreshCurrentChat()')
+    expect(source).toContain("log.info('ui:refresh-recover-chat'")
+    expect(source).toContain('refreshCurrentChat().catch')
   })
 
-  it('renders explicit mentions inside user message bubbles', () => {
+  it('uses a lighter composer and simplified chat header', () => {
+    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+
+    expect(html).toContain('placeholder="输入消息，@成员可指定回复；不 @ 默认发给全部成员。"')
+    expect(html).toMatch(/\.chat-header\s*{[^}]*min-height:\s*72px;/s)
+    expect(html).toMatch(/\.chat-header\s*{[^}]*padding:\s*16px 132px 14px 22px;/s)
+    expect(html).toMatch(/\.composer\s*{[^}]*margin:\s*0;/s)
+    expect(html).toMatch(/\.composer\s*{[^}]*border-top:\s*1px solid rgba\(132,\s*153,\s*171,\s*0\.12\);/s)
+    expect(html).toMatch(/\.drawer-summary\s*{[^}]*min-height:\s*30px;/s)
+    expect(source).toContain("togglePeopleDrawerEl.textContent = '成员 0'")
+    expect(source).toContain('togglePeopleDrawerEl.textContent = `成员 ${roles.length} ${peopleDrawerOpen ?')
+    expect(source).not.toContain('人回复中')
+  })
+
+  it('places user messages on the right like a WeChat conversation', () => {
+    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+
+    expect(html).toMatch(/\.message-row\.user\s*{[^}]*justify-content:\s*flex-end;/s)
+    expect(html).toMatch(/\.message-row\.user \.message-inner\s*{[^}]*flex-direction:\s*row-reverse;/s)
+    expect(html).toMatch(/\.message-row\.user \.message-bubble\s*{[^}]*background:\s*#95ec69;/s)
+    expect(html).toMatch(/\.message-row\.user \.message-bubble::before\s*{[^}]*border-left-color:\s*#95ec69;/s)
+    expect(html).not.toContain('.message-content')
+  })
+
+  it('renders time dividers and system messages as centered pills', () => {
+    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+
+    expect(source).toContain("divider.className = 'message-time-divider'")
+    expect(source).toContain("pill.className = 'message-system-pill'")
+    expect(html).toMatch(/\.message-time-divider\s*{[^}]*align-self:\s*center;/s)
+    expect(html).toMatch(/\.message-system-pill\s*{[^}]*border-radius:\s*999px;/s)
+  })
+
+  it('renders explicit mentions inline inside user message bubbles', () => {
     const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
 
     expect(source).toContain('renderMessageMentions(message)')
+    expect(source).toContain('appendMentionsToBody(body, mentions)')
     expect(source).toContain('message.mentionedRoleIds')
     expect(source).toContain("mention.textContent = `@${name}`")
-    expect(html).toMatch(/\.message-mentions\s*{[^}]*display:\s*flex;/s)
+    expect(html).toMatch(/\.message-mentions\s*{[^}]*display:\s*inline-flex;/s)
     expect(html).toMatch(/\.message-mention\s*{[^}]*font-weight:\s*820;/s)
+  })
+
+  it('renders message content as plain text with original whitespace preserved', () => {
+    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+
+    expect(source).toContain('body.append(document.createTextNode(message.content))')
+    expect(source).toContain('pill.textContent = message.content')
+    expect(source).not.toContain('renderMarkdown')
+    expect(source).not.toContain('markdown-body')
+    expect(html).toMatch(/\.message-body\s*{[^}]*white-space:\s*pre-wrap;/s)
+    expect(html).not.toContain('.markdown-body')
+    expect(html).not.toContain('markdown-it')
   })
 
   it('keeps chat titles as plain text and omits chat status from list rows', () => {
@@ -231,7 +281,7 @@ describe('team.html chat creation UI', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
 
     expect(source).toContain('messageNodeCache')
-    expect(source).toContain('renderMessageNode(message)')
-    expect(source).toContain('messageSignature(message)')
+    expect(source).toContain('renderMessageNode(item.message, item.showName, item.showAvatar)')
+    expect(source).toContain('messageSignature(message, showName, showAvatar)')
   })
 })

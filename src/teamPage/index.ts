@@ -2,8 +2,7 @@ import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStor
 import { createDefaultStore, loadStore, saveStore } from '../group/store'
 import { parseGroupMentions } from '../group/mentionParser'
 import { createIframeHost } from './iframeHost'
-import { formatChatListTime, getAvatarInitial, getChatStartupNotice, getVisibleThinkingRoles, isUnavailableRolesError, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter, THINKING_TIMEOUT_MS } from './chatExperience'
-import { renderMarkdown } from './markdown'
+import { buildChatRenderItems, formatChatListTime, getAvatarInitial, getChatStartupNotice, getVisibleThinkingRoles, isUnavailableRolesError, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter, THINKING_TIMEOUT_MS } from './chatExperience'
 
 interface RuntimeResponse<T = unknown> {
   ok?: boolean
@@ -163,6 +162,19 @@ async function refreshStore(showFailure = true): Promise<void> {
     applyStore(createDefaultStore())
     if (showFailure) showError(error instanceof Error ? error.message : String(error))
   }
+}
+
+async function refreshCurrentChat(): Promise<void> {
+  await refreshStore()
+  const chat = getCurrentChat()
+  if (!chat) return
+
+  const reconnectableRoles = getCurrentRoles().filter(role => role.status !== 'ready' && shouldAutoReconnectRole(role))
+  if (reconnectableRoles.length === 0) return
+
+  log.info('ui:refresh-recover-chat', { chatId: chat.id, roleIds: reconnectableRoles.map(role => role.id) })
+  await reconnectRolesForSend(chat, reconnectableRoles)
+  await refreshStore(false)
 }
 
 function applyStore(nextStore: OpenTeamStore): void {
@@ -419,18 +431,17 @@ function renderChatHeader(): void {
     chatSubtitleEl.textContent = '创建或选择一个群聊开始协作'
     chatStatusEl.className = 'status-pill'
     chatStatusEl.textContent = '空'
-    togglePeopleDrawerEl.textContent = '群聊人员 0 人'
+    togglePeopleDrawerEl.textContent = '成员 0'
     togglePeopleDrawerEl.disabled = true
     return
   }
 
-  const thinkingCount = getVisibleThinkingRoles(roles).length
   chatTitleEl.textContent = chat.name
-  chatSubtitleEl.textContent = `${modeLabel(chat.mode)} · ${roles.length} 人员 · ${messages.length} 条消息`
+  chatSubtitleEl.textContent = roles.length ? `${modeLabel(chat.mode)} · ${roles.length} 位成员 · ${messages.length} 条消息` : '暂无成员'
   chatStatusEl.className = `status-pill status-${chat.status}`
   chatStatusEl.textContent = chatStatusLabel(chat.status)
   togglePeopleDrawerEl.disabled = false
-  togglePeopleDrawerEl.textContent = `群聊人员 ${roles.length} 人${thinkingCount ? ` · ${thinkingCount} 人回复中` : ''} ${peopleDrawerOpen ? '▴' : '▾'}`
+  togglePeopleDrawerEl.textContent = `成员 ${roles.length} ${peopleDrawerOpen ? '▴' : '▾'}`
   togglePeopleDrawerEl.setAttribute('aria-expanded', String(peopleDrawerOpen))
 }
 
@@ -449,7 +460,16 @@ function renderMessages(): void {
     messagesEl.append(startupNotice ? emptyCard(startupNotice.title, startupNotice.body) : emptyCard('等待第一条消息', '唤醒人员后，在下方输入任务；无 @ 默认发送给全部人员。'))
   }
 
-  for (const message of messages) messagesEl.append(renderMessageNode(message))
+  for (const item of buildChatRenderItems(messages, getCurrentRoles())) {
+    if (item.type === 'time') {
+      const divider = document.createElement('div')
+      divider.className = 'message-time-divider'
+      divider.textContent = item.label
+      messagesEl.append(divider)
+      continue
+    }
+    messagesEl.append(renderMessageNode(item.message, item.showName, item.showAvatar))
+  }
 
   for (const role of getVisibleThinkingRoles(getCurrentRoles())) {
     messagesEl.append(thinkingBubble(role))
@@ -458,40 +478,52 @@ function renderMessages(): void {
   messagesEl.scrollTop = messagesEl.scrollHeight
 }
 
-function renderMessageNode(message: GroupMessage): HTMLElement {
-  const signature = messageSignature(message)
+function renderMessageNode(message: GroupMessage, showName = true, showAvatar = true): HTMLElement {
+  const signature = messageSignature(message, showName, showAvatar)
   const cached = messageNodeCache.get(message.id)
   if (cached?.signature === signature) return cached.node
 
   const article = document.createElement('article')
-  article.className = `message ${message.type}`
-
-  const meta = document.createElement('div')
-  meta.className = 'message-meta tiny'
-  meta.append(textNode(messageTitle(message)), textNode(formatTime(message.createdAt)))
-
-  const body = document.createElement('div')
-  body.className = 'message-body markdown-body'
-  if (message.type === 'user') {
-    const mentions = renderMessageMentions(message)
-    if (mentions) body.append(mentions)
-  }
-  body.append(renderMarkdown(message.content))
+  article.className = `message-row message ${message.type}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
 
   if (message.type === 'system') {
-    article.append(meta, body)
+    const pill = document.createElement('div')
+    pill.className = 'message-system-pill'
+    pill.textContent = message.content
+    article.append(pill)
     cacheMessageNode(message.id, signature, article)
     return article
   }
 
+  const inner = document.createElement('div')
+  inner.className = 'message-inner'
+
   const avatar = document.createElement('div')
   avatar.className = `message-avatar ${messageToneClass(message)}`
   avatar.textContent = messageAvatarLabel(message)
+  avatar.hidden = !showAvatar
 
-  const content = document.createElement('div')
-  content.className = 'message-content'
-  content.append(meta, body)
-  if (message.references?.length) content.append(referenceBox(message.references[0]))
+  const stack = document.createElement('div')
+  stack.className = 'message-stack'
+
+  if (message.type === 'assistant' && showName) {
+    const name = document.createElement('div')
+    name.className = 'message-name'
+    name.textContent = messageTitle(message)
+    stack.append(name)
+  }
+
+  const bubble = document.createElement('div')
+  bubble.className = 'message-bubble'
+  const body = document.createElement('div')
+  body.className = 'message-body'
+  if (message.type === 'user') {
+    const mentions = renderMessageMentions(message)
+    if (mentions) appendMentionsToBody(body, mentions)
+  }
+  body.append(document.createTextNode(message.content))
+  bubble.append(body)
+  if (message.references?.length) bubble.append(referenceBox(message.references[0]))
 
   if (message.type === 'assistant') {
     const tools = document.createElement('div')
@@ -502,10 +534,12 @@ function renderMessageNode(message: GroupMessage): HTMLElement {
     quote.textContent = '引用'
     quote.addEventListener('click', () => setReference(message))
     tools.append(quote)
-    content.append(tools)
+    bubble.append(tools)
   }
 
-  article.append(avatar, content)
+  stack.append(bubble)
+  inner.append(avatar, stack)
+  article.append(inner)
   cacheMessageNode(message.id, signature, article)
   return article
 }
@@ -519,7 +553,7 @@ function cacheMessageNode(messageId: string, signature: string, node: HTMLElemen
   }
 }
 
-function messageSignature(message: GroupMessage): string {
+function messageSignature(message: GroupMessage, showName = true, showAvatar = true): string {
   return JSON.stringify({
     type: message.type,
     roleId: message.roleId,
@@ -530,6 +564,8 @@ function messageSignature(message: GroupMessage): string {
     references: message.references,
     targetRoleIds: message.targetRoleIds,
     mentionedRoleIds: message.mentionedRoleIds,
+    showName,
+    showAvatar,
   })
 }
 
@@ -547,6 +583,10 @@ function renderMessageMentions(message: GroupMessage): HTMLElement | undefined {
     mentions.append(mention)
   }
   return mentions
+}
+
+function appendMentionsToBody(body: HTMLElement, mentions: HTMLElement): void {
+  body.append(mentions)
 }
 
 function scheduleThinkingTimeouts(): void {
@@ -575,22 +615,32 @@ function scheduleThinkingTimeouts(): void {
   }
 }
 
-function thinkingBubble(role: GroupRole): HTMLElement {
+function thinkingBubble(role: GroupRole, showName = true, showAvatar = true): HTMLElement {
   const article = document.createElement('article')
-  article.className = 'message assistant thinking'
+  article.className = `message-row message assistant thinking${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
+  const inner = document.createElement('div')
+  inner.className = 'message-inner'
   const avatar = document.createElement('div')
   avatar.className = `message-avatar ${roleToneClass(role.name)}`
   avatar.textContent = roleAvatarLabel(role.name)
-  const content = document.createElement('div')
-  content.className = 'message-content'
-  const meta = document.createElement('div')
-  meta.className = 'message-meta tiny'
-  meta.append(textNode(role.name), textNode('回复中'))
+  avatar.hidden = !showAvatar
+  const stack = document.createElement('div')
+  stack.className = 'message-stack'
+  if (showName) {
+    const name = document.createElement('div')
+    name.className = 'message-name'
+    name.textContent = role.name
+    stack.append(name)
+  }
+  const bubble = document.createElement('div')
+  bubble.className = 'message-bubble'
   const body = document.createElement('div')
   body.className = 'message-body thinking-dots'
   body.textContent = `${role.name} 正在回复中 `
-  content.append(meta, body)
-  article.append(avatar, content)
+  bubble.append(body)
+  stack.append(bubble)
+  inner.append(avatar, stack)
+  article.append(inner)
   return article
 }
 
@@ -1018,14 +1068,9 @@ function getChatRecentSummary(chat: GroupChat): string {
 }
 
 function messageTitle(message: GroupMessage): string {
-  if (message.type === 'user') return message.targetRoleIds?.length ? `你 -> ${roleNames(message.targetRoleIds)}` : '你 -> 全部人员'
+  if (message.type === 'user') return '我'
   if (message.type === 'assistant') return message.roleName || 'AI 人员'
   return '系统'
-}
-
-function roleNames(roleIds: string[]): string {
-  const names = roleIds.map(roleId => store.rolesById[roleId]?.name).filter((name): name is string => Boolean(name))
-  return names.length > 0 ? names.join('、') : '全部人员'
 }
 
 function modeLabel(mode: RoomMode): string {
@@ -1052,11 +1097,6 @@ function roleStatusLabel(status: RoleStatus): string {
     error: '异常',
   }
   return labels[status]
-}
-
-function formatTime(timestamp: number): string {
-  if (!timestamp) return '-'
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(timestamp)
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -1198,7 +1238,7 @@ function registerFloatingWindowControls(): void {
 
 function registerUi(): void {
   requireElement<HTMLButtonElement>('#refresh-store').addEventListener('click', () => {
-    refreshStore().catch(error => showError(error instanceof Error ? error.message : String(error)))
+    refreshCurrentChat().catch(error => showError(error instanceof Error ? error.message : String(error)))
   })
 
   quickCreateChatEl.addEventListener('click', () => {
