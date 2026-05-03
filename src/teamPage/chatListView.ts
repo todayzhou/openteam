@@ -12,7 +12,8 @@ export interface ChatListViewDependencies {
   roleToneClass(value: string): string
   roleAvatarLabel(value: string): string
   emptyCard(title: string, body: string): HTMLElement
-  switchChat(chatId: string): void
+  renderSelectedChat(): void
+  renderRolePanel(): void
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   clearChatMessages(chatId: string): Promise<void>
   closeChatFrames(chatId: string): Promise<void>
@@ -22,6 +23,7 @@ export interface ChatListViewDependencies {
 
 export interface ChatListView {
   renderChatList(): void
+  switchChat(chatId: string): void
 }
 
 export function createChatListView(deps: ChatListViewDependencies): ChatListView {
@@ -43,11 +45,11 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       item.tabIndex = 0
       item.setAttribute('role', 'button')
       item.setAttribute('aria-label', `切换到 ${chat.name}`)
-      item.addEventListener('click', () => deps.switchChat(chat.id))
+      item.addEventListener('click', () => switchChat(chat.id))
       item.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
-        deps.switchChat(chat.id)
+        switchChat(chat.id)
       })
 
       const avatar = document.createElement('div')
@@ -92,6 +94,30 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       if (deps.state.chatMenuChatId === chat.id) item.append(chatActionMenu(chat))
       deps.chatListEl.append(item)
     }
+  }
+
+  function switchChat(chatId: string) {
+    if (chatId === deps.state.selectedChatId) {
+      deps.state.chatMenuChatId = undefined
+      deps.state.roleSiteMenuRoleId = undefined
+      renderChatList()
+      deps.renderRolePanel()
+      return
+    }
+    deps.state.selectedChatId = chatId
+    deps.state.selectedRoleId = undefined
+    deps.state.selectedReference = undefined
+    deps.state.peopleDrawerOpen = false
+    deps.state.chatMenuChatId = undefined
+    deps.state.roleSiteMenuRoleId = undefined
+    deps.renderSelectedChat()
+    if (deps.state.pendingSwitchAnimationFrame !== undefined) window.cancelAnimationFrame(deps.state.pendingSwitchAnimationFrame)
+    deps.state.pendingSwitchAnimationFrame = window.requestAnimationFrame(() => {
+      deps.state.pendingSwitchAnimationFrame = undefined
+      if (deps.state.selectedChatId !== chatId) return
+      deps.runCommand('GROUP_CHAT_SWITCH', { chatId })
+        .catch(error => deps.showError(error.message))
+    })
   }
 
   function chatActionMenu(chat: GroupChat): HTMLElement {
@@ -153,5 +179,5 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     return menu
   }
 
-  return { renderChatList }
+  return { renderChatList, switchChat }
 }

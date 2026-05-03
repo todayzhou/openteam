@@ -276,7 +276,7 @@ describe('team.html chat creation UI', () => {
   it('switches chats from the whole chat row while keeping row menus isolated', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
-    expect(source).toContain("item.addEventListener('click', () => deps.switchChat(chat.id))")
+    expect(source).toContain("item.addEventListener('click', () => switchChat(chat.id))")
     expect(source).toContain("item.addEventListener('keydown'")
     expect(source).toContain("item.tabIndex = 0")
     expect(source).toContain("item.setAttribute('role', 'button')")
@@ -406,11 +406,11 @@ describe('team.html chat creation UI', () => {
   })
 
   it('keeps chat switching to one store write and one store application', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
     const runtimeSource = readFileSync(resolve(process.cwd(), 'src/teamPage/runtimeClient.ts'), 'utf8')
 
     expect(source).toContain("runCommand('GROUP_CHAT_SWITCH', { chatId })")
-    expect(source).toContain('renderSelectedChat()')
+    expect(source).toContain('deps.renderSelectedChat()')
     expect(source).toContain('window.requestAnimationFrame(() => {')
     expect(source).not.toContain("runCommand('GROUP_CHAT_MARK_READ', { chatId })")
     expect(runtimeSource).toMatch(/if \(response\.store\) \{\s*deps\.applyStore\(response\.store\)\s*return\s*\}/s)

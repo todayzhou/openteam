@@ -9,8 +9,10 @@ describe('team page chat list view boundary', () => {
 
     expect(viewSource).toContain('function renderChatList()')
     expect(viewSource).toContain('function chatActionMenu(chat: GroupChat)')
+    expect(viewSource).toContain('function switchChat(chatId: string)')
     expect(viewSource).toContain("runCommand('GROUP_CHAT_UPDATE'")
     expect(entrySource).not.toContain('function renderChatList()')
     expect(entrySource).not.toContain('function chatActionMenu(chat: GroupChat)')
+    expect(entrySource).not.toContain('function switchChat(chatId: string)')
   })
 })

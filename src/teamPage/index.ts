@@ -107,7 +107,8 @@ const chatListView = createChatListView({
   roleToneClass,
   roleAvatarLabel,
   emptyCard,
-  switchChat,
+  renderSelectedChat,
+  renderRolePanel,
   runCommand,
   clearChatMessages,
   closeChatFrames,
@@ -115,6 +116,7 @@ const chatListView = createChatListView({
   showError,
 })
 const renderChatList = chatListView.renderChatList
+const switchChat = chatListView.switchChat
 
 async function resolveHostTabId(): Promise<void> {
   const tab = await chrome.tabs.getCurrent()
@@ -1126,30 +1128,6 @@ function messageToneClass(message: GroupMessage): string {
 
 function textNode(content: string): Text {
   return document.createTextNode(content)
-}
-
-function switchChat(chatId: string): void {
-  if (chatId === appState.selectedChatId) {
-    appState.chatMenuChatId = undefined
-    appState.roleSiteMenuRoleId = undefined
-    renderChatList()
-    renderRolePanel()
-    return
-  }
-  appState.selectedChatId = chatId
-  appState.selectedRoleId = undefined
-  appState.selectedReference = undefined
-  appState.peopleDrawerOpen = false
-  appState.chatMenuChatId = undefined
-  appState.roleSiteMenuRoleId = undefined
-  renderSelectedChat()
-  if (appState.pendingSwitchAnimationFrame !== undefined) window.cancelAnimationFrame(appState.pendingSwitchAnimationFrame)
-  appState.pendingSwitchAnimationFrame = window.requestAnimationFrame(() => {
-    appState.pendingSwitchAnimationFrame = undefined
-    if (appState.selectedChatId !== chatId) return
-    runCommand('GROUP_CHAT_SWITCH', { chatId })
-      .catch(error => showError(error.message))
-  })
 }
 
 async function reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void> {
