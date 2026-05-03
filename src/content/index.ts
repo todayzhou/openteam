@@ -59,7 +59,7 @@ let lastReportedConversationKey = ''
 let conversationMonitorStarted = false
 let promptBaselineContainers = new Set<Element>()
 let promptBaselineReplies = new Set<string>()
-let replyPollingTimer: ReturnType<typeof setTimeout> | null = null
+let replyPollingTimer: number | null = null
 let replyPollingInFlight = false
 const replyTracker = createReplyTracker()
 let panelApi: ReturnType<typeof createTeamPanel> | null = null
@@ -307,12 +307,12 @@ async function resolveReportableReplyText(element: Element, fallbackText: string
 }
 
 function observeResponseContainers(onStableText: (text: string, element: Element) => void): void {
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let debounceTimer: number | null = null
   const pendingContainers = new Set<Element>()
 
   function flush(): void {
     if (debounceTimer) {
-      clearTimeout(debounceTimer)
+      window.clearTimeout(debounceTimer)
       debounceTimer = null
     }
 
@@ -351,8 +351,8 @@ function observeResponseContainers(onStableText: (text: string, element: Element
   function schedule(container: Element): void {
     pendingContainers.add(container)
 
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(flush, RESPONSE_DEBOUNCE_MS)
+    if (debounceTimer) window.clearTimeout(debounceTimer)
+    debounceTimer = window.setTimeout(flush, RESPONSE_DEBOUNCE_MS)
   }
 
   function inspectNode(node: Node): void {

@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "@types/markdown-it": "^14.1.2",
+    "@types/node": "^25.6.0",
     "jsdom": "^29.1.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.4",

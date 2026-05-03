@@ -33,6 +33,23 @@ export type GroupRoleBatchInput =
       avatarColor?: string
     }
 
+type PreparedGroupRoleBatchItem = Omit<GroupRoleInput, 'chatId'> & {
+  name: string
+  systemPrompt: string
+}
+
+interface GraphemeSegment {
+  segment: string
+}
+
+interface GraphemeSegmenter {
+  segment(value: string): Iterable<GraphemeSegment>
+}
+
+interface IntlWithSegmenter {
+  Segmenter?: new (locale: string | undefined, options: { granularity: 'grapheme' }) => GraphemeSegmenter
+}
+
 export function validateRoleName(name: string, existingNames: string[] = []): string | undefined {
   const trimmed = name.trim()
   if (!trimmed) return '人员名称不能为空'
@@ -249,7 +266,7 @@ export function createGroupRolesBatch(
   return prepared.map(item => createGroupRole(store, { chatId, ...item }, idFactory(), now))
 }
 
-function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index: number): Omit<GroupRoleInput, 'chatId'> {
+function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index: number): PreparedGroupRoleBatchItem {
   if (item.source === 'library') {
     const template = store.roleTemplatesById[item.roleTemplateId]
     if (!template) throw new Error(`找不到人员库人员：${item.roleTemplateId}`)
@@ -283,7 +300,7 @@ function assertValidSystemPrompt(systemPrompt: string | undefined): string {
 }
 
 function countUserPerceivedCharacters(value: string): number {
-  const Segmenter = Intl.Segmenter
+  const Segmenter = (Intl as IntlWithSegmenter).Segmenter
   if (!Segmenter) return [...value].length
   return [...new Segmenter(undefined, { granularity: 'grapheme' }).segment(value)].length
 }

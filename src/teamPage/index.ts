@@ -54,7 +54,7 @@ let chatMenuChatId: string | undefined
 let roleSiteMenuRoleId: string | undefined
 let addPersonSiteMenuId: string | undefined
 let pendingSwitchAnimationFrame: number | undefined
-let thinkingTimeoutTimers: ReturnType<typeof window.setTimeout>[] = []
+let thinkingTimeoutTimers: number[] = []
 const loggedThinkingTimeoutRoleIds = new Set<string>()
 const messageNodeCache = new Map<string, CachedMessageNode>()
 const reconnectingRoleKeys = new Set<string>()
@@ -1529,15 +1529,6 @@ async function addPeopleToCurrentChat(items: Record<string, unknown>[]): Promise
   if (!chat) return
   if (items.length === 0) throw new Error('请选择或填写要添加的人员')
   await runCommand('GROUP_ROLES_CREATE_BATCH', { chatId: chat.id, items })
-}
-
-function resetTemplateForm(): void {
-  selectedTemplateId = undefined
-  templateNameEl.value = ''
-  templateDescriptionEl.value = ''
-  templatePromptEl.value = ''
-  personTemplateModalEl.hidden = true
-  renderTemplates()
 }
 
 function deleteTemplate(template: RoleTemplate): void {

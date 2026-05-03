@@ -188,6 +188,14 @@ npm run dev
 npm run build
 ```
 
+完整验证：
+
+```bash
+npm run verify
+```
+
+`verify` 会依次执行 TypeScript 类型检查、测试和生产构建，建议每轮重构结束后都跑一遍。
+
 构建产物在 `dist/`：
 
 ```text
@@ -213,11 +221,23 @@ dist/
 
 ## 测试
 
+类型检查：
+
+```bash
+npm run typecheck
+```
+
 运行所有测试：
 
 ```bash
 npm test
 ```
+
+## 依赖安全
+
+当前已执行非破坏性 `npm audit fix`，可自动修复的 PostCSS/Rollup 风险已处理。
+
+剩余 `npm audit --audit-level=moderate` 报告来自 `esbuild <=0.24.2`，通过 Vite/Vitest 依赖链引入。npm 给出的自动修复路径需要 `npm audit fix --force` 并升级到 Vite 8，属于破坏性升级，应单独规划依赖升级与回归验证，不和结构拆分混在同一轮完成。
 
 当前测试覆盖：
 

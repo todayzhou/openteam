@@ -8,9 +8,16 @@
     "type": "module"
   },
   "permissions": ["storage", "tabs", "declarativeNetRequest", "clipboardRead", "clipboardWrite"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://*.gemini.google.com/*",
+    "https://chatgpt.com/*",
+    "https://*.chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*"
+  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; frame-src *;"
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai;"
   },
   "action": {
     "default_title": "OpenTeam"
@@ -26,7 +33,7 @@
   "declarative_net_request": {
     "rule_resources": [
       {
-        "id": "gemini_iframe_rules",
+        "id": "ai_iframe_rules",
         "enabled": true,
         "path": "rules.json"
       }
