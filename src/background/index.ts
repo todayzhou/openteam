@@ -13,7 +13,8 @@ import {
   updateRoleTemplate,
 } from '../group/roleTemplates'
 import { loadStore } from '../group/store'
-import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RoleStatus, RoomMode, RuntimeFrameBinding } from '../group/types'
+import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RoleStatus, RuntimeFrameBinding } from '../group/types'
+import { createChatHandlers } from './chatHandlers'
 import {
   broadcastStoreUpdated as broadcastRuntimeStoreUpdated,
   forgetHostTab,
@@ -245,113 +246,11 @@ function mapRuntimeRoleStatus(value: unknown): RoleStatus | undefined {
   }
 }
 
-function readRoomMode(value: unknown, fallback: RoomMode): RoomMode {
-  return value === 'collaborative' || value === 'independent' ? value : fallback
-}
-
-function markChatRead(store: OpenTeamStore, chat: GroupChat): void {
-  store.viewState ??= { chatReadSeqById: {}, chatHasNewMessageById: {} }
-  store.viewState.chatReadSeqById ??= {}
-  store.viewState.chatHasNewMessageById ??= {}
-  store.viewState.chatReadSeqById[chat.id] = chat.nextMessageSeq - 1
-  delete store.viewState.chatHasNewMessageById[chat.id]
-}
-
 function markChatHasNewMessage(store: OpenTeamStore, chat: GroupChat): void {
   if (store.currentChatId === chat.id) return
   store.viewState ??= { chatReadSeqById: {}, chatHasNewMessageById: {} }
   store.viewState.chatHasNewMessageById ??= {}
   store.viewState.chatHasNewMessageById[chat.id] = true
-}
-
-function createChat(store: OpenTeamStore, message: RuntimeMessage, timestamp: number): GroupChat {
-  const name = typeof message.name === 'string' && message.name.trim() ? message.name.trim() : '新群聊'
-  const description = readOptionalString(message.description)
-  const chat: GroupChat = {
-    id: newId('chat'),
-    name,
-    ...(description ? { description } : {}),
-    mode: readRoomMode(message.mode, store.settings.defaultMode),
-    roleIds: [],
-    messageIds: [],
-    nextMessageSeq: 1,
-    status: 'initializing',
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-
-  store.chatsById[chat.id] = chat
-  store.chatOrder.unshift(chat.id)
-  store.currentChatId = chat.id
-
-  const roles = Array.isArray(message.roles) ? message.roles : []
-  for (const input of roles) {
-    if (!isRecord(input)) continue
-    createGroupRole(store, {
-      chatId: chat.id,
-      templateId: readOptionalString(input.roleTemplateId) ?? readOptionalString(input.templateId),
-      name: readOptionalString(input.name),
-      description: readOptionalString(input.description),
-      systemPrompt: readOptionalString(input.systemPrompt),
-    }, newId('role'), timestamp)
-  }
-
-  chat.status = chat.roleIds.length > 0 ? 'initializing' : 'draft'
-  return chat
-}
-
-function duplicatedChatName(store: OpenTeamStore, sourceName: string): string {
-  const baseName = `${sourceName} 副本`
-  const existingNames = new Set(store.chatOrder.map(chatId => store.chatsById[chatId]?.name).filter(Boolean))
-  if (!existingNames.has(baseName)) return baseName
-
-  let index = 2
-  while (existingNames.has(`${baseName} ${index}`)) index += 1
-  return `${baseName} ${index}`
-}
-
-function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, timestamp: number): { chat: GroupChat; roles: GroupRole[] } {
-  const sourceChat = requireChat(store, sourceChatId)
-  const chat: GroupChat = {
-    id: newId('chat'),
-    name: duplicatedChatName(store, sourceChat.name),
-    ...(sourceChat.description ? { description: sourceChat.description } : {}),
-    mode: sourceChat.mode,
-    roleIds: [],
-    messageIds: [],
-    nextMessageSeq: 1,
-    status: sourceChat.roleIds.length > 0 ? 'initializing' : 'draft',
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  const roles: GroupRole[] = []
-
-  store.chatsById[chat.id] = chat
-  store.chatOrder.unshift(chat.id)
-  store.currentChatId = chat.id
-
-  for (const sourceRoleId of sourceChat.roleIds) {
-    const sourceRole = store.rolesById[sourceRoleId]
-    if (!sourceRole) continue
-    const role: GroupRole = {
-      id: newId('role'),
-      chatId: chat.id,
-      ...(sourceRole.templateId ? { templateId: sourceRole.templateId } : {}),
-      name: sourceRole.name,
-      ...(sourceRole.description ? { description: sourceRole.description } : {}),
-      ...(sourceRole.systemPrompt ? { systemPrompt: sourceRole.systemPrompt } : {}),
-      ...(sourceRole.avatarColor ? { avatarColor: sourceRole.avatarColor } : {}),
-      status: 'pending',
-      contextCursor: 0,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    store.rolesById[role.id] = role
-    chat.roleIds.push(role.id)
-    roles.push(role)
-  }
-
-  return { chat, roles }
 }
 
 async function handleStoreGet(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
@@ -360,160 +259,12 @@ async function handleStoreGet(message: RuntimeMessage, sender: chrome.runtime.Me
   return { ok: true, store, state: toLegacyState(store), bindings: runtimeFrames.list() }
 }
 
-async function handleChatCreate(message: RuntimeMessage) {
-  const { store, result } = await mutateStore(store => createChat(store, message, now()))
-  await broadcastStoreUpdated(store)
-  return { ok: true, chat: result, store }
-}
-
-async function handleChatDuplicate(message: RuntimeMessage) {
-  const { store, result } = await mutateStore(store => duplicateChat(store, message.chatId, now()))
-  log.info('chat-duplicate:stored', { sourceChatId: message.chatId, chatId: result.chat.id, roleCount: result.roles.length })
-  await broadcastStoreUpdated(store)
-  return { ok: true, chat: result.chat, roles: result.roles, store }
-}
-
-async function handleChatSwitch(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
-  const { store } = await mutateStore(store => {
-    const chat = requireChat(store, message.chatId)
-    store.currentChatId = chat.id
-    markChatRead(store, chat)
-    chat.updatedAt = now()
-  })
-  await broadcastStoreUpdated(store, messageTabId(message, sender))
-  return { ok: true, store }
-}
-
-async function handleChatUpdate(message: RuntimeMessage) {
-  const patch = isRecord(message.patch) ? message.patch : message
-  const timestamp = now()
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, message.chatId)
-    const patchKeys: string[] = []
-
-    if (patch.name !== undefined) {
-      const name = requireString(patch.name, '群聊名称不能为空')
-      chat.name = name
-      patchKeys.push('name')
-    }
-
-    if (patch.description !== undefined) {
-      const description = readOptionalString(patch.description)
-      if (description) {
-        chat.description = description
-      } else {
-        delete chat.description
-      }
-      patchKeys.push('description')
-    }
-
-    chat.updatedAt = timestamp
-    return { chat, patchKeys }
-  })
-  log.info('chat-update:stored', { chatId: result.chat.id, patchKeys: result.patchKeys })
-  await broadcastStoreUpdated(store)
-  return { ok: true, chat: result.chat, store }
-}
-
 async function handleSettingsUpdate(message: RuntimeMessage) {
   const { store } = await mutateStore(store => {
     const defaultChatSite = readOptionalString(message.defaultChatSite)
     if (defaultChatSite === 'chatgpt' || defaultChatSite === 'gemini' || defaultChatSite === 'claude') {
       store.settings.defaultChatSite = defaultChatSite
     }
-  })
-  await broadcastStoreUpdated(store)
-  return { ok: true, store }
-}
-
-async function handleChatDelete(message: RuntimeMessage) {
-  const chatId = requireString(message.chatId, '缺少群聊 ID')
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const roleIds = [...chat.roleIds]
-    const messageIds = [...chat.messageIds]
-
-    for (const roleId of roleIds) {
-      delete store.rolesById[roleId]
-      runtimeFrames.removeRole(chat.id, roleId)
-    }
-    for (const messageId of messageIds) delete store.messagesById[messageId]
-
-    store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
-    delete store.chatsById[chat.id]
-    if (store.currentChatId === chat.id) store.currentChatId = store.chatOrder[0]
-    if (store.viewState?.chatReadSeqById) delete store.viewState.chatReadSeqById[chat.id]
-    if (store.viewState?.chatHasNewMessageById) delete store.viewState.chatHasNewMessageById[chat.id]
-
-    return { chatId: chat.id, roleIds, messageIds }
-  })
-  log.info('chat-delete:stored', { chatId: result.chatId, roleCount: result.roleIds.length, messageCount: result.messageIds.length })
-  await broadcastStoreUpdated(store)
-  return { ok: true, chatId: result.chatId, store }
-}
-
-async function handleChatClearMessages(message: RuntimeMessage) {
-  const chatId = requireString(message.chatId, '缺少群聊 ID')
-  const timestamp = now()
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const roleIds = [...chat.roleIds]
-    const messageIds = [...chat.messageIds]
-
-    for (const messageId of messageIds) delete store.messagesById[messageId]
-    chat.messageIds = []
-    chat.nextMessageSeq = 1
-    chat.updatedAt = timestamp
-
-    for (const roleId of roleIds) {
-      const role = store.rolesById[roleId]
-      if (!role) continue
-      runtimeFrames.removeRole(chat.id, role.id)
-      role.status = 'loading'
-      role.contextCursor = 0
-      role.updatedAt = timestamp
-      delete role.geminiConversationId
-      delete role.geminiConversationUrl
-      delete role.lastPromptMessageId
-      delete role.replyAttemptId
-    }
-
-    chat.status = roleIds.length > 0 ? 'initializing' : 'draft'
-    markChatRead(store, chat)
-    return { chatId: chat.id, roleIds, messageIds }
-  })
-  log.info('chat-clear-messages:stored', { chatId: result.chatId, roleCount: result.roleIds.length, messageCount: result.messageIds.length })
-  await broadcastStoreUpdated(store)
-  return { ok: true, chatId: result.chatId, store }
-}
-
-async function handleChatClose(message: RuntimeMessage) {
-  const chatId = requireString(message.chatId, '缺少群聊 ID')
-  const timestamp = now()
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const roleIds = [...chat.roleIds]
-
-    for (const roleId of roleIds) {
-      const role = store.rolesById[roleId]
-      if (!role) continue
-      runtimeFrames.removeRole(chat.id, role.id)
-      if (role.status !== 'thinking') role.status = 'loading'
-      role.updatedAt = timestamp
-    }
-    chat.status = getChatStatusFromRoles(store, chat)
-    chat.updatedAt = timestamp
-    return { chatId: chat.id, roleIds }
-  })
-  log.info('chat-close:stored', { chatId: result.chatId, roleCount: result.roleIds.length })
-  await broadcastStoreUpdated(store)
-  return { ok: true, chatId: result.chatId, store }
-}
-
-async function handleChatMarkRead(message: RuntimeMessage) {
-  const { store } = await mutateStore(store => {
-    const chat = requireChat(store, message.chatId)
-    markChatRead(store, chat)
   })
   await broadcastStoreUpdated(store)
   return { ok: true, store }
@@ -1264,7 +1015,7 @@ async function handleLegacyCreateRole(message: RuntimeMessage) {
   const store = await loadStore()
   let chatId = store.currentChatId
   if (!chatId) {
-    const created = await handleChatCreate({ type: 'GROUP_CHAT_CREATE', name: 'OpenTeam', mode: 'independent' })
+    const created = await routeMessage({ type: 'GROUP_CHAT_CREATE', name: 'OpenTeam', mode: 'independent' }, {}) as { chat: GroupChat }
     chatId = created.chat.id
   }
 
@@ -1273,15 +1024,8 @@ async function handleLegacyCreateRole(message: RuntimeMessage) {
 
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
-  { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
-  { type: 'GROUP_CHAT_DUPLICATE', handler: handleChatDuplicate },
-  { type: 'GROUP_CHAT_SWITCH', handler: handleChatSwitch },
-  { type: 'GROUP_CHAT_UPDATE', handler: handleChatUpdate },
+  ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
-  { type: 'GROUP_CHAT_DELETE', handler: handleChatDelete },
-  { type: 'GROUP_CHAT_CLEAR_MESSAGES', handler: handleChatClearMessages },
-  { type: 'GROUP_CHAT_CLOSE', handler: handleChatClose },
-  { type: 'GROUP_CHAT_MARK_READ', handler: handleChatMarkRead },
   { type: 'ROLE_TEMPLATE_CREATE', handler: handleRoleTemplateCreate },
   { type: 'ROLE_TEMPLATE_UPDATE', handler: handleRoleTemplateUpdate },
   { type: 'ROLE_TEMPLATE_DELETE', handler: handleRoleTemplateDelete },
