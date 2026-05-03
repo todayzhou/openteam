@@ -1417,11 +1417,12 @@
       #people-library-modal .modal {
         display: flex;
         min-height: min(620px, calc(100vh - 48px));
+        width: min(640px, 100%);
         flex-direction: column;
         overflow: hidden;
       }
 
-      #people-library-modal .modal-grid {
+      .people-library-content {
         min-height: 0;
         flex: 1;
       }
@@ -1435,6 +1436,32 @@
         max-height: calc(100vh - 220px);
         overflow: auto;
         padding-right: 2px;
+      }
+
+      .template-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .template-card-body {
+        min-width: 0;
+      }
+
+      .template-edit {
+        min-height: 30px;
+        padding: 0 10px;
+      }
+
+      .template-card-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .template-editor-modal {
+        width: min(520px, 100%);
       }
 
       .modal-header {
@@ -1785,9 +1812,12 @@
             <h2 id="people-library-title">人员库</h2>
             <p class="tiny">维护可复用人员人设；加入群聊后会复制为独立人员。</p>
           </div>
-          <button id="close-people-library" class="icon-btn" type="button" aria-label="关闭人员库">×</button>
+          <div class="chat-row">
+            <button id="new-template" class="btn btn-primary" type="button">新建</button>
+            <button id="close-people-library" class="icon-btn" type="button" aria-label="关闭人员库">×</button>
+          </div>
         </div>
-        <div class="modal-grid">
+        <div class="people-library-content">
           <div class="people-library-pane">
             <div class="section-title">
               <h3>人员列表</h3>
@@ -1795,44 +1825,53 @@
             </div>
             <div id="people-library-list" class="template-list"></div>
           </div>
-          <form id="people-library-form" class="modal-form modal-card">
-            <h3 id="template-form-title">新建人员</h3>
-            <div class="field">
-              <label for="template-name">人员名称</label>
-              <input id="template-name" type="text" maxlength="10" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="template-description">描述</label>
-              <textarea id="template-description"></textarea>
-            </div>
-            <div class="field">
-              <label for="template-prompt">人设</label>
-              <textarea id="template-prompt"></textarea>
-            </div>
-            <div class="field">
-              <label>默认站点</label>
-              <div class="site-segmented">
-                <label class="site-segment" for="template-site-gemini">
-                  <input id="template-site-gemini" type="radio" name="template-chat-site" value="gemini" checked />
-                  <span>Gemini</span>
-                </label>
-                <label class="site-segment" for="template-site-chatgpt">
-                  <input id="template-site-chatgpt" type="radio" name="template-chat-site" value="chatgpt" />
-                  <span>ChatGPT</span>
-                </label>
-                <label class="site-segment" for="template-site-claude">
-                  <input id="template-site-claude" type="radio" name="template-chat-site" value="claude" />
-                  <span>Claude</span>
-                </label>
-              </div>
-            </div>
-            <div class="template-actions">
-              <button class="btn btn-primary" type="submit">保存人员</button>
-              <button id="reset-template-form" class="btn" type="button">新建</button>
-              <button id="delete-template" class="btn btn-danger" type="button">删除</button>
-            </div>
-          </form>
         </div>
+      </section>
+    </div>
+
+    <div id="person-template-modal" class="modal-backdrop" hidden>
+      <section class="modal template-editor-modal" role="dialog" aria-modal="true" aria-labelledby="template-form-title">
+        <div class="modal-header">
+          <div>
+            <h2 id="template-form-title">新建人员</h2>
+            <p class="tiny">维护人员名称、人设和默认站点。</p>
+          </div>
+          <button id="close-person-template" class="icon-btn" type="button" aria-label="关闭人员编辑">×</button>
+        </div>
+        <form id="people-library-form" class="modal-form">
+          <div class="field">
+            <label for="template-name">人员名称</label>
+            <input id="template-name" type="text" maxlength="10" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="template-description">描述</label>
+            <textarea id="template-description"></textarea>
+          </div>
+          <div class="field">
+            <label for="template-prompt">人设</label>
+            <textarea id="template-prompt"></textarea>
+          </div>
+          <div class="field">
+            <label>默认站点</label>
+            <div class="site-segmented">
+              <label class="site-segment" for="template-site-gemini">
+                <input id="template-site-gemini" type="radio" name="template-chat-site" value="gemini" checked />
+                <span>Gemini</span>
+              </label>
+              <label class="site-segment" for="template-site-chatgpt">
+                <input id="template-site-chatgpt" type="radio" name="template-chat-site" value="chatgpt" />
+                <span>ChatGPT</span>
+              </label>
+              <label class="site-segment" for="template-site-claude">
+                <input id="template-site-claude" type="radio" name="template-chat-site" value="claude" />
+                <span>Claude</span>
+              </label>
+            </div>
+          </div>
+          <div class="template-actions">
+            <button class="btn btn-primary" type="submit">保存人员</button>
+          </div>
+        </form>
       </section>
     </div>
 

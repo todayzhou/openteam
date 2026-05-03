@@ -71,6 +71,29 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('默认站点：Claude')
   })
 
+  it('keeps the people-library modal as a list and opens a separate editor for creating or editing people', () => {
+    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const peopleLibraryModal = html.match(/<div id="people-library-modal"[\s\S]*?<div id="person-template-modal"/)?.[0] ?? ''
+    const personTemplateModal = html.match(/<div id="person-template-modal"[\s\S]*?<div id="add-person-modal"/)?.[0] ?? ''
+
+    expect(html).toContain('id="new-template"')
+    expect(html).toContain('id="person-template-modal"')
+    expect(html).toContain('id="close-person-template"')
+    expect(peopleLibraryModal).not.toContain('id="people-library-form"')
+    expect(peopleLibraryModal).not.toContain('id="template-name"')
+    expect(personTemplateModal).not.toContain('id="delete-template"')
+    expect(source).toContain('function openTemplateEditor(templateId?: string): void')
+    expect(source).toContain("edit.className = 'btn btn-ghost template-edit'")
+    expect(source).toContain("edit.textContent = '编辑'")
+    expect(source).toContain("remove.className = 'btn btn-danger template-delete'")
+    expect(source).toContain("remove.textContent = '删除'")
+    expect(source).toContain('window.confirm(`确定删除「${template.name}」吗？删除后这个人员会从人员库移除。`)')
+    expect(source).toContain('if (!isTemplateUsed(template.id)) actions.append(remove)')
+    expect(source).toContain("'#new-template'")
+    expect(source).toContain("'#close-person-template'")
+  })
+
   it('keeps long people-library lists scrolling inside the left list pane', () => {
     const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
 

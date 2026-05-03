@@ -78,10 +78,10 @@ const templateNameEl = requireElement<HTMLInputElement>('#template-name')
 const templateDescriptionEl = requireElement<HTMLTextAreaElement>('#template-description')
 const templatePromptEl = requireElement<HTMLTextAreaElement>('#template-prompt')
 const templateFormTitleEl = requireElement<HTMLElement>('#template-form-title')
-const deleteTemplateEl = requireElement<HTMLButtonElement>('#delete-template')
 const settingsButtonEl = requireElement<HTMLButtonElement>('#settings-button')
 const settingsMenuEl = requireElement<HTMLElement>('#settings-menu')
 const peopleLibraryModalEl = requireElement<HTMLElement>('#people-library-modal')
+const personTemplateModalEl = requireElement<HTMLElement>('#person-template-modal')
 const addPersonModalEl = requireElement<HTMLElement>('#add-person-modal')
 const peopleLibrarySummaryEl = requireElement<HTMLElement>('#people-library-summary')
 const peopleLibraryListEl = requireElement<HTMLElement>('#people-library-list')
@@ -785,12 +785,12 @@ function renderTemplates(): void {
       peopleLibraryListEl.append(card)
     }
   }
+  if (!personTemplateModalEl.hidden) renderTemplateEditor()
+}
 
+function renderTemplateEditor(): void {
   const selectedTemplate = selectedTemplateId ? store.roleTemplatesById[selectedTemplateId] : undefined
   templateFormTitleEl.textContent = selectedTemplate ? `编辑人员：${selectedTemplate.name}` : '新建人员'
-  const used = selectedTemplate ? isTemplateUsed(selectedTemplate.id) : false
-  deleteTemplateEl.disabled = !selectedTemplate || used
-  deleteTemplateEl.title = used ? '该人员已被群聊使用，不能删除' : ''
   if (selectedTemplate) {
     const defaultChatSite = selectedTemplate.defaultChatSite ?? store.settings.defaultChatSite
     templateNameEl.value = selectedTemplate.name
@@ -807,6 +807,18 @@ function renderTemplates(): void {
     templateSiteChatGptEl.checked = store.settings.defaultChatSite === 'chatgpt'
     templateSiteClaudeEl.checked = store.settings.defaultChatSite === 'claude'
   }
+}
+
+function openTemplateEditor(templateId?: string): void {
+  selectedTemplateId = templateId
+  renderTemplateEditor()
+  personTemplateModalEl.hidden = false
+  templateNameEl.focus()
+}
+
+function closeTemplateEditor(): void {
+  personTemplateModalEl.hidden = true
+  selectedTemplateId = undefined
 }
 
 function roleCard(role: GroupRole): HTMLElement {
@@ -923,12 +935,10 @@ async function switchRoleSite(role: GroupRole, chatSite: ChatSite): Promise<void
 
 function templateCard(template: RoleTemplate): HTMLElement {
   const card = document.createElement('section')
-  card.className = `template-card${template.id === selectedTemplateId ? ' active' : ''}`
-  card.addEventListener('click', () => {
-    selectedTemplateId = template.id
-    renderTemplates()
-  })
+  card.className = 'template-card'
 
+  const body = document.createElement('div')
+  body.className = 'template-card-body'
   const row = document.createElement('div')
   row.className = 'role-row'
   const name = document.createElement('div')
@@ -945,7 +955,32 @@ function templateCard(template: RoleTemplate): HTMLElement {
   const site = document.createElement('div')
   site.className = 'template-description'
   site.textContent = `默认站点：${siteLabel(template.defaultChatSite ?? store.settings.defaultChatSite)}`
-  card.append(row, description, site)
+  body.append(row, description, site)
+
+  const edit = document.createElement('button')
+  edit.type = 'button'
+  edit.className = 'btn btn-ghost template-edit'
+  edit.textContent = '编辑'
+  edit.addEventListener('click', event => {
+    event.stopPropagation()
+    openTemplateEditor(template.id)
+  })
+
+  const actions = document.createElement('div')
+  actions.className = 'template-card-actions'
+  actions.append(edit)
+
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'btn btn-danger template-delete'
+  remove.textContent = '删除'
+  remove.addEventListener('click', event => {
+    event.stopPropagation()
+    deleteTemplate(template)
+  })
+  if (!isTemplateUsed(template.id)) actions.append(remove)
+
+  card.append(body, actions)
   return card
 }
 
@@ -1249,7 +1284,15 @@ function resetTemplateForm(): void {
   templateNameEl.value = ''
   templateDescriptionEl.value = ''
   templatePromptEl.value = ''
+  personTemplateModalEl.hidden = true
   renderTemplates()
+}
+
+function deleteTemplate(template: RoleTemplate): void {
+  if (isTemplateUsed(template.id)) return
+  if (!window.confirm(`确定删除「${template.name}」吗？删除后这个人员会从人员库移除。`)) return
+  if (selectedTemplateId === template.id) closeTemplateEditor()
+  runCommand('ROLE_TEMPLATE_DELETE', { templateId: template.id }).catch(error => showError(error.message))
 }
 
 function readNewChatMode(): RoomMode {
@@ -1380,6 +1423,12 @@ function registerUi(): void {
     peopleLibraryModalEl.hidden = true
   })
 
+  requireElement<HTMLButtonElement>('#new-template').addEventListener('click', () => {
+    openTemplateEditor()
+  })
+
+  requireElement<HTMLButtonElement>('#close-person-template').addEventListener('click', closeTemplateEditor)
+
   requireElement<HTMLButtonElement>('#close-add-person').addEventListener('click', () => {
     addPersonModalEl.hidden = true
   })
@@ -1414,7 +1463,9 @@ function registerUi(): void {
     settingsMenuEl.hidden = true
     settingsButtonEl.setAttribute('aria-expanded', 'false')
     peopleLibraryModalEl.hidden = true
+    personTemplateModalEl.hidden = true
     addPersonModalEl.hidden = true
+    selectedTemplateId = undefined
     chatMenuChatId = undefined
     roleSiteMenuRoleId = undefined
     renderChatList()
@@ -1536,19 +1587,9 @@ function registerUi(): void {
     }
     const type = selectedTemplateId ? 'ROLE_TEMPLATE_UPDATE' : 'ROLE_TEMPLATE_CREATE'
     const payload = selectedTemplateId ? { templateId: selectedTemplateId, ...draft } : draft
-    runCommand(type, payload).catch(error => showError(error.message))
-  })
-
-  requireElement<HTMLButtonElement>('#reset-template-form').addEventListener('click', resetTemplateForm)
-  deleteTemplateEl.addEventListener('click', () => {
-    if (!selectedTemplateId) return
-    if (isTemplateUsed(selectedTemplateId)) {
-      showError('该人员已被群聊使用，不能删除')
-      return
-    }
-    const templateId = selectedTemplateId
-    resetTemplateForm()
-    runCommand('ROLE_TEMPLATE_DELETE', { templateId }).catch(error => showError(error.message))
+    runCommand(type, payload)
+      .then(closeTemplateEditor)
+      .catch(error => showError(error.message))
   })
 
   requireElement<HTMLButtonElement>('#open-gemini-login').addEventListener('click', () => {
