@@ -32,6 +32,7 @@ export interface PeopleLibraryViewDependencies {
   templateSiteGeminiEl: HTMLInputElement
   templateSiteChatGptEl: HTMLInputElement
   templateSiteClaudeEl: HTMLInputElement
+  templateSiteDeepSeekEl: HTMLInputElement
   temporaryPersonNameEl: HTMLInputElement
   temporaryPersonDescriptionEl: HTMLTextAreaElement
   temporaryPersonPromptEl: HTMLTextAreaElement
@@ -98,6 +99,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteGeminiEl.checked = defaultChatSite === 'gemini'
       deps.templateSiteChatGptEl.checked = defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = defaultChatSite === 'claude'
+      deps.templateSiteDeepSeekEl.checked = defaultChatSite === 'deepseek'
     } else {
       deps.templateNameEl.value = ''
       deps.templateDescriptionEl.value = ''
@@ -105,6 +107,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteGeminiEl.checked = store.settings.defaultChatSite === 'gemini'
       deps.templateSiteChatGptEl.checked = store.settings.defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = store.settings.defaultChatSite === 'claude'
+      deps.templateSiteDeepSeekEl.checked = store.settings.defaultChatSite === 'deepseek'
     }
   }
 
@@ -398,7 +401,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     const menu = document.createElement('div')
     menu.className = 'role-site-menu'
     menu.addEventListener('click', event => event.stopPropagation())
-    for (const site of ['gemini', 'chatgpt', 'claude'] as const) {
+    for (const site of ['gemini', 'chatgpt', 'claude', 'deepseek'] as const) {
       const option = document.createElement('button')
       option.type = 'button'
       option.className = `role-site-option${currentSite === site ? ' active' : ''}`
@@ -448,6 +451,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   function readTemplateChatSite(): ChatSite {
     if (deps.templateSiteChatGptEl.checked) return 'chatgpt'
     if (deps.templateSiteClaudeEl.checked) return 'claude'
+    if (deps.templateSiteDeepSeekEl.checked) return 'deepseek'
     return 'gemini'
   }
 
@@ -475,5 +479,6 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
+  if (site === 'deepseek') return 'DeepSeek'
   return 'Gemini'
 }

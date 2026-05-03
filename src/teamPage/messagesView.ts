@@ -411,5 +411,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 function siteLabel(site: GroupRole['chatSite']): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
+  if (site === 'deepseek') return 'DeepSeek'
   return 'Gemini'
 }

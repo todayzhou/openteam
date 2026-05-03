@@ -1535,6 +1535,12 @@ select:focus {
   color: #f5cd82;
 }
 
+.site-pill-deepseek {
+  border-color: rgba(112, 142, 255, 0.34);
+  background: rgba(112, 142, 255, 0.1);
+  color: #a8bbff;
+}
+
 .role-site-badge {
   display: inline-flex;
   align-items: center;

@@ -339,7 +339,9 @@ function normalizeSettings(raw: unknown): OpenTeamSettings {
         ? 'chatgpt'
         : raw.defaultChatSite === 'claude'
           ? 'claude'
-          : DEFAULT_SETTINGS.defaultChatSite,
+          : raw.defaultChatSite === 'deepseek'
+            ? 'deepseek'
+            : DEFAULT_SETTINGS.defaultChatSite,
   }
 }
 

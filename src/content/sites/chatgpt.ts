@@ -16,7 +16,7 @@ const CHATGPT_SELECTORS = {
   sendButton:
     'button[data-testid="send-button"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"]',
   response: '[data-message-author-role="assistant"]',
-  responseActions: '[role="group"][aria-label="回复操作"], [role="group"][aria-label="Message actions"]',
+  responseActions: '[role="group"][aria-label="回复操作"], [role="group"][aria-label="Message actions"], [aria-label="回复操作"], [aria-label="Message actions"]',
   turnCopyButton: 'button[data-testid="copy-turn-action-button"], button[aria-label="复制回复"], button[aria-label="Copy response"]',
   copyButton:
     'button[data-testid="copy-turn-action-button"], button[aria-label="复制回复"], button[aria-label="Copy response"], button[aria-label="复制"], button[aria-label="Copy"]',

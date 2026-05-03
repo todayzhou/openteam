@@ -71,6 +71,7 @@ describe('team page messages view boundary', () => {
       roleAvatarLabel: () => '工',
       messageTitle: message => message.roleName ?? 'AI 人员',
       focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
       setReference: vi.fn(),
       retryRoleReply: vi.fn(async () => undefined),
       stopRoleReply: vi.fn(async () => undefined),

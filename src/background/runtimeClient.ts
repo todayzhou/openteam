@@ -51,6 +51,7 @@ export async function broadcastStoreUpdated(store: OpenTeamStore, options: Broad
       await chrome.tabs.sendMessage(tabId, message)
     } catch (error) {
       log.debug('group-store-updated:tab-failed', { tabId, error: error instanceof Error ? error.message : String(error) })
+      forgetHostTab(tabId)
     }
   }
 

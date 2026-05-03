@@ -110,6 +110,23 @@ describe('IframeHost', () => {
     expect(lastCall?.[1]).toBe('https://claude.ai')
   })
 
+  it('posts role assignments to the DeepSeek origin for DeepSeek role frames', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const host = createIframeHost({ visibleHost, assignIntervalMs: 50, hostTabId: 123 })
+
+    host.activateChat(makeChat('chat-1', ['role-1']), [{ ...makeRole('chat-1', 'role-1', 'https://chat.deepseek.com/a/chat/s/abc'), chatSite: 'deepseek' }])
+
+    const iframe = host.getRoleFrame('chat-1', 'role-1')
+    expect(iframe?.src).toBe('https://chat.deepseek.com/a/chat/s/abc')
+
+    const postMessage = vi.spyOn(iframe!.contentWindow!, 'postMessage')
+    vi.advanceTimersByTime(120)
+
+    const lastCall = postMessage.mock.calls[postMessage.mock.calls.length - 1]
+    expect(lastCall?.[1]).toBe('https://chat.deepseek.com')
+  })
+
   it('uses safe ChatGPT conversation URLs for role frames', () => {
     const visibleHost = document.createElement('div')
     document.body.append(visibleHost)
@@ -128,6 +145,16 @@ describe('IframeHost', () => {
     host.activateChat(makeChat('chat-1', ['role-1']), [{ ...makeRole('chat-1', 'role-1', 'https://claude.ai/chat/restored'), chatSite: 'claude' }])
 
     expect(host.getRoleFrame('chat-1', 'role-1')?.src).toBe('https://claude.ai/chat/restored')
+  })
+
+  it('uses safe DeepSeek conversation URLs for role frames', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const host = createIframeHost({ visibleHost })
+
+    host.activateChat(makeChat('chat-1', ['role-1']), [{ ...makeRole('chat-1', 'role-1', 'https://chat.deepseek.com/a/chat/s/restored'), chatSite: 'deepseek' }])
+
+    expect(host.getRoleFrame('chat-1', 'role-1')?.src).toBe('https://chat.deepseek.com/a/chat/s/restored')
   })
 
   it('mounts all active chat role iframes in that chat group', () => {

@@ -14,17 +14,18 @@
     "https://chatgpt.com/*",
     "https://*.chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://chat.deepseek.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai;"
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai https://chat.deepseek.com;"
   },
   "action": {
     "default_title": "OpenTeam"
   },
   "content_scripts": [
     {
-      "matches": ["*://gemini.google.com/*", "*://*.gemini.google.com/*", "*://chatgpt.com/*", "*://*.chatgpt.com/*", "*://chat.openai.com/*", "*://claude.ai/*"],
+      "matches": ["*://gemini.google.com/*", "*://*.gemini.google.com/*", "*://chatgpt.com/*", "*://*.chatgpt.com/*", "*://chat.openai.com/*", "*://claude.ai/*", "*://chat.deepseek.com/*"],
       "js": ["content.js"],
       "run_at": "document_start",
       "all_frames": true
