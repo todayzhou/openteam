@@ -1114,6 +1114,18 @@
         padding: 0 8px 7px;
       }
 
+      .message-row.thinking .message-tools {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.14s ease;
+      }
+
+      .message-row.thinking:hover .message-tools,
+      .message-row.thinking:focus-within .message-tools {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
       .message-tool-btn {
         position: relative;
         display: inline-flex;
