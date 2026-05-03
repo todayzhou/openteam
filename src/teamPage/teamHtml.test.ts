@@ -57,6 +57,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="template-site-kimi"')
     expect(html).toContain('for="template-site-qwen" hidden')
     expect(html).toContain('for="template-site-kimi" hidden')
+    expect(html).toMatch(/\.site-segment\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toContain('id="add-person-modal"')
     expect(html).toContain('id="open-temporary-person"')
     expect(html).toContain('id="temporary-person-modal"')

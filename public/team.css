@@ -479,6 +479,10 @@ h3 {
   font-weight: 760;
 }
 
+.site-segment[hidden] {
+  display: none;
+}
+
 .site-segment input {
   position: absolute;
   inset: 0;
