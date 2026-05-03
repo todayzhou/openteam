@@ -12,6 +12,7 @@ import {
 } from '../group/roleTemplates'
 import type { ChatSite, OpenTeamStore } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
+import type { PromptSender } from './promptDelivery'
 import type { RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
@@ -28,24 +29,6 @@ export const ROLE_ROUTE_TYPES = [
   'GROUP_ROLE_REINITIALIZE',
 ] as const
 
-export type SendPromptMessage = {
-  type: 'TEAM_SEND_PROMPT'
-  chatId: string
-  roleId: string
-  messageId: string
-  replyAttemptId?: string
-  content: string
-  autoSend?: boolean
-  includesPersona?: boolean
-}
-
-export interface PromptDelivery {
-  roleId: string
-  tabId: number
-  frameId: number
-  message: SendPromptMessage
-}
-
 export interface RoleHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
   log: {
@@ -55,7 +38,7 @@ export interface RoleHandlersDependencies {
   newId(prefix: string): string
   now(): number
   runtimeFrames: Pick<RuntimeFrameRegistry, 'getByRole' | 'removeRole'>
-  sendPrompt(delivery: PromptDelivery): Promise<void> | void
+  sendPrompt: PromptSender
 }
 
 export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMessageRoute[] {

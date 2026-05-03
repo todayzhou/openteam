@@ -1,10 +1,8 @@
-import { buildUnsyncedContext } from '../group/contextSync'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
-import { parseGroupMentions } from '../group/mentionParser'
-import { buildPrompt } from '../group/promptBuilder'
 import { loadStore } from '../group/store'
-import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RoleStatus, RuntimeFrameBinding } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleStatus } from '../group/types'
 import { createChatHandlers } from './chatHandlers'
+import { createMessageHandlers } from './messageHandlers'
 import {
   broadcastStoreUpdated as broadcastRuntimeStoreUpdated,
   forgetHostTab,
@@ -17,11 +15,11 @@ import {
   type RuntimeMessage,
 } from './runtimeClient'
 import { createMessageRouter } from './messageRouter'
-import { createRoleHandlers, type PromptDelivery } from './roleHandlers'
+import { createPromptSender } from './promptDelivery'
+import { createRoleHandlers } from './roleHandlers'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
-const STALE_THINKING_MS = 120_000
 const runtimeFrames = createRuntimeFrameRegistry()
 
 const log = {
@@ -39,6 +37,8 @@ const log = {
   },
 }
 
+const sendPrompt = createPromptSender({ log })
+
 function now(): number {
   return Date.now()
 }
@@ -50,43 +50,6 @@ function newId(prefix: string): string {
 
 async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> {
   await broadcastRuntimeStoreUpdated(store, { excludeTabId, legacyState: toLegacyState(store) })
-}
-
-async function sendPrompt(delivery: PromptDelivery): Promise<void> {
-  log.info('prompt:send:start', {
-    chatId: delivery.message.chatId,
-    roleId: delivery.roleId,
-    messageId: delivery.message.messageId,
-    tabId: delivery.tabId,
-    frameId: delivery.frameId,
-    contentLength: delivery.message.content.length,
-    includesPersona: delivery.message.includesPersona ?? false,
-  })
-
-  try {
-    const response = await chrome.tabs.sendMessage(delivery.tabId, delivery.message, { frameId: delivery.frameId })
-    if (isRecord(response) && response.ok === false) {
-      throw new Error(readOptionalString(response.error) ?? readOptionalString(response.message) ?? 'Gemini prompt delivery failed')
-    }
-    log.info('prompt:send:response', {
-      chatId: delivery.message.chatId,
-      roleId: delivery.roleId,
-      messageId: delivery.message.messageId,
-      tabId: delivery.tabId,
-      frameId: delivery.frameId,
-      response,
-    })
-  } catch (error) {
-    log.warn('prompt:send:failed', {
-      chatId: delivery.message.chatId,
-      roleId: delivery.roleId,
-      messageId: delivery.message.messageId,
-      tabId: delivery.tabId,
-      frameId: delivery.frameId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    throw error
-  }
 }
 
 function getRoleReplyHistory(store: OpenTeamStore, chat: GroupChat, roleId: string, limit = 100): string[] {
@@ -104,32 +67,6 @@ function getChatStatusFromRoles(store: OpenTeamStore, chat: GroupChat): GroupCha
   return 'ready'
 }
 
-function isStaleThinkingRole(role: GroupRole, timestamp: number): boolean {
-  return role.status === 'thinking' && timestamp - role.updatedAt >= STALE_THINKING_MS
-}
-
-function isRoleDeliverable(role: GroupRole, binding: RuntimeFrameBinding | undefined, timestamp: number): boolean {
-  if (!binding?.ready) return false
-  return role.status === 'ready' || role.status === 'error' || role.status === 'loading' || role.status === 'pending' || isStaleThinkingRole(role, timestamp)
-}
-
-function shouldIncludePersonaForPrompt(roleHistoryCount: number): boolean {
-  return roleHistoryCount === 0
-}
-
-function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {
-  return messages.filter(message => message.id !== currentMessageId && isRoleHistoryMessage(message, role.id)).length
-}
-
-function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
-  if (message.roleId === roleId) return true
-  return Array.isArray(message.targetRoleIds) && message.targetRoleIds.includes(roleId)
-}
-
-function readPersonaLength(role: GroupRole): number {
-  return (role.systemPrompt?.trim() || role.description?.trim() || role.name.trim()).length
-}
-
 function staleReplyReason(store: OpenTeamStore, chat: GroupChat, role: GroupRole, promptMessageId: string | undefined, replyAttemptId?: string): string | undefined {
   if (!promptMessageId) return 'missing-prompt-message-id'
   if (role.lastPromptMessageId !== promptMessageId) return 'prompt-message-mismatch'
@@ -144,61 +81,8 @@ function staleReplyReason(store: OpenTeamStore, chat: GroupChat, role: GroupRole
   return undefined
 }
 
-function isUserMessageForRole(message: GroupMessage | undefined, chat: GroupChat, role: GroupRole): message is GroupMessage {
-  return Boolean(
-    message &&
-      message.chatId === chat.id &&
-      message.type === 'user' &&
-      (!message.targetRoleIds || message.targetRoleIds.includes(role.id)),
-  )
-}
-
-function isPendingRetryStatus(message: GroupMessage, role: GroupRole): boolean {
-  const deliveryStatus = message.deliveryStatus?.[role.id]
-  return deliveryStatus === 'pending' || deliveryStatus === 'sent'
-}
-
-function findLatestPendingRetryMessage(store: OpenTeamStore, chat: GroupChat, role: GroupRole): GroupMessage | undefined {
-  for (const messageId of [...chat.messageIds].reverse()) {
-    const message = store.messagesById[messageId]
-    if (isUserMessageForRole(message, chat, role) && isPendingRetryStatus(message, role)) return message
-  }
-  return undefined
-}
-
-function resolveRetryUserMessage(store: OpenTeamStore, chat: GroupChat, role: GroupRole, requestedMessageId: string | undefined): GroupMessage | undefined {
-  if (requestedMessageId) {
-    const requestedMessage = store.messagesById[requestedMessageId]
-    return isUserMessageForRole(requestedMessage, chat, role) ? requestedMessage : undefined
-  }
-
-  const activePromptMessage = role.lastPromptMessageId ? store.messagesById[role.lastPromptMessageId] : undefined
-  if (isUserMessageForRole(activePromptMessage, chat, role) && isPendingRetryStatus(activePromptMessage, role)) return activePromptMessage
-
-  const latestPendingMessage = findLatestPendingRetryMessage(store, chat, role)
-  if (latestPendingMessage && role.lastPromptMessageId && latestPendingMessage.id !== role.lastPromptMessageId) {
-    log.warn('role-retry-reply:stale-prompt-pointer', {
-      chatId: chat.id,
-      roleId: role.id,
-      staleMessageId: role.lastPromptMessageId,
-      retryMessageId: latestPendingMessage.id,
-    })
-  }
-  return latestPendingMessage
-}
-
 function isMeaningfulConversationId(value: string | undefined): value is string {
   return Boolean(value && value !== '__default__')
-}
-
-function recoverDeliverableRoleStatus(role: GroupRole, timestamp: number): void {
-  if (role.status === 'ready') return
-
-  log.warn('role:auto-recover-status', { roleId: role.id, roleName: role.name, previousStatus: role.status, lastPromptMessageId: role.lastPromptMessageId })
-  role.status = 'ready'
-  delete role.lastPromptMessageId
-  delete role.replyAttemptId
-  role.updatedAt = timestamp
 }
 
 function mapRuntimeRoleStatus(value: unknown): RoleStatus | undefined {
@@ -241,201 +125,6 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
   })
   await broadcastStoreUpdated(store)
   return { ok: true, store }
-}
-
-async function handleMessageSend(message: RuntimeMessage) {
-  const chatId = requireString(message.chatId, '缺少群聊 ID')
-  const raw = requireString(message.raw, '消息内容不能为空')
-  const timestamp = now()
-  log.info('message-send:start', { chatId, rawLength: raw.length })
-
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const roles = getChatRoles(store, chat)
-    const parsed = parseGroupMentions(raw, roles)
-    if (!parsed.ok) throw new Error(parsed.error)
-    if (parsed.targetRoleIds.length === 0) throw new Error('当前群聊没有可投递人员')
-    log.debug('message-send:parsed-targets', { chatId: chat.id, targetRoleIds: parsed.targetRoleIds })
-
-    const targetRoles = parsed.targetRoleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
-    const unavailable = targetRoles.filter(role => !isRoleDeliverable(role, runtimeFrames.getByRole(chat.id, role.id), timestamp))
-
-    if (unavailable.length > 0) {
-      log.warn('message-send:unavailable-targets', {
-        chatId: chat.id,
-        targets: unavailable.map(role => ({
-          id: role.id,
-          name: role.name,
-          status: role.status,
-          updatedAt: role.updatedAt,
-          staleThinking: isStaleThinkingRole(role, timestamp),
-          binding: runtimeFrames.getByRole(chat.id, role.id),
-        })),
-      })
-      throw new Error(`以下人员不可用，请等待或恢复：${unavailable.map(role => role.name).join('、')}`)
-    }
-
-    for (const role of targetRoles) recoverDeliverableRoleStatus(role, timestamp)
-
-    const reference = resolveReference(store, chat, message.reference ?? (Array.isArray(message.references) ? message.references[0] : undefined))
-    const userMessage: GroupMessage = {
-      id: newId('msg'),
-      chatId: chat.id,
-      seq: chat.nextMessageSeq,
-      type: 'user',
-      content: parsed.content,
-      targetRoleIds: parsed.targetRoleIds,
-      mentionedRoleIds: parsed.mentionedRoleIds.length > 0 ? parsed.mentionedRoleIds : undefined,
-      references: reference ? [reference] : undefined,
-      createdAt: timestamp,
-      status: 'pending',
-      deliveryStatus: Object.fromEntries(parsed.targetRoleIds.map(roleId => [roleId, 'pending'])),
-    }
-
-    store.messagesById[userMessage.id] = userMessage
-    chat.messageIds.push(userMessage.id)
-    chat.nextMessageSeq += 1
-    log.info('message-send:stored', { chatId: chat.id, messageId: userMessage.id, targetCount: parsed.targetRoleIds.length })
-    chat.status = 'running'
-    chat.updatedAt = timestamp
-
-    const messages = getChatMessages(store, chat)
-    const deliveries: PromptDelivery[] = parsed.targetRoleIds.map(roleId => {
-      const role = requireRole(store, chat.id, roleId)
-      const binding = runtimeFrames.getByRole(chat.id, role.id)!
-      const unsyncedContext = buildUnsyncedContext(chat, role, messages, userMessage, store.settings.maxContextChars)
-      const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-      const includesPersona = shouldIncludePersonaForPrompt(roleHistoryCount)
-      const content = buildPrompt({ chat, role, userMessage, roles, unsyncedContext, reference, includePersona: includesPersona })
-      const replyAttemptId = newId('attempt')
-      if (!includesPersona) {
-        log.debug('prompt:persona-skipped', {
-          chatId: chat.id,
-          roleId: role.id,
-          messageId: userMessage.id,
-          conversationUrlPresent: Boolean(role.geminiConversationUrl),
-          contextCursor: role.contextCursor,
-          roleHistoryCount,
-          personaLength: readPersonaLength(role),
-        })
-      }
-
-      role.status = 'thinking'
-      role.lastPromptMessageId = userMessage.id
-      role.replyAttemptId = replyAttemptId
-      role.updatedAt = timestamp
-
-      return {
-        roleId,
-        tabId: binding.tabId,
-        frameId: binding.frameId,
-        message: { type: 'TEAM_SEND_PROMPT', chatId: chat.id, roleId, messageId: userMessage.id, replyAttemptId, content, includesPersona },
-      }
-    })
-
-    return { message: userMessage, deliveries }
-  })
-
-  log.info('message-send:deliveries-ready', {
-    chatId,
-    messageId: result.message.id,
-    deliveries: result.deliveries.map(delivery => ({ roleId: delivery.roleId, tabId: delivery.tabId, frameId: delivery.frameId, contentLength: delivery.message.content.length })),
-  })
-  await broadcastStoreUpdated(store)
-
-  for (const delivery of result.deliveries) {
-    try {
-      await sendPrompt(delivery)
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error)
-      await markDeliveryError(chatId, delivery.roleId, result.message.id, reason)
-    }
-  }
-
-  return { ok: true, message: result.message, deliveries: result.deliveries.map(delivery => ({ roleId: delivery.roleId })), store }
-}
-
-async function handleRoleRetryReply(message: RuntimeMessage) {
-  const chatId = requireString(message.chatId, '缺少群聊 ID')
-  const roleId = requireString(message.roleId, '缺少人员 ID')
-  const timestamp = now()
-  const binding = runtimeFrames.getByRole(chatId, roleId)
-  if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，请先恢复人员')
-
-  const { store, result } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const role = requireRole(store, chat.id, roleId)
-    const requestedMessageId = readOptionalString(message.messageId)
-    const userMessage = resolveRetryUserMessage(store, chat, role, requestedMessageId)
-    if (!userMessage) throw new Error(requestedMessageId ? '该消息没有发送给这个人员' : '找不到可重试的用户消息')
-
-    const roles = getChatRoles(store, chat)
-    const messages = getChatMessages(store, chat)
-    const reference = userMessage.references?.[0]
-    const unsyncedContext = buildUnsyncedContext(chat, role, messages, userMessage, store.settings.maxContextChars)
-    const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-    const includesPersona = shouldIncludePersonaForPrompt(roleHistoryCount)
-    const content = buildPrompt({ chat, role, userMessage, roles, unsyncedContext, reference, includePersona: includesPersona })
-    const replyAttemptId = newId('attempt')
-
-    userMessage.deliveryStatus ??= {}
-    userMessage.deliveryStatus[role.id] = 'pending'
-    userMessage.status = 'pending'
-    role.status = 'thinking'
-    role.lastPromptMessageId = userMessage.id
-    role.replyAttemptId = replyAttemptId
-    role.updatedAt = timestamp
-    chat.status = 'running'
-    chat.updatedAt = timestamp
-
-    return {
-      delivery: {
-        roleId,
-        tabId: binding.tabId,
-        frameId: binding.frameId,
-        message: { type: 'TEAM_SEND_PROMPT' as const, chatId: chat.id, roleId, messageId: userMessage.id, replyAttemptId, content, includesPersona },
-      },
-    }
-  })
-
-  log.info('role-retry-reply:deliver', {
-    chatId,
-    roleId,
-    messageId: result.delivery.message.messageId,
-    replyAttemptId: result.delivery.message.replyAttemptId,
-    tabId: result.delivery.tabId,
-    frameId: result.delivery.frameId,
-  })
-  await broadcastStoreUpdated(store)
-  try {
-    await sendPrompt(result.delivery)
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    await markDeliveryError(chatId, roleId, result.delivery.message.messageId, reason)
-  }
-  return { ok: true, store, messageId: result.delivery.message.messageId }
-}
-
-async function markDeliveryError(chatId: string, roleId: string, messageId: string, reason: string): Promise<void> {
-  log.warn('delivery:error', { chatId, roleId, messageId, reason })
-  const { store } = await mutateStore(store => {
-    const chat = requireChat(store, chatId)
-    const role = requireRole(store, chat.id, roleId)
-    role.status = 'error'
-    role.updatedAt = now()
-    if (role.lastPromptMessageId === messageId) delete role.lastPromptMessageId
-    delete role.replyAttemptId
-
-    const userMessage = store.messagesById[messageId]
-    if (userMessage?.deliveryStatus) {
-      userMessage.deliveryStatus[roleId] = 'error'
-      userMessage.status = 'error'
-    }
-    chat.status = 'error'
-    chat.updatedAt = role.updatedAt
-  })
-  await broadcastStoreUpdated(store)
-  await sendError(reason)
 }
 
 async function handleFrameRoleReady(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
@@ -665,32 +354,6 @@ function updateConversation(role: GroupRole, conversationUrl: string | undefined
   if (isMeaningfulConversationId(conversationId)) role.geminiConversationId = conversationId
 }
 
-function resolveReference(store: OpenTeamStore, chat: GroupChat, raw: unknown): MessageReference | undefined {
-  if (!isRecord(raw)) return undefined
-
-  const messageId = readOptionalString(raw.messageId)
-  if (messageId) {
-    const message = store.messagesById[messageId]
-    if (message && message.chatId === chat.id) {
-      return {
-        messageId: message.id,
-        roleId: message.roleId,
-        roleName: message.roleName,
-        contentSnapshot: message.content,
-      }
-    }
-  }
-
-  const contentSnapshot = readOptionalString(raw.contentSnapshot)
-  if (!contentSnapshot) return undefined
-  return {
-    messageId: messageId ?? newId('ref'),
-    roleId: readOptionalString(raw.roleId),
-    roleName: readOptionalString(raw.roleName),
-    contentSnapshot,
-  }
-}
-
 function toLegacyState(store: OpenTeamStore) {
   const chat = store.currentChatId ? store.chatsById[store.currentChatId] : undefined
   const roles = chat ? getChatRoles(store, chat).map(role => ({
@@ -736,10 +399,6 @@ function requireString(value: unknown, error: string): string {
   return result
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 async function handleLegacyHostReady(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
   rememberHost(sender, message.hostTabId)
   const store = await loadStore()
@@ -762,8 +421,7 @@ const routeMessage = createMessageRouter([
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createRoleHandlers({ broadcastStoreUpdated, log, newId, now, runtimeFrames, sendPrompt }),
-  { type: 'GROUP_ROLE_RETRY_REPLY', handler: handleRoleRetryReply },
-  { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
+  ...createMessageHandlers({ broadcastStoreUpdated, log, newId, now, runtimeFrames, sendError, sendPrompt }),
   {
     type: 'TEAM_FRAME_ROLE_READY',
     handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },
@@ -781,7 +439,7 @@ const routeMessage = createMessageRouter([
     handler: async message => {
       const store = await loadStore()
       if (!store.currentChatId) return { ok: false, error: '请先创建群聊' }
-      return handleMessageSend({ type: 'GROUP_MESSAGE_SEND', chatId: store.currentChatId, raw: message.raw })
+      return routeMessage({ type: 'GROUP_MESSAGE_SEND', chatId: store.currentChatId, raw: message.raw }, {})
     },
   },
 ])
