@@ -12,11 +12,22 @@ import {
   updateGroupRole,
   updateRoleTemplate,
 } from '../group/roleTemplates'
-import { loadStore, updateStoreQueued } from '../group/store'
+import { loadStore } from '../group/store'
 import type { ChatSite, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RoleStatus, RoomMode, RuntimeFrameBinding } from '../group/types'
+import {
+  broadcastStoreUpdated as broadcastRuntimeStoreUpdated,
+  forgetHostTab,
+  listHostTabIds,
+  messageTabId,
+  rememberHost,
+  sendError,
+  senderFrameId,
+  senderTabId,
+  type RuntimeMessage,
+} from './runtimeClient'
+import { createMessageRouter } from './messageRouter'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
-
-type RuntimeMessage = { type?: string; [key: string]: unknown }
+import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
 type SendPromptMessage = {
   type: 'TEAM_SEND_PROMPT'
@@ -36,16 +47,8 @@ interface PromptDelivery {
   message: SendPromptMessage
 }
 
-interface StoreMutationResult<T> {
-  store: OpenTeamStore
-  result: T
-}
-
-const GROUP_PUSH_TYPE = 'OPENTEAM_GROUP_PUSH'
-const LEGACY_PUSH_TYPE = 'OPENTEAM_HOST_PUSH'
 const STALE_THINKING_MS = 120_000
 const runtimeFrames = createRuntimeFrameRegistry()
-const hostTabIds = new Set<number>()
 
 const log = {
   debug(event: string, details?: Record<string, unknown>): void {
@@ -71,75 +74,8 @@ function newId(prefix: string): string {
   return `${prefix}-${cryptoApi?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`
 }
 
-function senderTabId(sender: chrome.runtime.MessageSender): number | undefined {
-  return sender.tab?.id
-}
-
-function senderFrameId(sender: chrome.runtime.MessageSender): number {
-  return sender.frameId ?? 0
-}
-
-function explicitTabId(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined
-}
-
-function messageTabId(message: RuntimeMessage, sender: chrome.runtime.MessageSender): number | undefined {
-  return senderTabId(sender) ?? explicitTabId(message.hostTabId)
-}
-
-function rememberHost(sender: chrome.runtime.MessageSender, explicitTabIdValue?: unknown): void {
-  const tabId = senderTabId(sender) ?? explicitTabId(explicitTabIdValue)
-  if (tabId !== undefined) hostTabIds.add(tabId)
-}
-
-async function mutateStore<T>(mutator: (store: OpenTeamStore) => T | Promise<T>): Promise<StoreMutationResult<T>> {
-  return updateStoreQueued(async store => {
-    const result = await mutator(store)
-    return { store, result }
-  })
-}
-
 async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> {
-  const message = { type: 'GROUP_STORE_UPDATED', store }
-
-  for (const tabId of [...hostTabIds]) {
-    if (tabId === excludeTabId) continue
-    try {
-      await chrome.tabs.sendMessage(tabId, message)
-    } catch (error) {
-      hostTabIds.delete(tabId)
-      log.debug('group-store-updated:tab-failed', { tabId, error: error instanceof Error ? error.message : String(error) })
-    }
-  }
-
-  try {
-    await chrome.runtime.sendMessage({ type: GROUP_PUSH_TYPE, payload: message })
-  } catch (error) {
-    log.debug('group-store-updated:runtime-failed', { error: error instanceof Error ? error.message : String(error) })
-  }
-
-  try {
-    await chrome.runtime.sendMessage({ type: LEGACY_PUSH_TYPE, payload: { type: 'TEAM_STATE_UPDATED', state: toLegacyState(store) } })
-  } catch (error) {
-    log.debug('legacy-store-updated:runtime-failed', { error: error instanceof Error ? error.message : String(error) })
-  }
-}
-
-async function sendError(message: string): Promise<void> {
-  const payload = { type: 'GROUP_DELIVERY_ERROR', message }
-  for (const tabId of [...hostTabIds]) {
-    try {
-      await chrome.tabs.sendMessage(tabId, payload)
-    } catch {
-      hostTabIds.delete(tabId)
-    }
-  }
-
-  try {
-    await chrome.runtime.sendMessage({ type: GROUP_PUSH_TYPE, payload })
-  } catch {
-    // no active receiver
-  }
+  await broadcastRuntimeStoreUpdated(store, { excludeTabId, legacyState: toLegacyState(store) })
 }
 
 async function sendPrompt(delivery: PromptDelivery): Promise<void> {
@@ -177,14 +113,6 @@ async function sendPrompt(delivery: PromptDelivery): Promise<void> {
     })
     throw error
   }
-}
-
-function getChatRoles(store: OpenTeamStore, chat: GroupChat): GroupRole[] {
-  return chat.roleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
-}
-
-function getChatMessages(store: OpenTeamStore, chat: GroupChat): GroupMessage[] {
-  return chat.messageIds.map(messageId => store.messagesById[messageId]).filter((message): message is GroupMessage => Boolean(message))
 }
 
 function getRoleReplyHistory(store: OpenTeamStore, chat: GroupChat, roleId: string, limit = 100): string[] {
@@ -315,20 +243,6 @@ function mapRuntimeRoleStatus(value: unknown): RoleStatus | undefined {
     default:
       return undefined
   }
-}
-
-function requireChat(store: OpenTeamStore, chatId: unknown): GroupChat {
-  if (typeof chatId !== 'string') throw new Error('缺少群聊 ID')
-  const chat = store.chatsById[chatId]
-  if (!chat) throw new Error(`找不到群聊：${chatId}`)
-  return chat
-}
-
-function requireRole(store: OpenTeamStore, chatId: string, roleId: unknown): GroupRole {
-  if (typeof roleId !== 'string') throw new Error('缺少人员 ID')
-  const role = store.rolesById[roleId]
-  if (!role || role.chatId !== chatId) throw new Error(`找不到人员：${roleId}`)
-  return role
 }
 
 function readRoomMode(value: unknown, fallback: RoomMode): RoomMode {
@@ -1266,7 +1180,7 @@ function toLegacyState(store: OpenTeamStore) {
     status: message.status,
   })) : []
 
-  return { roomId: chat?.id ?? 'group-empty', hostTabId: [...hostTabIds][0] ?? -1, roles, messages }
+  return { roomId: chat?.id ?? 'group-empty', hostTabId: listHostTabIds()[0] ?? -1, roles, messages }
 }
 
 function legacyStatus(status: GroupRole['status']): string {
@@ -1357,6 +1271,57 @@ async function handleLegacyCreateRole(message: RuntimeMessage) {
   return handleRoleCreate({ type: 'GROUP_ROLE_CREATE', chatId, name: message.name })
 }
 
+const routeMessage = createMessageRouter([
+  { type: 'GROUP_STORE_GET', handler: handleStoreGet },
+  { type: 'GROUP_CHAT_CREATE', handler: handleChatCreate },
+  { type: 'GROUP_CHAT_DUPLICATE', handler: handleChatDuplicate },
+  { type: 'GROUP_CHAT_SWITCH', handler: handleChatSwitch },
+  { type: 'GROUP_CHAT_UPDATE', handler: handleChatUpdate },
+  { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
+  { type: 'GROUP_CHAT_DELETE', handler: handleChatDelete },
+  { type: 'GROUP_CHAT_CLEAR_MESSAGES', handler: handleChatClearMessages },
+  { type: 'GROUP_CHAT_CLOSE', handler: handleChatClose },
+  { type: 'GROUP_CHAT_MARK_READ', handler: handleChatMarkRead },
+  { type: 'ROLE_TEMPLATE_CREATE', handler: handleRoleTemplateCreate },
+  { type: 'ROLE_TEMPLATE_UPDATE', handler: handleRoleTemplateUpdate },
+  { type: 'ROLE_TEMPLATE_DELETE', handler: handleRoleTemplateDelete },
+  { type: 'GROUP_ROLE_CREATE', handler: handleRoleCreate },
+  { type: 'GROUP_ROLES_CREATE_BATCH', handler: handleRolesCreateBatch },
+  { type: 'GROUP_ROLE_UPDATE', handler: handleRoleUpdate },
+  {
+    type: 'GROUP_ROLE_DELETE',
+    handler: async message => {
+      const result = await mutateStore(store => deleteGroupRole(store, requireString(message.roleId, '缺少人员 ID'), now()))
+      await broadcastStoreUpdated(result.store)
+      return { ok: true, store: result.store }
+    },
+  },
+  { type: 'GROUP_ROLE_RECOVER', handler: handleRoleRecover },
+  { type: 'GROUP_ROLE_REINITIALIZE', handler: handleRoleReinitialize },
+  { type: 'GROUP_ROLE_RETRY_REPLY', handler: handleRoleRetryReply },
+  { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
+  {
+    type: 'TEAM_FRAME_ROLE_READY',
+    handler: (message, sender) => readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' },
+  },
+  { type: 'TEAM_ROLE_CONVERSATION_UPDATED', handler: handleConversationUpdated },
+  { type: 'TEAM_SEND_ACK', handler: handleSendAck },
+  { type: 'TEAM_ROLE_STATUS', handler: handleRoleStatus },
+  { type: 'TEAM_ROLE_REPLY', handler: handleRoleReply },
+  { type: 'TEAM_ROLE_ERROR', handler: handleRoleError },
+  { type: 'TEAM_HOST_READY', handler: handleLegacyHostReady },
+  { type: 'TEAM_GET_STATE', handler: handleLegacyHostReady },
+  { type: 'TEAM_CREATE_ROLE', handler: handleLegacyCreateRole },
+  {
+    type: 'TEAM_SEND_MESSAGE',
+    handler: async message => {
+      const store = await loadStore()
+      if (!store.currentChatId) return { ok: false, error: '请先创建群聊' }
+      return handleMessageSend({ type: 'GROUP_MESSAGE_SEND', chatId: store.currentChatId, raw: message.raw })
+    },
+  },
+])
+
 chrome.runtime.onInstalled.addListener(() => {
   log.info('extension-installed')
 })
@@ -1367,83 +1332,9 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
     return true
   }
 
-  const run = async () => {
-    switch (message?.type) {
-      case 'GROUP_STORE_GET':
-        return handleStoreGet(message, sender)
-      case 'GROUP_CHAT_CREATE':
-        return handleChatCreate(message)
-      case 'GROUP_CHAT_DUPLICATE':
-        return handleChatDuplicate(message)
-      case 'GROUP_CHAT_SWITCH':
-        return handleChatSwitch(message, sender)
-      case 'GROUP_CHAT_UPDATE':
-        return handleChatUpdate(message)
-      case 'GROUP_SETTINGS_UPDATE':
-        return handleSettingsUpdate(message)
-      case 'GROUP_CHAT_DELETE':
-        return handleChatDelete(message)
-      case 'GROUP_CHAT_CLEAR_MESSAGES':
-        return handleChatClearMessages(message)
-      case 'GROUP_CHAT_CLOSE':
-        return handleChatClose(message)
-      case 'GROUP_CHAT_MARK_READ':
-        return handleChatMarkRead(message)
-      case 'ROLE_TEMPLATE_CREATE':
-        return handleRoleTemplateCreate(message)
-      case 'ROLE_TEMPLATE_UPDATE':
-        return handleRoleTemplateUpdate(message)
-      case 'ROLE_TEMPLATE_DELETE':
-        return handleRoleTemplateDelete(message)
-      case 'GROUP_ROLE_CREATE':
-        return handleRoleCreate(message)
-      case 'GROUP_ROLES_CREATE_BATCH':
-        return handleRolesCreateBatch(message)
-      case 'GROUP_ROLE_UPDATE':
-        return handleRoleUpdate(message)
-      case 'GROUP_ROLE_DELETE':
-        return mutateStore(store => deleteGroupRole(store, requireString(message.roleId, '缺少人员 ID'), now())).then(async result => {
-          await broadcastStoreUpdated(result.store)
-          return { ok: true, store: result.store }
-        })
-      case 'GROUP_ROLE_RECOVER':
-        return handleRoleRecover(message)
-      case 'GROUP_ROLE_REINITIALIZE':
-        return handleRoleReinitialize(message)
-      case 'GROUP_ROLE_RETRY_REPLY':
-        return handleRoleRetryReply(message)
-      case 'GROUP_MESSAGE_SEND':
-        return handleMessageSend(message)
-      case 'TEAM_FRAME_ROLE_READY':
-        return readOptionalString(message.chatId) ? handleFrameRoleReady(message, sender) : { ok: false, error: 'TEAM_FRAME_ROLE_READY 缺少 chatId' }
-      case 'TEAM_ROLE_CONVERSATION_UPDATED':
-        return handleConversationUpdated(message, sender)
-      case 'TEAM_SEND_ACK':
-        return handleSendAck(message, sender)
-      case 'TEAM_ROLE_STATUS':
-        return handleRoleStatus(message, sender)
-      case 'TEAM_ROLE_REPLY':
-        return handleRoleReply(message, sender)
-      case 'TEAM_ROLE_ERROR':
-        return handleRoleError(message, sender)
-      case 'TEAM_HOST_READY':
-      case 'TEAM_GET_STATE':
-        return handleLegacyHostReady(message, sender)
-      case 'TEAM_CREATE_ROLE':
-        return handleLegacyCreateRole(message)
-      case 'TEAM_SEND_MESSAGE': {
-        const store = await loadStore()
-        if (!store.currentChatId) return { ok: false, error: '请先创建群聊' }
-        return handleMessageSend({ type: 'GROUP_MESSAGE_SEND', chatId: store.currentChatId, raw: message.raw })
-      }
-      default:
-        return { ok: false, error: 'Unknown OpenTeam message' }
-    }
-  }
-
-  run()
+  Promise.resolve(routeMessage(message, sender))
     .then(sendResponse)
-    .catch(error => {
+    .catch((error: unknown) => {
       const reason = error instanceof Error ? error.message : String(error)
       log.error('message-handler:failed', { type: message?.type, error: reason })
       sendError(reason).catch(() => undefined)
@@ -1460,7 +1351,7 @@ chrome.action.onClicked.addListener(() => {
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  hostTabIds.delete(tabId)
+  forgetHostTab(tabId)
   const removed = runtimeFrames.removeTab(tabId)
   if (removed.length === 0) return
 
