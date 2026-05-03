@@ -14,6 +14,7 @@ export interface TeamPageDomRefs {
   templateListEl: HTMLElement
   targetPreviewEl: HTMLElement
   busyPreviewEl: HTMLElement
+  composerFormEl: HTMLFormElement
   sendButtonEl: HTMLButtonElement
   messageInputEl: HTMLTextAreaElement
   referenceDraftEl: HTMLElement
@@ -28,6 +29,8 @@ export interface TeamPageDomRefs {
   templateFormTitleEl: HTMLElement
   settingsButtonEl: HTMLButtonElement
   settingsMenuEl: HTMLElement
+  openPeopleLibraryEl: HTMLButtonElement
+  closePeopleLibraryEl: HTMLButtonElement
   peopleLibraryModalEl: HTMLElement
   personTemplateModalEl: HTMLElement
   addPersonModalEl: HTMLElement
@@ -35,6 +38,15 @@ export interface TeamPageDomRefs {
   peopleLibrarySummaryEl: HTMLElement
   peopleLibraryListEl: HTMLElement
   addLibraryPeopleListEl: HTMLElement
+  newTemplateEl: HTMLButtonElement
+  closePersonTemplateEl: HTMLButtonElement
+  closeAddPersonEl: HTMLButtonElement
+  openTemporaryPersonEl: HTMLButtonElement
+  closeTemporaryPersonEl: HTMLButtonElement
+  addRoleFormEl: HTMLFormElement
+  addLibraryPeopleFormEl: HTMLFormElement
+  addTemporaryPersonFormEl: HTMLFormElement
+  peopleLibraryFormEl: HTMLFormElement
   templateSiteGeminiEl: HTMLInputElement
   templateSiteChatGptEl: HTMLInputElement
   templateSiteClaudeEl: HTMLInputElement
@@ -70,6 +82,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateListEl: requireElement<HTMLElement>('#template-list'),
     targetPreviewEl: requireElement<HTMLElement>('#target-preview'),
     busyPreviewEl: requireElement<HTMLElement>('#busy-preview'),
+    composerFormEl: requireElement<HTMLFormElement>('#composer'),
     sendButtonEl: requireElement<HTMLButtonElement>('#send-message'),
     messageInputEl: requireElement<HTMLTextAreaElement>('#message-input'),
     referenceDraftEl: requireElement<HTMLElement>('#reference-draft'),
@@ -84,6 +97,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateFormTitleEl: requireElement<HTMLElement>('#template-form-title'),
     settingsButtonEl: requireElement<HTMLButtonElement>('#settings-button'),
     settingsMenuEl: requireElement<HTMLElement>('#settings-menu'),
+    openPeopleLibraryEl: requireElement<HTMLButtonElement>('#open-people-library'),
+    closePeopleLibraryEl: requireElement<HTMLButtonElement>('#close-people-library'),
     peopleLibraryModalEl: requireElement<HTMLElement>('#people-library-modal'),
     personTemplateModalEl: requireElement<HTMLElement>('#person-template-modal'),
     addPersonModalEl: requireElement<HTMLElement>('#add-person-modal'),
@@ -91,6 +106,15 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     peopleLibrarySummaryEl: requireElement<HTMLElement>('#people-library-summary'),
     peopleLibraryListEl: requireElement<HTMLElement>('#people-library-list'),
     addLibraryPeopleListEl: requireElement<HTMLElement>('#add-library-people-list'),
+    newTemplateEl: requireElement<HTMLButtonElement>('#new-template'),
+    closePersonTemplateEl: requireElement<HTMLButtonElement>('#close-person-template'),
+    closeAddPersonEl: requireElement<HTMLButtonElement>('#close-add-person'),
+    openTemporaryPersonEl: requireElement<HTMLButtonElement>('#open-temporary-person'),
+    closeTemporaryPersonEl: requireElement<HTMLButtonElement>('#close-temporary-person'),
+    addRoleFormEl: requireElement<HTMLFormElement>('#add-role-form'),
+    addLibraryPeopleFormEl: requireElement<HTMLFormElement>('#add-library-people-form'),
+    addTemporaryPersonFormEl: requireElement<HTMLFormElement>('#add-temporary-person-form'),
+    peopleLibraryFormEl: requireElement<HTMLFormElement>('#people-library-form'),
     templateSiteGeminiEl: requireElement<HTMLInputElement>('#template-site-gemini'),
     templateSiteChatGptEl: requireElement<HTMLInputElement>('#template-site-chatgpt'),
     templateSiteClaudeEl: requireElement<HTMLInputElement>('#template-site-claude'),

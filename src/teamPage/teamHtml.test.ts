@@ -2,9 +2,32 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+function readTeamHtml(): string {
+  return readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+}
+
+function readTeamCss(): string {
+  return readFileSync(resolve(process.cwd(), 'public/team.css'), 'utf8')
+}
+
+function readTeamDocument(): string {
+  return `${readTeamHtml()}\n${readTeamCss()}`
+}
+
 describe('team.html chat creation UI', () => {
+  it('loads team styles from an external stylesheet', () => {
+    const html = readTeamHtml()
+    const css = readTeamCss()
+
+    expect(html).toContain('<link rel="stylesheet" href="team.css" />')
+    expect(html).not.toContain('<style>')
+    expect(html).not.toContain('</style>')
+    expect(css).toContain(':root')
+    expect(css).toContain('body {')
+  })
+
   it('offers an explicit chat mode choice before creating a chat from the plus button', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toContain('id="chat-create-popover"')
     expect(html).toContain('id="new-chat-mode-independent"')
@@ -13,7 +36,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('includes the people-library workflows, right drawer, iframe host, and minimized launcher', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toContain('id="settings-button"')
     expect(html).toContain('id="settings-menu"')
@@ -43,23 +66,24 @@ describe('team.html chat creation UI', () => {
   })
 
   it('uses template default sites for library people and the add-person picker for temporary people', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
 
     expect(source).toContain('function addPersonSiteControl(itemKey: string, chatSite: ChatSite): HTMLElement')
-    expect(source).toContain('const chatSite = appState.addPersonSiteByKey.get(item.key) ?? item.chatSite')
+    expect(source).toContain('const chatSite = deps.state.addPersonSiteByKey.get(item.key) ?? item.chatSite')
     expect(source).toContain("if (item.source === 'library') return { source: 'library', roleTemplateId: item.roleTemplateId, chatSite }")
     expect(source).toContain("source: 'temporary'")
-    expect(source).toContain("selected?.value === 'claude'")
+    expect(source).toContain("if (deps.templateSiteClaudeEl.checked) return 'claude'")
   })
 
   it('stores a default target site on people-library entries instead of the settings menu', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
+    const domRefsSource = readFileSync(resolve(process.cwd(), 'src/teamPage/domRefs.ts'), 'utf8')
 
     expect(source).not.toContain("'#default-site-gemini'")
     expect(source).not.toContain("'#default-site-chatgpt'")
     expect(source).not.toContain("'#default-site-claude'")
-    expect(source).toContain('const templateSiteGeminiEl')
+    expect(domRefsSource).toContain('templateSiteGeminiEl')
     expect(source).toContain('function readTemplateChatSite(): ChatSite')
     expect(source).toContain('defaultChatSite: readTemplateChatSite()')
     expect(source).toContain('template.defaultChatSite ?? store.settings.defaultChatSite')
@@ -69,8 +93,9 @@ describe('team.html chat creation UI', () => {
   })
 
   it('keeps the people-library modal as a list and opens a separate editor for creating or editing people', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
+    const domRefsSource = readFileSync(resolve(process.cwd(), 'src/teamPage/domRefs.ts'), 'utf8')
     const peopleLibraryModal = html.match(/<div id="people-library-modal"[\s\S]*?<div id="person-template-modal"/)?.[0] ?? ''
     const personTemplateModal = html.match(/<div id="person-template-modal"[\s\S]*?<div id="add-person-modal"/)?.[0] ?? ''
 
@@ -87,12 +112,12 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("remove.textContent = '删除'")
     expect(source).toContain('window.confirm(`确定删除「${template.name}」吗？删除后这个人员会从人员库移除。`)')
     expect(source).toContain('if (!isTemplateUsed(template.id)) actions.append(remove)')
-    expect(source).toContain("'#new-template'")
-    expect(source).toContain("'#close-person-template'")
+    expect(domRefsSource).toContain("'#new-template'")
+    expect(domRefsSource).toContain("'#close-person-template'")
   })
 
   it('keeps long people-library lists scrolling inside the left list pane', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toMatch(/#people-library-modal \.modal\s*{[^}]*overflow:\s*hidden;/s)
     expect(html).toMatch(/#people-library-list\s*{[^}]*overflow:\s*auto;/s)
@@ -100,8 +125,8 @@ describe('team.html chat creation UI', () => {
   })
 
   it('shows role sites as compact pills with a menu instead of always-visible switch buttons', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/rolePanelView.ts'), 'utf8')
 
     expect(source).toContain("sitePill.className = `site-pill site-pill-${role.chatSite ?? 'gemini'}`")
     expect(source).toContain("menu.className = 'role-site-menu'")
@@ -112,7 +137,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('does not keep a global add-person site picker', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).not.toContain('name="add-person-chat-site"')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Gemini。')
@@ -121,7 +146,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('uses a clean page background without decorative side panels', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).not.toContain('body::before')
     expect(html).not.toContain('body::after')
@@ -130,7 +155,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('styles iframe background groups with chat and role labels', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toContain('.chat-frame-group-title')
     expect(html).toContain('.role-frame-shell')
@@ -143,7 +168,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('lays iframe chat groups as one group per row with up to three role frames per group', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const hostRule = html.match(/#iframe-host\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
     const groupRule = html.match(/#iframe-host \.chat-frame-group\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
 
@@ -165,7 +190,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('makes the selected iframe chat group visibly highlighted without changing its layout', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const activeGroupRule = html.match(/#iframe-host \.chat-frame-group\.active\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
 
     expect(activeGroupRule).toContain('outline: 2px solid rgba(47, 216, 204, 0.55);')
@@ -176,7 +201,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('does not render person settings inside the people drawer', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
 
     expect(html).not.toContain('id="role-editor"')
@@ -194,8 +219,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('renders chat actions through a three-dot menu that updates, duplicates, and deletes chats', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
     const chatListSource = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
     expect(chatListSource).toContain("menuButton.className = 'icon-btn chat-menu-btn'")
@@ -206,21 +230,22 @@ describe('team.html chat creation UI', () => {
     expect(chatListSource).toContain("clearMessages.textContent = '清空消息'")
     expect(chatListSource).toContain("closeFrames.textContent = '关闭群聊'")
     expect(chatListSource).toContain("remove.textContent = '删除群聊'")
-    expect(source).toContain("runCommand('GROUP_CHAT_CLEAR_MESSAGES'")
-    expect(source).toContain("runCommand('GROUP_CHAT_CLOSE'")
+    expect(chatListSource).toContain("runCommand('GROUP_CHAT_CLEAR_MESSAGES'")
+    expect(chatListSource).toContain("runCommand('GROUP_CHAT_CLOSE'")
     expect(chatListSource).toContain("runCommand('GROUP_CHAT_UPDATE'")
     expect(chatListSource).toContain("runCommand('GROUP_CHAT_DUPLICATE'")
-    expect(source).toContain("sendRuntimeMessage('GROUP_CHAT_DELETE'")
-    expect(source).toContain("response.error === 'Unknown OpenTeam message'")
-    expect(source).toContain('deleteChatFromLocalStore(chatId)')
+    expect(chatListSource).toContain("sendRuntimeMessage('GROUP_CHAT_DELETE'")
+    expect(chatListSource).toContain("response.error === 'Unknown OpenTeam message'")
+    expect(chatListSource).toContain('deleteChatFromLocalStore(chatId)')
     expect(html).toMatch(/\.chat-action-menu\s*{[^}]*position:\s*absolute;/s)
     expect(html).toMatch(/\.chat-action-menu\s*{[^}]*right:\s*14px;/s)
     expect(html).not.toMatch(/\.chat-action-menu\s*{[^}]*grid-column:\s*2 \/ 4;/s)
   })
 
   it('renders compact icon actions for assistant messages', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
+    const recoverySource = readFileSync(resolve(process.cwd(), 'src/teamPage/roleRecoveryController.ts'), 'utf8')
 
     expect(source).toContain("createMessageIconButton('跳转到原始窗口'")
     expect(source).toContain("createMessageIconButton('引用回复'")
@@ -229,12 +254,12 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("button.setAttribute('aria-label', '已复制')")
     expect(source).toContain("setMessageButtonIcon(button, 'check')")
     expect(source).toContain("setMessageButtonIcon(button, 'copy')")
-    expect(source).toContain('focusRoleFrame(message.chatId, message.roleId)')
+    expect(source).toContain('deps.focusRoleFrame(message.chatId, message.roleId)')
     expect(source).toContain('copyMessageContent(message)')
     expect(source).toContain('navigator.clipboard.writeText(message.content)')
     expect(source).not.toContain("jump.textContent = '跳转'")
     expect(source).not.toContain("quote.textContent = '引用'")
-    expect(source).toContain('setWindowMinimized(true)')
+    expect(recoverySource).toContain('setWindowMinimized(true)')
     expect(html).toContain('.role-frame-shell.jump-highlight')
     expect(html).toContain('.message-tool-btn')
     expect(html).toContain('.message-tool-btn::after')
@@ -244,12 +269,12 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.message-row\.thinking \.message-tools\s*{[^}]*opacity:\s*0;/s)
     expect(html).toMatch(/\.message-row\.thinking:hover \.message-tools,/s)
     expect(source).toContain("retry.textContent = '打断重试'")
-    expect(source).toContain("runCommand('GROUP_ROLE_RETRY_REPLY'")
+    expect(recoverySource).toContain("runCommand('GROUP_ROLE_RETRY_REPLY'")
   })
 
   it('keeps add-person sites per person and moves temporary people into a separate draft flow', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
     const addPersonModal = html.match(/<div id="add-person-modal"[\s\S]*?<div id="temporary-person-modal"/)?.[0] ?? ''
     const temporaryModal = html.match(/<div id="temporary-person-modal"[\s\S]*?<div id="iframe-host"/)?.[0] ?? ''
 
@@ -266,11 +291,11 @@ describe('team.html chat creation UI', () => {
   })
 
   it('shows an add-person call to action when the selected chat has no people', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
     expect(source).toContain("emptyChatPeopleCard('暂无人员'")
     expect(source).toContain("button.textContent = '添加人员'")
-    expect(source).toContain('openAddPersonDialog()')
+    expect(source).toContain('deps.openAddPersonDialog')
   })
 
   it('switches chats from the whole chat row while keeping row menus isolated', () => {
@@ -284,8 +309,8 @@ describe('team.html chat creation UI', () => {
   })
 
   it('hides the reference draft until quoting and keeps quoted text to one line', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/composerView.ts'), 'utf8')
 
     expect(html).toMatch(/\.reference-draft\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toMatch(/\.reference-draft-preview\s*{[^}]*white-space:\s*nowrap;/s)
@@ -295,7 +320,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('positions the mention panel next to the composer input instead of the right action area', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toMatch(/\.mention-panel\s*{[^}]*left:\s*12px;/s)
     expect(html).toMatch(/\.mention-panel\s*{[^}]*bottom:\s*calc\(100% \+ 8px\);/s)
@@ -304,19 +329,20 @@ describe('team.html chat creation UI', () => {
   })
 
   it('makes the refresh control sync and recover the current chat', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/roleRecoveryController.ts'), 'utf8')
+    const uiSource = readFileSync(resolve(process.cwd(), 'src/teamPage/teamUiController.ts'), 'utf8')
 
     expect(html).toContain('aria-label="同步并恢复当前群聊"')
     expect(html).toContain('title="同步并恢复当前群聊"')
     expect(source).toContain('async function refreshCurrentChat()')
     expect(source).toContain("log.info('ui:refresh-recover-chat'")
-    expect(source).toContain('refreshCurrentChat().catch')
+    expect(uiSource).toContain('refreshCurrentChat().catch')
   })
 
   it('uses a lighter composer and simplified chat header', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatHeaderView.ts'), 'utf8')
 
     expect(html).toContain('placeholder="输入消息，@成员可指定回复；不 @ 默认发给全部成员。"')
     expect(html).toMatch(/\.chat-header\s*{[^}]*min-height:\s*72px;/s)
@@ -325,12 +351,12 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.composer\s*{[^}]*border-top:\s*1px solid rgba\(132,\s*153,\s*171,\s*0\.12\);/s)
     expect(html).toMatch(/\.drawer-summary\s*{[^}]*min-height:\s*30px;/s)
     expect(source).toContain("togglePeopleDrawerEl.textContent = '成员 0'")
-    expect(source).toContain('togglePeopleDrawerEl.textContent = `成员 ${roles.length} ${appState.peopleDrawerOpen ?')
+    expect(source).toContain('deps.togglePeopleDrawerEl.textContent = `成员 ${roles.length} ${deps.state.peopleDrawerOpen ?')
     expect(source).not.toContain('人回复中')
   })
 
   it('places user messages on the right like a WeChat conversation', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
 
     expect(html).toMatch(/\.message-row\.user\s*{[^}]*justify-content:\s*flex-end;/s)
     expect(html).toMatch(/\.message-row\.user \.message-inner\s*{[^}]*flex-direction:\s*row-reverse;/s)
@@ -340,8 +366,8 @@ describe('team.html chat creation UI', () => {
   })
 
   it('renders time dividers and system messages as centered pills', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
     expect(source).toContain("divider.className = 'message-time-divider'")
     expect(source).toContain("pill.className = 'message-system-pill'")
@@ -350,8 +376,8 @@ describe('team.html chat creation UI', () => {
   })
 
   it('renders explicit mentions inline inside user message bubbles', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
     expect(source).toContain('renderMessageMentions(message)')
     expect(source).toContain('appendMentionsToBody(body, mentions)')
@@ -362,8 +388,8 @@ describe('team.html chat creation UI', () => {
   })
 
   it('renders copied markdown replies with markdown-it while keeping other messages on the plain-text renderer', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
     expect(source).toContain("message.contentFormat === 'markdown'")
     expect(source).toContain('renderMarkdownMessageBody(body, message.content)')
@@ -376,7 +402,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('keeps chat titles as plain text and omits chat status from list rows', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
     expect(source).toContain("name.className = 'chat-name'")
@@ -388,7 +414,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('uses a WeChat-like chat list row with avatar, body, and right time column', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/chatListView.ts'), 'utf8')
 
     expect(source).toContain("avatar.className = `chat-avatar ${deps.roleToneClass(chat.name)}`")
@@ -418,7 +444,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('avoids layout-changing iframe group transitions while switching chats', () => {
-    const html = readFileSync(resolve(process.cwd(), 'public/team.html'), 'utf8')
+    const html = readTeamDocument()
     const activeGroupRule = html.match(/#iframe-host \.chat-frame-group\.active\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
     const groupRule = html.match(/#iframe-host \.chat-frame-group\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
 
@@ -429,7 +455,7 @@ describe('team.html chat creation UI', () => {
   })
 
   it('reuses rendered message nodes so returning to a chat is cheap', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/index.ts'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/messagesView.ts'), 'utf8')
 
     expect(source).toContain('messageNodeCache')
     expect(source).toContain('renderMessageNode(item.message, item.showName, item.showAvatar)')
