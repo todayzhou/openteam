@@ -6,6 +6,8 @@ type AddPersonItem =
   | { key: string; source: 'library'; roleTemplateId: string; name: string; description?: string; chatSite: ChatSite }
   | { key: string; source: 'temporary'; draftId: string; name: string; description?: string; systemPrompt: string; chatSite: ChatSite }
 
+const PEOPLE_LIBRARY_PAGE_SIZE = 8
+
 export interface PeopleLibraryViewDependencies {
   state: TeamPageState
   getStore(): OpenTeamStore
@@ -19,6 +21,7 @@ export interface PeopleLibraryViewDependencies {
   temporaryPersonModalEl: HTMLElement
   peopleLibrarySummaryEl: HTMLElement
   peopleLibraryListEl: HTMLElement
+  peopleLibraryPaginationEl: HTMLElement
   addLibraryPeopleListEl: HTMLElement
   roleTemplateSelectEl: HTMLSelectElement
   templateListEl: HTMLElement
@@ -68,14 +71,17 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 
     deps.templateListEl.replaceChildren()
     deps.peopleLibraryListEl.replaceChildren()
+    deps.peopleLibraryPaginationEl.replaceChildren()
     if (templates.length === 0) {
       deps.peopleLibraryListEl.append(deps.emptyCard('暂无人员', '新建人员后，可在添加人员时复用。'))
     } else {
-      for (const template of templates) {
+      const visibleTemplates = pagedTemplates(templates)
+      for (const template of visibleTemplates) {
         const card = templateCard(template)
         deps.templateListEl.append(card.cloneNode(true))
         deps.peopleLibraryListEl.append(card)
       }
+      renderPeopleLibraryPagination(templates.length)
     }
     if (!deps.personTemplateModalEl.hidden) renderTemplateEditor()
   }
@@ -148,6 +154,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.settingsMenuEl.hidden = true
       deps.settingsButtonEl.setAttribute('aria-expanded', 'false')
       deps.peopleLibraryModalEl.hidden = false
+      deps.state.peopleLibraryPage = 0
       deps.log.info('ui:people-library:open', { templateCount: deps.getTemplates().length })
       renderTemplates()
     })
@@ -269,6 +276,41 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 
     card.append(body, actions)
     return card
+  }
+
+  function pagedTemplates(templates: RoleTemplate[]): RoleTemplate[] {
+    const pageCount = Math.max(1, Math.ceil(templates.length / PEOPLE_LIBRARY_PAGE_SIZE))
+    deps.state.peopleLibraryPage = Math.min(Math.max(0, deps.state.peopleLibraryPage), pageCount - 1)
+    const start = deps.state.peopleLibraryPage * PEOPLE_LIBRARY_PAGE_SIZE
+    return templates.slice(start, start + PEOPLE_LIBRARY_PAGE_SIZE)
+  }
+
+  function renderPeopleLibraryPagination(total: number): void {
+    const pageCount = Math.max(1, Math.ceil(total / PEOPLE_LIBRARY_PAGE_SIZE))
+    if (pageCount <= 1) return
+
+    const previous = paginationButton('上一页', deps.state.peopleLibraryPage === 0, () => {
+      deps.state.peopleLibraryPage = Math.max(0, deps.state.peopleLibraryPage - 1)
+      renderTemplates()
+    })
+    const next = paginationButton('下一页', deps.state.peopleLibraryPage >= pageCount - 1, () => {
+      deps.state.peopleLibraryPage = Math.min(pageCount - 1, deps.state.peopleLibraryPage + 1)
+      renderTemplates()
+    })
+    const label = document.createElement('span')
+    label.className = 'pagination-label'
+    label.textContent = `${deps.state.peopleLibraryPage + 1} / ${pageCount}`
+    deps.peopleLibraryPaginationEl.append(previous, label, next)
+  }
+
+  function paginationButton(label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'btn btn-ghost pagination-btn'
+    button.textContent = label
+    button.disabled = disabled
+    button.addEventListener('click', onClick)
+    return button
   }
 
   function renderAddPersonDialog(): void {

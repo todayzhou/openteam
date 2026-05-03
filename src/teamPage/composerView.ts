@@ -24,6 +24,7 @@ export interface ComposerViewDependencies {
 export interface ComposerView {
   renderComposerState(): void
   registerComposerEvents(): void
+  insertMention(role: GroupRole): void
   setReference(message: GroupMessage): void
   submitComposerMessage(): Promise<void>
 }
@@ -238,7 +239,8 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     const cursor = deps.messageInputEl.selectionStart ?? value.length
     const beforeCursor = value.slice(0, cursor)
     const atIndex = beforeCursor.lastIndexOf('@')
-    const prefix = atIndex >= 0 ? value.slice(0, atIndex) : value.slice(0, cursor)
+    const rawPrefix = atIndex >= 0 ? value.slice(0, atIndex) : value.slice(0, cursor)
+    const prefix = rawPrefix && !/\s$/.test(rawPrefix) ? `${rawPrefix} ` : rawPrefix
     const suffix = value.slice(cursor)
     const inserted = `${prefix}@${role.name} ${suffix}`
     deps.messageInputEl.value = inserted
@@ -249,7 +251,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     renderComposerState()
   }
 
-  return { renderComposerState, registerComposerEvents, setReference, submitComposerMessage }
+  return { renderComposerState, registerComposerEvents, insertMention, setReference, submitComposerMessage }
 }
 
 function teamRoleKey(chatId: string, roleId: string): string {

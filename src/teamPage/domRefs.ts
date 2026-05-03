@@ -37,6 +37,7 @@ export interface TeamPageDomRefs {
   temporaryPersonModalEl: HTMLElement
   peopleLibrarySummaryEl: HTMLElement
   peopleLibraryListEl: HTMLElement
+  peopleLibraryPaginationEl: HTMLElement
   addLibraryPeopleListEl: HTMLElement
   newTemplateEl: HTMLButtonElement
   closePersonTemplateEl: HTMLButtonElement
@@ -105,6 +106,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     temporaryPersonModalEl: requireElement<HTMLElement>('#temporary-person-modal'),
     peopleLibrarySummaryEl: requireElement<HTMLElement>('#people-library-summary'),
     peopleLibraryListEl: requireElement<HTMLElement>('#people-library-list'),
+    peopleLibraryPaginationEl: requireElement<HTMLElement>('#people-library-pagination'),
     addLibraryPeopleListEl: requireElement<HTMLElement>('#add-library-people-list'),
     newTemplateEl: requireElement<HTMLButtonElement>('#new-template'),
     closePersonTemplateEl: requireElement<HTMLButtonElement>('#close-person-template'),

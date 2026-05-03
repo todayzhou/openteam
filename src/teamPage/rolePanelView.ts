@@ -17,6 +17,7 @@ export interface RolePanelViewDependencies {
   emptyCard(title: string, body: string): HTMLElement
   roleToneClass(seed: string | undefined): string
   roleAvatarLabel(name: string | undefined): string
+  insertMention(role: GroupRole): void
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
 }
@@ -55,6 +56,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const avatar = document.createElement('div')
     avatar.className = `role-avatar ${deps.roleToneClass(role.name)}`
     avatar.textContent = deps.roleAvatarLabel(role.name)
+    wireMentionShortcut(avatar, role)
 
     const main = document.createElement('div')
     main.className = 'role-card-main'
@@ -64,7 +66,8 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
     const name = document.createElement('div')
     name.className = 'role-name'
     name.textContent = role.name
-    row.append(name, statusPill(role.status, roleStatusLabel(role.status)))
+    wireMentionShortcut(name, role)
+    row.append(name, roleSiteBadge(role.chatSite), statusPill(role.status, roleStatusLabel(role.status)))
 
     const description = document.createElement('div')
     description.className = 'role-description'
@@ -146,12 +149,33 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
   }
 
   return { renderRolePanel }
+
+  function wireMentionShortcut(element: HTMLElement, role: GroupRole): void {
+    element.classList.add('mention-shortcut')
+    element.title = `@${role.name}`
+    element.addEventListener('click', event => {
+      event.stopPropagation()
+      deps.insertMention(role)
+    })
+    element.addEventListener('contextmenu', event => {
+      event.preventDefault()
+      event.stopPropagation()
+      deps.insertMention(role)
+    })
+  }
 }
 
 function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   return 'Gemini'
+}
+
+function roleSiteBadge(site: ChatSite | undefined): HTMLElement {
+  const badge = document.createElement('span')
+  badge.className = `role-site-badge site-pill-${site ?? 'gemini'}`
+  badge.textContent = siteLabel(site)
+  return badge
 }
 
 function statusPill(status: string, label: string): HTMLElement {

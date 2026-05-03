@@ -22,6 +22,7 @@ export interface MessagesViewDependencies {
   roleAvatarLabel(name: string | undefined): string
   messageTitle(message: GroupMessage): string
   focusRoleFrame(chatId: string, roleId: string | undefined): void
+  insertMention(role: GroupRole): void
   setReference(message: GroupMessage): void
   interruptAndRetryRole(role: GroupRole): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
@@ -99,6 +100,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     avatar.className = `message-avatar ${messageToneClass(message)}`
     avatar.textContent = messageAvatarLabel(message)
     avatar.hidden = !showAvatar
+    wireMentionShortcut(avatar, roleForMessage(message))
 
     const stack = document.createElement('div')
     stack.className = 'message-stack'
@@ -106,7 +108,13 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     if (message.type === 'assistant' && showName) {
       const name = document.createElement('div')
       name.className = 'message-name'
-      name.textContent = deps.messageTitle(message)
+      const title = document.createElement('span')
+      title.className = 'message-name-text'
+      title.textContent = deps.messageTitle(message)
+      name.append(title)
+      const role = roleForMessage(message)
+      if (role) name.append(siteBadge(role.chatSite))
+      wireMentionShortcut(name, role)
       stack.append(name)
     }
 
@@ -229,6 +237,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       type: message.type,
       roleId: message.roleId,
       roleName: message.roleName,
+      roleSite: roleForMessage(message)?.chatSite,
       content: message.content,
       contentFormat: message.contentFormat,
       createdAt: message.createdAt,
@@ -297,12 +306,17 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     avatar.className = `message-avatar ${deps.roleToneClass(role.name)}`
     avatar.textContent = deps.roleAvatarLabel(role.name)
     avatar.hidden = !showAvatar
+    wireMentionShortcut(avatar, role)
     const stack = document.createElement('div')
     stack.className = 'message-stack'
     if (showName) {
       const name = document.createElement('div')
       name.className = 'message-name'
-      name.textContent = role.name
+      const title = document.createElement('span')
+      title.className = 'message-name-text'
+      title.textContent = role.name
+      name.append(title, siteBadge(role.chatSite))
+      wireMentionShortcut(name, role)
       stack.append(name)
     }
     const bubble = document.createElement('div')
@@ -359,5 +373,39 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value
   }
 
+  function roleForMessage(message: GroupMessage): GroupRole | undefined {
+    if (!message.roleId) return undefined
+    const role = deps.getStore().rolesById[message.roleId]
+    return role?.chatId === message.chatId ? role : undefined
+  }
+
+  function wireMentionShortcut(element: HTMLElement, role: GroupRole | undefined): void {
+    if (!role) return
+    element.classList.add('mention-shortcut')
+    element.title = `@${role.name}`
+    element.addEventListener('click', event => {
+      event.stopPropagation()
+      deps.insertMention(role)
+    })
+    element.addEventListener('contextmenu', event => {
+      event.preventDefault()
+      event.stopPropagation()
+      deps.insertMention(role)
+    })
+  }
+
+  function siteBadge(site: GroupRole['chatSite']): HTMLElement {
+    const badge = document.createElement('span')
+    badge.className = `role-site-badge site-pill-${site ?? 'gemini'}`
+    badge.textContent = siteLabel(site)
+    return badge
+  }
+
   return { renderMessages }
+}
+
+function siteLabel(site: GroupRole['chatSite']): string {
+  if (site === 'chatgpt') return 'ChatGPT'
+  if (site === 'claude') return 'Claude'
+  return 'Gemini'
 }

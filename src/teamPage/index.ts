@@ -26,7 +26,7 @@ const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetP
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
 const { templateNameEl, templateDescriptionEl, templatePromptEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl } = teamDomRefs
 const { openPeopleLibraryEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
-const { peopleLibrarySummaryEl, peopleLibraryListEl, addLibraryPeopleListEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
+const { peopleLibrarySummaryEl, peopleLibraryListEl, peopleLibraryPaginationEl, addLibraryPeopleListEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
 const { openTemporaryPersonEl, closeTemporaryPersonEl, addRoleFormEl, addLibraryPeopleFormEl, addTemporaryPersonFormEl, peopleLibraryFormEl } = teamDomRefs
 const { templateSiteGeminiEl, templateSiteChatGptEl, templateSiteClaudeEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
 const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl } = teamDomRefs
@@ -49,6 +49,7 @@ const runtimeClient = createTeamPageRuntimeClient({
 const sendRuntimeMessage = runtimeClient.sendRuntimeMessage
 const runCommand = runtimeClient.runCommand
 let renderComposerState = (): void => {}
+let insertMention = (_role: GroupRole): void => {}
 const floatingWindowControls = createFloatingWindowControls({
   appShellEl,
   floatingDragHandleEl,
@@ -69,6 +70,7 @@ const rolePanelView = createRolePanelView({
   emptyCard,
   roleToneClass,
   roleAvatarLabel,
+  insertMention: role => insertMention(role),
   runCommand,
   showError,
 })
@@ -141,6 +143,7 @@ const composerView = createComposerView({
   showError,
 })
 renderComposerState = composerView.renderComposerState
+insertMention = composerView.insertMention
 const registerComposerEvents = composerView.registerComposerEvents
 const setReference = composerView.setReference
 const peopleLibraryView = createPeopleLibraryView({
@@ -156,6 +159,7 @@ const peopleLibraryView = createPeopleLibraryView({
   temporaryPersonModalEl,
   peopleLibrarySummaryEl,
   peopleLibraryListEl,
+  peopleLibraryPaginationEl,
   addLibraryPeopleListEl,
   roleTemplateSelectEl,
   templateListEl,
@@ -203,6 +207,7 @@ const messagesView = createMessagesView({
   roleAvatarLabel,
   messageTitle,
   focusRoleFrame,
+  insertMention,
   setReference,
   interruptAndRetryRole,
   runCommand,

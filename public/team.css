@@ -761,6 +761,7 @@ select:focus {
 .workspace {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  background: #111418;
 }
 
 .chat-header {
@@ -820,8 +821,8 @@ select:focus {
   flex-direction: column;
   gap: 10px;
   overflow: auto;
-  padding: 18px 28px 22px;
-  background: #111418;
+  padding: 18px 28px 14px;
+  background: transparent;
 }
 
 .empty-state {
@@ -878,7 +879,10 @@ select:focus {
 }
 
 .message-name {
+  display: inline-flex;
   max-width: 100%;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   margin: 0 0 4px 2px;
   color: #9aa4ad;
@@ -887,6 +891,20 @@ select:focus {
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.message-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-shortcut {
+  cursor: pointer;
+}
+
+.mention-shortcut:hover {
+  filter: brightness(1.08);
 }
 
 .message-time-divider {
@@ -1181,16 +1199,16 @@ select:focus {
 
 .composer {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
   align-items: end;
-  gap: 10px;
-  margin: 0;
-  padding: 10px 14px 12px;
-  border: 0;
-  border-top: 1px solid rgba(132, 153, 171, 0.12);
-  border-radius: 0;
-  background: #151a1f;
-  box-shadow: none;
+  margin: 0 22px 18px;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(132, 153, 171, 0.22);
+  border-radius: 14px;
+  background: #1b1d20;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018), 0 12px 30px rgba(0, 0, 0, 0.18);
 }
 
 .reference-draft {
@@ -1261,9 +1279,10 @@ select:focus {
 }
 
 #message-input {
-  min-height: 44px;
-  max-height: 120px;
-  flex: 1;
+  min-height: 98px;
+  max-height: 150px;
+  grid-column: 1;
+  grid-row: 1;
   border: 0;
   background: transparent;
   resize: none;
@@ -1275,7 +1294,9 @@ select:focus {
 }
 
 .composer-actions {
-  flex: 0 0 auto;
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
 }
 
 .composer-actions > div {
@@ -1354,6 +1375,14 @@ select:focus {
   align-items: center;
   min-height: 70px;
   cursor: pointer;
+}
+
+.role-card .role-row {
+  justify-content: flex-start;
+}
+
+.role-card .status-pill {
+  margin-left: auto;
 }
 
 .role-card.active,
@@ -1468,6 +1497,19 @@ select:focus {
   color: #f5cd82;
 }
 
+.role-site-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(132, 153, 171, 0.18);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 1;
+}
+
 .role-site-menu {
   position: absolute;
   left: 0;
@@ -1567,6 +1609,32 @@ select:focus {
   max-height: calc(100vh - 220px);
   overflow: auto;
   padding-right: 2px;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 42px;
+  padding-top: 12px;
+}
+
+.pagination-bar:empty {
+  display: none;
+}
+
+.pagination-label {
+  min-width: 54px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  text-align: center;
+}
+
+.pagination-btn {
+  min-height: 30px;
+  padding: 0 10px;
 }
 
 .template-card {

@@ -24,6 +24,7 @@ export interface TeamPageState {
   chatMenuChatId?: string
   roleSiteMenuRoleId?: string
   addPersonSiteMenuId?: string
+  peopleLibraryPage: number
   pendingSwitchAnimationFrame?: number
   thinkingTimeoutTimers: number[]
   loggedThinkingTimeoutRoleIds: Set<string>
@@ -46,5 +47,6 @@ export function createTeamPageState(): TeamPageState {
     roleReadyWaiters: new Set<RoleReadyWaiter>(),
     temporaryPersonDrafts: [],
     addPersonSiteByKey: new Map<string, ChatSite>(),
+    peopleLibraryPage: 0,
   }
 }
