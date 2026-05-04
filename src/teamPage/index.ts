@@ -13,7 +13,7 @@ import { createPeopleLibraryView } from './peopleLibraryView'
 import { createRoleRecoveryController } from './roleRecoveryController'
 import { createRolePanelView } from './rolePanelView'
 import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeClient'
-import { createErrorPresenter, teamPageLog } from './teamPageServices'
+import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 
@@ -22,7 +22,7 @@ const appState = createTeamPageState()
 let store: OpenTeamStore = appState.store
 
 const teamDomRefs = createTeamPageDomRefs()
-const { appShellEl, floatingDragHandleEl, toggleWindowSizeEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
+const { appShellEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
 const { templateNameEl, templateDescriptionEl, templatePromptEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl } = teamDomRefs
@@ -35,6 +35,7 @@ const { templateSiteGeminiEl, templateSiteChatGptEl, templateSiteClaudeEl, templ
 const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl } = teamDomRefs
 const log = teamPageLog
 const showError = createErrorPresenter(errorEl)
+const showSuccess = createSuccessPresenter(errorEl)
 
 const iframeHost = createIframeHost({
   visibleHost: teamDomRefs.iframeHostEl,
@@ -56,8 +57,8 @@ let insertMention = (_role: GroupRole): void => {}
 let insertTextIntoActiveNote = (_text: string): void => {}
 const floatingWindowControls = createFloatingWindowControls({
   appShellEl,
-  floatingDragHandleEl,
   toggleWindowSizeEl,
+  toggleFullscreenEl,
   windowLauncherEl,
 })
 const setWindowMinimized = floatingWindowControls.setWindowMinimized
@@ -128,6 +129,7 @@ const refreshCurrentChat = roleRecoveryController.refreshCurrentChat
 const notifyRoleReadyWaiters = roleRecoveryController.notifyRoleReadyWaiters
 const reconnectRolesForSend = roleRecoveryController.reconnectRolesForSend
 const focusRoleFrame = roleRecoveryController.focusRoleFrame
+const resyncMessageReply = roleRecoveryController.resyncMessageReply
 const retryRoleReply = roleRecoveryController.retryRoleReply
 const stopRoleReply = roleRecoveryController.stopRoleReply
 const composerView = createComposerView({
@@ -245,11 +247,13 @@ const messagesView = createMessagesView({
   insertMention,
   setReference,
   insertTextIntoActiveNote,
+  resyncMessageReply,
   retryRoleReply,
   stopRoleReply,
   runCommand,
   render,
   showError,
+  showSuccess,
   log,
 })
 const renderMessages = messagesView.renderMessages

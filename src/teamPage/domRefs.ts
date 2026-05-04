@@ -1,7 +1,7 @@
 export interface TeamPageDomRefs {
   appShellEl: HTMLElement
-  floatingDragHandleEl: HTMLElement
   toggleWindowSizeEl: HTMLButtonElement
+  toggleFullscreenEl: HTMLButtonElement
   storeSummaryEl: HTMLElement
   chatListEl: HTMLElement
   chatTitleEl: HTMLElement
@@ -87,8 +87,8 @@ export function requireElement<T extends Element>(selector: string): T {
 export function createTeamPageDomRefs(): TeamPageDomRefs {
   return {
     appShellEl: requireElement<HTMLElement>('#app'),
-    floatingDragHandleEl: requireElement<HTMLElement>('#floating-drag-handle'),
     toggleWindowSizeEl: requireElement<HTMLButtonElement>('#toggle-window-size'),
+    toggleFullscreenEl: requireElement<HTMLButtonElement>('#toggle-fullscreen'),
     storeSummaryEl: requireElement<HTMLElement>('#store-summary'),
     chatListEl: requireElement<HTMLElement>('#chat-list'),
     chatTitleEl: requireElement<HTMLElement>('#chat-title'),

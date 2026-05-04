@@ -1,7 +1,7 @@
 export interface FloatingWindowDependencies {
   appShellEl: HTMLElement
-  floatingDragHandleEl: HTMLElement
   toggleWindowSizeEl: HTMLButtonElement
+  toggleFullscreenEl: HTMLButtonElement
   windowLauncherEl: HTMLButtonElement
 }
 
@@ -11,6 +11,8 @@ export interface FloatingWindowControls {
 }
 
 export function createFloatingWindowControls(deps: FloatingWindowDependencies): FloatingWindowControls {
+  const dragZoneHeight = 52
+
   function ensureShellPositioned(): DOMRect {
     const rect = deps.appShellEl.getBoundingClientRect()
     deps.appShellEl.style.left = `${rect.left}px`
@@ -30,6 +32,7 @@ export function createFloatingWindowControls(deps: FloatingWindowDependencies): 
   }
 
   function clampShellPosition(): void {
+    if (deps.appShellEl.classList.contains('fullscreen')) return
     if (deps.appShellEl.style.transform !== 'none') return
 
     const rect = deps.appShellEl.getBoundingClientRect()
@@ -37,6 +40,7 @@ export function createFloatingWindowControls(deps: FloatingWindowDependencies): 
   }
 
   function setWindowMinimized(minimized: boolean): void {
+    if (minimized) setWindowFullscreen(false)
     if (!minimized && deps.appShellEl.style.transform !== 'none') ensureShellPositioned()
     deps.appShellEl.classList.toggle('minimized', minimized)
     deps.windowLauncherEl.hidden = !minimized
@@ -45,24 +49,43 @@ export function createFloatingWindowControls(deps: FloatingWindowDependencies): 
     if (!minimized) window.requestAnimationFrame(clampShellPosition)
   }
 
+  function setWindowFullscreen(fullscreen: boolean): void {
+    if (fullscreen) {
+      deps.appShellEl.style.left = ''
+      deps.appShellEl.style.top = ''
+      deps.appShellEl.style.transform = ''
+      deps.appShellEl.classList.remove('minimized')
+      deps.windowLauncherEl.hidden = true
+      deps.toggleWindowSizeEl.textContent = '−'
+      deps.toggleWindowSizeEl.setAttribute('aria-expanded', 'true')
+    }
+    deps.appShellEl.classList.toggle('fullscreen', fullscreen)
+    deps.toggleFullscreenEl.textContent = fullscreen ? '⤡' : '⛶'
+    deps.toggleFullscreenEl.setAttribute('aria-pressed', String(fullscreen))
+    deps.toggleFullscreenEl.setAttribute('aria-label', fullscreen ? '退出全屏' : '全屏窗口')
+    deps.toggleFullscreenEl.title = fullscreen ? '退出全屏' : '全屏窗口'
+  }
+
   function registerFloatingWindowControls(): void {
     let dragOffsetX = 0
     let dragOffsetY = 0
     let activePointerId: number | undefined
 
-    deps.floatingDragHandleEl.addEventListener('pointerdown', event => {
+    deps.appShellEl.addEventListener('pointerdown', event => {
       if (event.button !== 0) return
+      if (deps.appShellEl.classList.contains('fullscreen')) return
+      if (!isTopChromeDragEvent(event)) return
 
       const rect = ensureShellPositioned()
       dragOffsetX = event.clientX - rect.left
       dragOffsetY = event.clientY - rect.top
       activePointerId = event.pointerId
       deps.appShellEl.classList.add('dragging')
-      deps.floatingDragHandleEl.setPointerCapture(event.pointerId)
+      deps.appShellEl.setPointerCapture(event.pointerId)
       event.preventDefault()
     })
 
-    deps.floatingDragHandleEl.addEventListener('pointermove', event => {
+    deps.appShellEl.addEventListener('pointermove', event => {
       if (activePointerId !== event.pointerId) return
       moveShellTo(event.clientX - dragOffsetX, event.clientY - dragOffsetY)
     })
@@ -71,14 +94,23 @@ export function createFloatingWindowControls(deps: FloatingWindowDependencies): 
       if (activePointerId !== event.pointerId) return
       activePointerId = undefined
       deps.appShellEl.classList.remove('dragging')
-      if (deps.floatingDragHandleEl.hasPointerCapture(event.pointerId)) deps.floatingDragHandleEl.releasePointerCapture(event.pointerId)
+      if (deps.appShellEl.hasPointerCapture(event.pointerId)) deps.appShellEl.releasePointerCapture(event.pointerId)
     }
 
-    deps.floatingDragHandleEl.addEventListener('pointerup', stopDragging)
-    deps.floatingDragHandleEl.addEventListener('pointercancel', stopDragging)
+    deps.appShellEl.addEventListener('pointerup', stopDragging)
+    deps.appShellEl.addEventListener('pointercancel', stopDragging)
     deps.toggleWindowSizeEl.addEventListener('click', () => setWindowMinimized(!deps.appShellEl.classList.contains('minimized')))
+    deps.toggleFullscreenEl.addEventListener('click', () => setWindowFullscreen(!deps.appShellEl.classList.contains('fullscreen')))
+    setWindowFullscreen(deps.appShellEl.classList.contains('fullscreen'))
     deps.windowLauncherEl.addEventListener('click', () => setWindowMinimized(false))
     window.addEventListener('resize', clampShellPosition)
+  }
+
+  function isTopChromeDragEvent(event: PointerEvent): boolean {
+    const target = event.target as Element | null
+    if (target?.closest('button, input, textarea, select, a, [role="button"], .settings-menu, .modal')) return false
+    const rect = deps.appShellEl.getBoundingClientRect()
+    return event.clientY - rect.top <= dragZoneHeight
   }
 
   return { registerFloatingWindowControls, setWindowMinimized }

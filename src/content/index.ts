@@ -4,6 +4,7 @@ import { registerFrameRoleHandshake } from './frameHandshake'
 import { isDirectEmbeddedFrame, isEmbeddedFrame } from './frameEnvironment'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
 import { createReplyObserver, type ReplyObserverController } from './replyObserver'
+import { readResyncReplyText } from './reportableReply'
 import { contentLog as log, sendRuntimeMessage, type ContentRuntimeMessage } from './runtimeClient'
 import { createRoleSession } from './roleSession'
 import { getActiveChatSiteAdapter } from './sites'
@@ -93,8 +94,60 @@ function registerMessageHandlers(): void {
       return true
     }
 
+    if (message?.type === 'TEAM_RESYNC_REPLY') {
+      handleResyncReplyMessage(message, sendResponse)
+      return true
+    }
+
     return false
   })
+}
+
+function handleResyncReplyMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_RESYNC_REPLY' }>, sendResponse: (response?: unknown) => void): void {
+  log.warn('message:resync-reply:start', {
+    chatId: message.chatId,
+    roleId: message.roleId,
+    messageId: message.messageId,
+    currentContentLength: message.currentContent?.length ?? 0,
+  })
+
+  readResyncReplyText(siteAdapter, message.currentContent, log)
+    .then(reply => {
+      log.warn('message:resync-reply:read', {
+        chatId: message.chatId,
+        roleId: message.roleId,
+        messageId: message.messageId,
+        contentLength: reply.text.length,
+        contentFormat: reply.contentFormat,
+      })
+      const snapshot = siteAdapter.getConversationSnapshot()
+      return sendBackgroundMessage({
+        type: 'TEAM_ROLE_REPLY_RESYNC',
+        chatId: message.chatId,
+        roleId: message.roleId,
+        messageId: message.messageId,
+        content: reply.text,
+        contentFormat: reply.contentFormat,
+        conversationId: snapshot.conversationId,
+        conversationUrl: snapshot.conversationUrl,
+      })
+    })
+    .then(response => {
+      const responseRecord = typeof response === 'object' && response !== null ? response as Record<string, unknown> : undefined
+      log.warn('message:resync-reply:reported', {
+        chatId: message.chatId,
+        roleId: message.roleId,
+        messageId: message.messageId,
+        ok: responseRecord?.ok,
+        hasStore: Boolean(responseRecord?.store),
+      })
+      sendResponse(response ?? { ok: true })
+    })
+    .catch(error => {
+      const reason = error instanceof Error ? error.message : String(error)
+      log.warn('message:resync-reply:failed', { messageId: message.messageId, error: reason, diagnostics: collectPromptDiagnostics() })
+      sendResponse({ ok: false, error: reason })
+    })
 }
 
 function handleStopGenerationMessage(message: Extract<BackgroundToRoleMessage, { type: 'TEAM_STOP_GENERATION' }>, sendResponse: (response?: unknown) => void): void {

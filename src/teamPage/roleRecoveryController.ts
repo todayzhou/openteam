@@ -1,4 +1,4 @@
-import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import type { RoleReadyWaiter, TeamPageState } from './appState'
 import { shouldAutoReconnectRole } from './chatExperience'
 
@@ -23,6 +23,7 @@ export interface RoleRecoveryDependencies {
   showError(message: string): void
   log: {
     info(event: string, details?: Record<string, unknown>): void
+    warn(event: string, details?: Record<string, unknown>): void
   }
 }
 
@@ -31,6 +32,7 @@ export interface RoleRecoveryController {
   notifyRoleReadyWaiters(): void
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
   refreshCurrentChat(): Promise<void>
+  resyncMessageReply(message: GroupMessage): Promise<void>
   retryRoleReply(role: GroupRole): Promise<void>
   stopRoleReply(role: GroupRole): Promise<void>
 }
@@ -153,7 +155,51 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
     await deps.refreshStore(false)
   }
 
-  return { focusRoleFrame, notifyRoleReadyWaiters, reconnectRolesForSend, refreshCurrentChat, retryRoleReply, stopRoleReply }
+  async function resyncMessageReply(message: GroupMessage): Promise<void> {
+    deps.log.warn('message-resync:start', { chatId: message.chatId, roleId: message.roleId, messageId: message.id })
+    if (!message.roleId) {
+      deps.log.warn('message-resync:skip-missing-role', { chatId: message.chatId, messageId: message.id })
+      return
+    }
+    const store = deps.getStore()
+    const chat = store.chatsById[message.chatId]
+    const role = store.rolesById[message.roleId]
+    if (!chat || !role || role.chatId !== chat.id) {
+      deps.log.warn('message-resync:skip-missing-chat-role', {
+        chatId: message.chatId,
+        roleId: message.roleId,
+        messageId: message.id,
+        hasChat: Boolean(chat),
+        hasRole: Boolean(role),
+        roleChatId: role?.chatId,
+      })
+      return
+    }
+
+    try {
+      deps.log.warn('message-resync:command:start', { chatId: chat.id, roleId: role.id, messageId: message.id })
+      await runMessageResync(chat, role, message)
+    } catch (error) {
+      deps.log.warn('message-resync:command:failed', {
+        chatId: chat.id,
+        roleId: role.id,
+        messageId: message.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      if (!isIframeNotReadyError(error)) throw error
+      deps.log.warn('message-resync:recover:start', { chatId: chat.id, roleId: role.id, messageId: message.id })
+      await reconnectRolesForSend(chat, [role])
+      deps.log.warn('message-resync:retry:start', { chatId: chat.id, roleId: role.id, messageId: message.id })
+      await runMessageResync(chat, role, message)
+    }
+    deps.log.warn('message-resync:done', { chatId: chat.id, roleId: role.id, messageId: message.id })
+  }
+
+  async function runMessageResync(chat: GroupChat, role: GroupRole, message: GroupMessage): Promise<void> {
+    await deps.runCommand('GROUP_MESSAGE_RESYNC_REPLY', { chatId: chat.id, roleId: role.id, messageId: message.id })
+  }
+
+  return { focusRoleFrame, notifyRoleReadyWaiters, reconnectRolesForSend, refreshCurrentChat, resyncMessageReply, retryRoleReply, stopRoleReply }
 
   function roleLabels(chatId: string, roleIds: string[]): string[] {
     const store = deps.getStore()
@@ -166,4 +212,9 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
 
 function teamRoleKey(chatId: string, roleId: string): string {
   return `${chatId}:${roleId}`
+}
+
+function isIframeNotReadyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('人员 iframe 尚未就绪')
 }

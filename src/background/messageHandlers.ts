@@ -18,12 +18,14 @@ export const MESSAGE_ROUTE_TYPES = [
   'GROUP_ROLE_STOP_REPLY',
   'GROUP_NOTE_SAVE',
   'GROUP_MESSAGE_HIGHLIGHT_CREATE',
+  'GROUP_MESSAGE_RESYNC_REPLY',
   'GROUP_MESSAGE_SEND',
   'TEAM_FRAME_ROLE_READY',
   'TEAM_ROLE_CONVERSATION_UPDATED',
   'TEAM_SEND_ACK',
   'TEAM_ROLE_STATUS',
   'TEAM_ROLE_REPLY',
+  'TEAM_ROLE_REPLY_RESYNC',
   'TEAM_ROLE_ERROR',
 ] as const
 
@@ -308,6 +310,44 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     return { ok: true, store }
   }
 
+  const handleMessageResyncReply = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, '缺少群聊 ID')
+    const roleId = requireString(message.roleId, '缺少人员 ID')
+    const messageId = requireString(message.messageId, '缺少消息 ID')
+    const binding = deps.runtimeFrames.getByRole(chatId, roleId)
+    if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，请先恢复人员')
+
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const role = requireRole(store, chat.id, roleId)
+      const assistantMessage = store.messagesById[messageId]
+      if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+      return { currentContent: assistantMessage.content }
+    })
+
+    deps.log.warn('message-resync-reply:request', { chatId, roleId, messageId, tabId: binding.tabId, frameId: binding.frameId, currentContentLength: result.currentContent.length })
+    const response = await deps.sendRoleMessage(binding.tabId, binding.frameId, {
+      type: 'TEAM_RESYNC_REPLY',
+      chatId,
+      roleId,
+      messageId,
+      currentContent: result.currentContent,
+    })
+    if (isRecord(response) && response.ok === false) throw new Error(readOptionalString(response.error) ?? '重新同步回复失败')
+    if (isRecord(response) && isRecord(response.store)) {
+      const updatedMessage = isRecord(response.message) ? response.message : undefined
+      deps.log.warn('message-resync-reply:updated-store', {
+        chatId,
+        roleId,
+        messageId,
+        updatedContentLength: typeof updatedMessage?.content === 'string' ? updatedMessage.content.length : undefined,
+      })
+      return { ok: true, store: response.store as unknown as OpenTeamStore, message: response.message, messageId }
+    }
+    deps.log.warn('message-resync-reply:no-updated-store', { chatId, roleId, messageId, response })
+    return { ok: true, store, messageId }
+  }
+
   const handleFrameRoleReady = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const tabId = messageTabId(message, sender)
     if (tabId === undefined) throw new Error('缺少 sender tab')
@@ -479,6 +519,33 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     return { ok: true, message: result.reply, store }
   }
 
+  const handleRoleReplyResync = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
+    const identity = readIdentity(deps, message, sender)
+    const messageId = requireString(message.messageId, '缺少消息 ID')
+    const content = requireString(message.content, '回复内容不能为空')
+    const contentFormat = message.contentFormat === 'markdown' ? 'markdown' : undefined
+    const timestamp = deps.now()
+    deps.log.info('role-reply-resync:received', { ...identity, messageId, contentLength: content.length, senderUrl: sender.url })
+
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, identity.chatId)
+      const role = requireRole(store, chat.id, identity.roleId)
+      const assistantMessage = store.messagesById[messageId]
+      if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+
+      updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
+      assistantMessage.content = content
+      assistantMessage.contentFormat = contentFormat
+      assistantMessage.status = 'received'
+      chat.updatedAt = timestamp
+      return { message: assistantMessage }
+    })
+
+    deps.log.info('role-reply-resync:stored', { chatId: result.message.chatId, roleId: result.message.roleId, replyMessageId: result.message.id })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, message: result.message, store }
+  }
+
   const handleRoleError = async (message: RuntimeMessage, sender: chrome.runtime.MessageSender) => {
     const identity = readIdentity(deps, message, sender)
     const reason = readOptionalString(message.reason) ?? readOptionalString(message.error) ?? '人员执行失败'
@@ -515,6 +582,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     { type: 'GROUP_ROLE_STOP_REPLY', handler: handleRoleStopReply },
     { type: 'GROUP_NOTE_SAVE', handler: handleNoteSave },
     { type: 'GROUP_MESSAGE_HIGHLIGHT_CREATE', handler: handleMessageHighlightCreate },
+    { type: 'GROUP_MESSAGE_RESYNC_REPLY', handler: handleMessageResyncReply },
     { type: 'GROUP_MESSAGE_SEND', handler: handleMessageSend },
     {
       type: 'TEAM_FRAME_ROLE_READY',
@@ -524,6 +592,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     { type: 'TEAM_SEND_ACK', handler: handleSendAck },
     { type: 'TEAM_ROLE_STATUS', handler: handleRoleStatus },
     { type: 'TEAM_ROLE_REPLY', handler: handleRoleReply },
+    { type: 'TEAM_ROLE_REPLY_RESYNC', handler: handleRoleReplyResync },
     { type: 'TEAM_ROLE_ERROR', handler: handleRoleError },
   ]
 }
@@ -651,6 +720,10 @@ function isUserMessageForRole(message: GroupMessage | undefined, chat: GroupChat
       message.type === 'user' &&
       (!message.targetRoleIds || message.targetRoleIds.includes(role.id)),
   )
+}
+
+function isAssistantMessageForRole(message: GroupMessage | undefined, chat: GroupChat, role: GroupRole): message is GroupMessage {
+  return Boolean(message && message.chatId === chat.id && message.type === 'assistant' && message.roleId === role.id)
 }
 
 function isPendingRetryStatus(message: GroupMessage, role: GroupRole): boolean {

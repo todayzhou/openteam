@@ -1,6 +1,9 @@
+// @vitest-environment jsdom
+
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { createFloatingWindowControls } from './floatingWindow'
 
 describe('team page floating window boundary', () => {
   it('keeps drag and minimize controls outside the entrypoint', () => {
@@ -16,5 +19,133 @@ describe('team page floating window boundary', () => {
     expect(entrySource).not.toContain('function moveShellTo(left: number, top: number): void')
     expect(entrySource).not.toContain('function clampShellPosition(): void')
     expect(entrySource).not.toContain('function registerFloatingWindowControls(): void')
+  })
+
+  it('toggles fullscreen mode from the floating toolbar', () => {
+    const appShellEl = document.createElement('main')
+    const toggleWindowSizeEl = document.createElement('button')
+    const toggleFullscreenEl = document.createElement('button')
+    const windowLauncherEl = document.createElement('button')
+
+    createFloatingWindowControls({
+      appShellEl,
+      toggleWindowSizeEl,
+      toggleFullscreenEl,
+      windowLauncherEl,
+    }).registerFloatingWindowControls()
+
+    toggleFullscreenEl.click()
+
+    expect(appShellEl.classList.contains('fullscreen')).toBe(true)
+    expect(toggleFullscreenEl.getAttribute('aria-pressed')).toBe('true')
+    expect(toggleFullscreenEl.getAttribute('aria-label')).toBe('退出全屏')
+
+    toggleFullscreenEl.click()
+
+    expect(appShellEl.classList.contains('fullscreen')).toBe(false)
+    expect(toggleFullscreenEl.getAttribute('aria-pressed')).toBe('false')
+    expect(toggleFullscreenEl.getAttribute('aria-label')).toBe('全屏窗口')
+  })
+
+  it('leaves fullscreen mode when minimized', () => {
+    const appShellEl = document.createElement('main')
+    const toggleWindowSizeEl = document.createElement('button')
+    const toggleFullscreenEl = document.createElement('button')
+    const windowLauncherEl = document.createElement('button')
+
+    const controls = createFloatingWindowControls({
+      appShellEl,
+      toggleWindowSizeEl,
+      toggleFullscreenEl,
+      windowLauncherEl,
+    })
+
+    controls.registerFloatingWindowControls()
+    toggleFullscreenEl.click()
+    controls.setWindowMinimized(true)
+
+    expect(appShellEl.classList.contains('fullscreen')).toBe(false)
+    expect(appShellEl.classList.contains('minimized')).toBe(true)
+    expect(toggleFullscreenEl.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('drags the window from the top chrome without a dedicated drag handle', () => {
+    const appShellEl = document.createElement('main')
+    const toggleWindowSizeEl = document.createElement('button')
+    const toggleFullscreenEl = document.createElement('button')
+    const windowLauncherEl = document.createElement('button')
+    const titlebarEl = document.createElement('header')
+    appShellEl.append(titlebarEl)
+    document.body.append(appShellEl)
+    Object.defineProperty(appShellEl, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 100,
+        top: 80,
+        right: 700,
+        bottom: 580,
+        width: 600,
+        height: 500,
+        x: 100,
+        y: 80,
+        toJSON: () => ({}),
+      }),
+    })
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+    appShellEl.setPointerCapture = () => undefined
+    appShellEl.releasePointerCapture = () => undefined
+    appShellEl.hasPointerCapture = () => true
+
+    createFloatingWindowControls({
+      appShellEl,
+      toggleWindowSizeEl,
+      toggleFullscreenEl,
+      windowLauncherEl,
+    }).registerFloatingWindowControls()
+
+    titlebarEl.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 180, clientY: 96, pointerId: 1, bubbles: true }))
+    appShellEl.dispatchEvent(new PointerEvent('pointermove', { clientX: 220, clientY: 126, pointerId: 1, bubbles: true }))
+
+    expect(appShellEl.style.left).toBe('140px')
+    expect(appShellEl.style.top).toBe('110px')
+    expect(appShellEl.classList.contains('dragging')).toBe(true)
+  })
+
+  it('does not start dragging from toolbar buttons', () => {
+    const appShellEl = document.createElement('main')
+    const toggleWindowSizeEl = document.createElement('button')
+    const toggleFullscreenEl = document.createElement('button')
+    const windowLauncherEl = document.createElement('button')
+    appShellEl.append(toggleWindowSizeEl)
+    document.body.append(appShellEl)
+    Object.defineProperty(appShellEl, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 100,
+        top: 80,
+        right: 700,
+        bottom: 580,
+        width: 600,
+        height: 500,
+        x: 100,
+        y: 80,
+        toJSON: () => ({}),
+      }),
+    })
+
+    createFloatingWindowControls({
+      appShellEl,
+      toggleWindowSizeEl,
+      toggleFullscreenEl,
+      windowLauncherEl,
+    }).registerFloatingWindowControls()
+
+    toggleWindowSizeEl.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 120, clientY: 96, pointerId: 1, bubbles: true }))
+    appShellEl.dispatchEvent(new PointerEvent('pointermove', { clientX: 220, clientY: 126, pointerId: 1, bubbles: true }))
+
+    expect(appShellEl.style.left).toBe('')
+    expect(appShellEl.style.top).toBe('')
+    expect(appShellEl.classList.contains('dragging')).toBe(false)
   })
 })

@@ -931,6 +931,81 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls[0][1].content).toContain('现在真正要回复的问题')
     expect(promptCalls[0][1].content).not.toContain('用户最新消息：\n第一条消息')
   })
+
+  it('asks the role frame to resync the selected assistant reply and returns the updated store', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['msg-1'], nextMessageSeq: 2 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    store.messagesById['msg-1'] = {
+      id: 'msg-1',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'assistant',
+      roleId: 'role-1',
+      roleName: '工程师',
+      content: '漏了一半',
+      createdAt: 1,
+      status: 'received',
+    }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' })
+    const updatedStore = structuredClone(store)
+    updatedStore.messagesById['msg-1'].content = '完整回复'
+    harness.tabsSendMessage.mockResolvedValueOnce({ ok: true, store: updatedStore, message: updatedStore.messagesById['msg-1'] })
+
+    const result = await harness.invoke({ type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1' }) as { ok: boolean; store: OpenTeamStore }
+
+    expect(result.ok).toBe(true)
+    expect(result.store.messagesById['msg-1'].content).toBe('完整回复')
+    const resyncCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_RESYNC_REPLY')
+    expect(resyncCalls).toHaveLength(1)
+    expect(resyncCalls[0][1]).toMatchObject({ type: 'TEAM_RESYNC_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1', currentContent: '漏了一半' })
+    expect(harness.tabsSendMessage.mock.calls.some(call => call[1]?.type === 'TEAM_SEND_PROMPT')).toBe(false)
+  })
+
+  it('replaces the selected assistant message when the role frame returns the complete reply', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['msg-1'], nextMessageSeq: 2 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    store.messagesById['msg-1'] = {
+      id: 'msg-1',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'assistant',
+      roleId: 'role-1',
+      roleName: '工程师',
+      content: '漏了一半',
+      createdAt: 1,
+      status: 'received',
+    }
+    const harness = await setupBackground(store)
+
+    const result = await harness.invoke(
+      {
+        type: 'TEAM_ROLE_REPLY_RESYNC',
+        chatId: 'chat-1',
+        roleId: 'role-1',
+        messageId: 'msg-1',
+        content: '完整回复\n\n- 第一段\n- 第二段',
+        contentFormat: 'markdown',
+        conversationUrl: 'https://chatgpt.com/c/abc',
+      },
+      { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' },
+    ) as { ok: boolean; message: { id: string; content: string; contentFormat?: string }; store: OpenTeamStore }
+
+    expect(result.ok).toBe(true)
+    expect(result.message.id).toBe('msg-1')
+    expect(result.message.content).toBe('完整回复\n\n- 第一段\n- 第二段')
+    expect(result.message.contentFormat).toBe('markdown')
+    expect(result.store.messagesById['msg-1'].content).toBe('完整回复\n\n- 第一段\n- 第二段')
+    expect(result.store.messagesById['msg-1'].createdAt).toBe(1)
+    expect(result.store.chatsById['chat-1'].messageIds).toEqual(['msg-1'])
+    expect(result.store.chatsById['chat-1'].nextMessageSeq).toBe(2)
+  })
 })
 
 function makeStore(): OpenTeamStore {

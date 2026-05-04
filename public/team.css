@@ -68,6 +68,27 @@ button {
   display: none;
 }
 
+.app-shell.fullscreen {
+  inset: 8px;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  transform: none;
+}
+
+.app-shell.fullscreen .floating-toolbar {
+  right: 14px;
+  top: 12px;
+}
+
+.app-shell.fullscreen .message-inner {
+  max-width: min(86%, 980px);
+}
+
+.app-shell.fullscreen .messages {
+  padding-inline: 34px;
+}
+
 .launcher {
   position: fixed;
   right: 24px;
@@ -102,7 +123,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 7px;
   width: auto;
   height: 28px;
   border: 0;
@@ -110,46 +131,97 @@ button {
   background: transparent;
   box-shadow: none;
   transform: none;
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
   pointer-events: auto;
 }
 
 .floating-toolbar .icon-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: transparent;
+  width: 13px;
+  height: 13px;
+  min-width: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  background: #d8dde4;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.28);
 }
 
-.drag-handle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  width: 18px;
-  height: 28px;
-  overflow: hidden;
-  color: transparent;
-  cursor: grab;
-  user-select: none;
+.window-dot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: rgba(22, 24, 28, 0);
   font-size: 0;
+  line-height: 1;
 }
 
-.drag-handle:active,
-.app-shell.dragging .drag-handle {
+.window-dot::before {
+  color: rgba(22, 24, 28, 0);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  transform: translateY(-0.5px);
+  transition: color 0.12s ease;
+}
+
+.floating-toolbar:hover .window-dot::before,
+.floating-toolbar .window-dot:focus-visible::before {
+  color: rgba(22, 24, 28, 0.68);
+}
+
+.floating-toolbar .icon-btn.window-dot:hover {
+  border-color: rgba(0, 0, 0, 0.24);
+  filter: brightness(1.04);
+}
+
+.floating-toolbar .icon-btn.window-dot-close {
+  background: #ff5f57;
+}
+
+.window-dot-close::before {
+  content: "×";
+}
+
+.floating-toolbar .icon-btn.window-dot-minimize {
+  background: #febc2e;
+}
+
+.window-dot-minimize::before {
+  content: "−";
+}
+
+.floating-toolbar .icon-btn.window-dot-fullscreen {
+  background: #28c840;
+}
+
+.window-dot-fullscreen::before {
+  content: "↗";
+  font-size: 8px;
+}
+
+#toggle-fullscreen[aria-pressed="true"]::before {
+  content: "↙";
+}
+
+.app-shell:not(.fullscreen) .panel-header,
+.app-shell:not(.fullscreen) .chat-header,
+.app-shell:not(.fullscreen) .rail > :first-child {
+  cursor: grab;
+}
+
+.app-shell.dragging,
+.app-shell.dragging .panel-header,
+.app-shell.dragging .chat-header,
+.app-shell.dragging .rail > :first-child {
   cursor: grabbing;
+  user-select: none;
 }
 
-.drag-handle::before {
-  content: "";
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(188, 203, 216, 0.56);
-  border-radius: 4px;
-  background:
-    linear-gradient(90deg, transparent 5px, rgba(188, 203, 216, 0.58) 6px, transparent 7px),
-    linear-gradient(transparent 5px, rgba(188, 203, 216, 0.58) 6px, transparent 7px);
-  box-shadow: none;
+.app-shell:not(.fullscreen) button,
+.app-shell:not(.fullscreen) input,
+.app-shell:not(.fullscreen) textarea,
+.app-shell:not(.fullscreen) select {
+  cursor: revert;
 }
 
 .panel {
@@ -2025,6 +2097,12 @@ select:focus {
   background: #33111b;
   color: #fecdd3;
   box-shadow: var(--shadow);
+}
+
+.toast.toast-success {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: #082f2e;
+  color: #ccfbf1;
 }
 
 #iframe-host {

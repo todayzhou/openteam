@@ -2,15 +2,11 @@ import type { RoleToBackgroundMessage } from '../group/runtimeProtocol'
 import { findLatestCompensationCandidate, findLatestCompensationReply } from './replyCompensation'
 import { createReplyTimeout } from './replyTimeout'
 import { createReplyTracker } from './replyTracker'
+import { resolveReportableReplyText, type ReportableReplyText } from './reportableReply'
 import { keepDeepestResponseContainers } from './responseContainers'
 import type { ContentLogger } from './runtimeClient'
 import type { RoleSession } from './roleSession'
 import type { ChatSiteAdapter } from './sites/types'
-
-interface ReportableReplyText {
-  text: string
-  contentFormat?: 'markdown'
-}
 
 type ReplySource = 'observer' | 'timeout-compensation' | 'polling-compensation'
 
@@ -19,9 +15,6 @@ const RESPONSE_FINAL_SETTLE_MS = 1500
 const RESPONSE_GENERATING_STABLE_GRACE_MS = 8000
 const REPLY_POLL_INTERVAL_MS = 2000
 const REPLY_TIMEOUT_MS = 120000
-const LONG_REPLY_TEXT_LENGTH = 160
-const SHORT_COPY_TEXT_LENGTH = 40
-const MIN_COPY_TO_DOM_TEXT_RATIO = 0.2
 
 export interface ReplyObserverController {
   capturePromptReplyBaseline(messageId: string | undefined): void
@@ -193,7 +186,7 @@ export function createReplyObserver(options: {
       }
 
       replyPollingInFlight = true
-      resolveReportableReplyText(candidate.element, candidate.text)
+      resolveReportableReplyText(siteAdapter, candidate.element, candidate.text, log)
         .then(reply => {
           const active = roleSession.getActivePrompt()
           const assignedRole = roleSession.getAssignedRole()
@@ -256,43 +249,6 @@ export function createReplyObserver(options: {
     log.warn('reply:compensated', { messageId, textLength: reply.text.length, roleId: assignedRole.roleId, source })
     reportAcceptedReply(messageId, { text: reply.text }, source)
     return true
-  }
-
-  async function resolveReportableReplyText(element: Element, fallbackText: string): Promise<ReportableReplyText> {
-    try {
-      const copiedText = await siteAdapter.readResponseTextFromCopy?.(element)
-      const trimmedCopiedText = copiedText?.trim()
-      if (trimmedCopiedText && !isSuspiciousCopiedReply(trimmedCopiedText, fallbackText)) return { text: trimmedCopiedText, contentFormat: 'markdown' }
-      if (trimmedCopiedText) {
-        log.warn('reply-copy:ignored-suspicious-short-text', {
-          copiedLength: normalizeReplyForLengthCheck(trimmedCopiedText).length,
-          domTextLength: normalizeReplyForLengthCheck(fallbackText).length,
-        })
-      }
-    } catch (error) {
-      log.warn('reply-copy:failed', { error: error instanceof Error ? error.message : String(error) })
-    }
-
-    try {
-      const markdownText = siteAdapter.readResponseMarkdown?.(element).trim()
-      if (markdownText) return { text: markdownText, contentFormat: 'markdown' }
-    } catch (error) {
-      log.warn('reply-markdown:failed', { error: error instanceof Error ? error.message : String(error) })
-    }
-
-    return { text: fallbackText }
-  }
-
-  function isSuspiciousCopiedReply(copiedText: string, fallbackText: string): boolean {
-    const copiedLength = normalizeReplyForLengthCheck(copiedText).length
-    const fallbackLength = normalizeReplyForLengthCheck(fallbackText).length
-    if (fallbackLength < LONG_REPLY_TEXT_LENGTH) return false
-    if (copiedLength < SHORT_COPY_TEXT_LENGTH) return true
-    return copiedLength / fallbackLength < MIN_COPY_TO_DOM_TEXT_RATIO
-  }
-
-  function normalizeReplyForLengthCheck(text: string): string {
-    return text.replace(/\s+/g, '')
   }
 
   function observeResponseContainers(onStableText: (text: string, element: Element) => void): void {
@@ -394,7 +350,7 @@ export function createReplyObserver(options: {
         return
       }
 
-      resolveReportableReplyText(element, text)
+      resolveReportableReplyText(siteAdapter, element, text, log)
         .then(reply => {
           const currentRole = roleSession.getAssignedRole()
           if (!currentRole) return

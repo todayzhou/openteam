@@ -82,6 +82,24 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('System Prompt')
   })
 
+  it('styles window controls as visible mac-style traffic lights', () => {
+    const html = readTeamDocument()
+    const toolbarRule = html.match(/(?:^|\n)\.floating-toolbar\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const fullscreenToolbarRule = html.match(/(?:^|\n)\.app-shell\.fullscreen \.floating-toolbar\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+
+    expect(html).toContain('class="icon-btn window-dot window-dot-close"')
+    expect(html).toContain('class="icon-btn window-dot window-dot-minimize"')
+    expect(html).toContain('class="icon-btn window-dot window-dot-fullscreen"')
+    expect(toolbarRule).toContain('right: 12px;')
+    expect(toolbarRule).not.toContain('left: 12px;')
+    expect(fullscreenToolbarRule).toContain('right: 14px;')
+    expect(fullscreenToolbarRule).not.toContain('left: 14px;')
+    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-close\s*{[^}]*background:\s*#ff5f57;/s)
+    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-minimize\s*{[^}]*background:\s*#febc2e;/s)
+    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot-fullscreen\s*{[^}]*background:\s*#28c840;/s)
+    expect(html).toMatch(/\.floating-toolbar \.icon-btn\.window-dot:hover\s*{[^}]*border-color:\s*rgba\(0,\s*0,\s*0,\s*0\.24\);[^}]*filter:\s*brightness\(1\.04\);/s)
+  })
+
   it('uses template default sites for library people and the add-person picker for temporary people', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
 

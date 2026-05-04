@@ -6,8 +6,8 @@ describe('team page dom refs', () => {
   it('collects required team page elements and fails clearly when a selector is missing', async () => {
     document.body.innerHTML = `
       <main id="app"><div id="iframe-host"></div></main>
-      <div id="floating-drag-handle"></div>
       <button id="toggle-window-size"></button>
+      <button id="toggle-fullscreen"></button>
       <section id="store-summary"></section>
       <section id="chat-list"></section>
       <h1 id="chat-title"></h1>
@@ -87,6 +87,7 @@ describe('team page dom refs', () => {
     const refs = createTeamPageDomRefs()
 
     expect(refs.appShellEl.id).toBe('app')
+    expect(refs.toggleFullscreenEl.id).toBe('toggle-fullscreen')
     expect(refs.messageInputEl.tagName).toBe('TEXTAREA')
     expect(refs.rolePanelEl.className).toBe('role-panel')
     expect(() => requireElement('#missing')).toThrow('Missing element: #missing')

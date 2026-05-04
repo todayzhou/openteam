@@ -8,6 +8,7 @@ type MessageActionIcon = 'copy' | 'quote' | 'jump' | 'check' | 'stop' | 'retry'
 
 const MAX_CACHED_MESSAGE_NODES = 400
 const COPY_FEEDBACK_MS = 1200
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48
 const markdownRenderer = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 export interface MessagesViewDependencies {
@@ -26,11 +27,13 @@ export interface MessagesViewDependencies {
   insertMention(role: GroupRole): void
   setReference(message: GroupMessage): void
   insertTextIntoActiveNote?(text: string): void
+  resyncMessageReply(message: GroupMessage): Promise<void>
   retryRoleReply(role: GroupRole): Promise<void>
   stopRoleReply(role: GroupRole): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   render(): void
   showError(message: string): void
+  showSuccess(message: string): void
   log: {
     warn(event: string, details?: Record<string, unknown>): void
   }
@@ -47,6 +50,9 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
   function renderMessages(): void {
     const chat = deps.getCurrentChat()
     const messages = deps.getCurrentMessages()
+    const preserveScroll = deps.state.preserveNextMessageScroll
+    const previousScrollTop = deps.messagesEl.scrollTop
+    const shouldFollowNewReplies = isScrolledNearBottom(deps.messagesEl)
     deps.messagesEl.replaceChildren()
 
     if (!chat) {
@@ -82,7 +88,16 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       deps.messagesEl.append(replyControlBubble(role))
     }
     scheduleThinkingTimeouts()
-    deps.messagesEl.scrollTop = deps.messagesEl.scrollHeight
+    if (preserveScroll || !shouldFollowNewReplies) {
+      deps.messagesEl.scrollTop = previousScrollTop
+    } else {
+      deps.messagesEl.scrollTop = deps.messagesEl.scrollHeight
+    }
+  }
+
+  function isScrolledNearBottom(element: HTMLElement): boolean {
+    const distanceFromBottom = element.scrollHeight - element.clientHeight - element.scrollTop
+    return distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX
   }
 
   function renderMessageNode(message: GroupMessage, showName = true, showAvatar = true): HTMLElement {
@@ -150,6 +165,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       tools.className = 'message-tools'
       if (message.roleId) {
         tools.append(createMessageIconButton('跳转到原始窗口', 'jump', () => deps.focusRoleFrame(message.chatId, message.roleId)))
+        tools.append(createMessageIconButton('重新同步完整回复', 'retry', () => handleResyncMessage(message)))
       }
       tools.append(createMessageIconButton('引用回复', 'quote', () => deps.setReference(message)))
       tools.append(createMessageIconButton('复制回复', 'copy', button => handleCopyMessage(button, message)))
@@ -237,6 +253,36 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     } catch (error) {
       deps.showError(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  function handleResyncMessage(message: GroupMessage): void {
+    deps.log.warn('ui:message-resync:click', {
+      chatId: message.chatId,
+      roleId: message.roleId,
+      messageId: message.id,
+      contentLength: message.content.length,
+    })
+    if (!message.roleId) {
+      deps.log.warn('ui:message-resync:missing-role', { chatId: message.chatId, messageId: message.id })
+      return
+    }
+    deps.state.preserveNextMessageScroll = true
+    deps.resyncMessageReply(message)
+      .then(() => {
+        deps.showSuccess('执行成功了')
+      })
+      .catch(error => {
+        deps.log.warn('ui:message-resync:failed', {
+          chatId: message.chatId,
+          roleId: message.roleId,
+          messageId: message.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        deps.showError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        deps.state.preserveNextMessageScroll = false
+      })
   }
 
   function showCopyFeedback(button: HTMLButtonElement): void {

@@ -73,11 +73,13 @@ describe('team page messages view boundary', () => {
       focusRoleFrame: vi.fn(),
       insertMention: vi.fn(),
       setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
       retryRoleReply: vi.fn(async () => undefined),
       stopRoleReply: vi.fn(async () => undefined),
       runCommand,
       render: vi.fn(),
       showError: vi.fn(),
+      showSuccess: vi.fn(),
       log: { warn: vi.fn() },
     }).renderMessages()
 
@@ -142,15 +144,429 @@ describe('team page messages view boundary', () => {
       focusRoleFrame: vi.fn(),
       insertMention: vi.fn(),
       setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
       retryRoleReply: vi.fn(async () => undefined),
       stopRoleReply: vi.fn(async () => undefined),
       runCommand: vi.fn(async () => undefined),
       render: vi.fn(),
       showError: vi.fn(),
+      showSuccess: vi.fn(),
       log: { warn: vi.fn() },
     }).renderMessages()
 
     expect(messagesEl.querySelector('.markdown-body strong')?.textContent).toBe('重点')
+  })
+
+  it('requests a full reply resync for the current assistant message without retrying the prompt', async () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '不完整回复',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+    const resyncMessageReply = vi.fn(async () => undefined)
+    const showSuccess = vi.fn()
+    const log = { warn: vi.fn() }
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply,
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess,
+      log,
+    }).renderMessages()
+
+    messagesEl.querySelector<HTMLButtonElement>('button[aria-label="重新同步完整回复"]')?.click()
+
+    expect(resyncMessageReply).toHaveBeenCalledWith(message)
+    await resyncMessageReply.mock.results[0]?.value
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+    expect(showSuccess).toHaveBeenCalledWith('执行成功了')
+    expect(log.warn).toHaveBeenCalledWith('ui:message-resync:click', {
+      chatId: chat.id,
+      roleId: role.id,
+      messageId: message.id,
+      contentLength: message.content.length,
+    })
+  })
+
+  it('preserves message scroll once after a reply resync render', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '同步后的完整回复',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const state = createTeamPageState()
+    state.preserveNextMessageScroll = true
+    const messagesEl = document.createElement('section')
+    messagesEl.scrollTop = 120
+    Object.defineProperty(messagesEl, 'scrollHeight', { configurable: true, value: 960 })
+
+    createMessagesView({
+      state,
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    expect(messagesEl.scrollTop).toBe(120)
+    expect(state.preserveNextMessageScroll).toBe(true)
+  })
+
+  it('preserves message scroll across push and command renders during reply resync', async () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '不完整回复',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const state = createTeamPageState()
+    const messagesEl = document.createElement('section')
+    Object.defineProperty(messagesEl, 'scrollHeight', { configurable: true, value: 960 })
+    let finishResync: (() => void) | undefined
+    const resyncMessageReply = vi.fn(() => new Promise<void>(resolve => {
+      finishResync = resolve
+    }))
+
+    const view = createMessagesView({
+      state,
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply,
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    messagesEl.scrollTop = 120
+    messagesEl.querySelector<HTMLButtonElement>('button[aria-label="重新同步完整回复"]')?.click()
+
+    view.renderMessages()
+    expect(messagesEl.scrollTop).toBe(120)
+    expect(state.preserveNextMessageScroll).toBe(true)
+
+    view.renderMessages()
+    expect(messagesEl.scrollTop).toBe(120)
+
+    finishResync?.()
+    await resyncMessageReply.mock.results[0]?.value
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+
+    expect(state.preserveNextMessageScroll).toBe(false)
+  })
+
+  it('keeps the current reading position when new replies render away from the bottom', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1', 'msg-2'],
+      nextMessageSeq: 3,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const messages: GroupMessage[] = [
+      {
+        id: 'msg-1',
+        chatId: chat.id,
+        seq: 1,
+        type: 'user',
+        content: '请分析这个方案',
+        createdAt: now,
+        status: 'sent',
+      },
+      {
+        id: 'msg-2',
+        chatId: chat.id,
+        seq: 2,
+        type: 'assistant',
+        content: '后续人员的新回复',
+        roleId: role.id,
+        roleName: role.name,
+        createdAt: now + 1,
+        status: 'received',
+      },
+    ]
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: Object.fromEntries(messages.map(message => [message.id, message])),
+    }
+    const messagesEl = document.createElement('section')
+    messagesEl.scrollTop = 120
+    Object.defineProperty(messagesEl, 'clientHeight', { configurable: true, value: 300 })
+    Object.defineProperty(messagesEl, 'scrollHeight', { configurable: true, value: 1000 })
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => messages,
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    expect(messagesEl.scrollTop).toBe(120)
+  })
+
+  it('continues following new replies when the reader is already near the bottom', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '最新回复',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+    messagesEl.scrollTop = 680
+    Object.defineProperty(messagesEl, 'clientHeight', { configurable: true, value: 300 })
+    Object.defineProperty(messagesEl, 'scrollHeight', { configurable: true, value: 1000 })
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    expect(messagesEl.scrollTop).toBe(1000)
   })
 
   it('renders saved message highlights without changing the message text', () => {
@@ -223,11 +639,13 @@ describe('team page messages view boundary', () => {
       focusRoleFrame: vi.fn(),
       insertMention: vi.fn(),
       setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
       retryRoleReply: vi.fn(async () => undefined),
       stopRoleReply: vi.fn(async () => undefined),
       runCommand: vi.fn(async () => undefined),
       render: vi.fn(),
       showError: vi.fn(),
+      showSuccess: vi.fn(),
       log: { warn: vi.fn() },
     }).renderMessages()
 
@@ -297,11 +715,13 @@ describe('team page messages view boundary', () => {
       insertMention: vi.fn(),
       setReference: vi.fn(),
       insertTextIntoActiveNote,
+      resyncMessageReply: vi.fn(async () => undefined),
       retryRoleReply: vi.fn(async () => undefined),
       stopRoleReply: vi.fn(async () => undefined),
       runCommand,
       render: vi.fn(),
       showError: vi.fn(),
+      showSuccess: vi.fn(),
       log: { warn: vi.fn() },
     }).renderMessages()
 

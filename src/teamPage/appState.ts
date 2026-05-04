@@ -32,6 +32,7 @@ export interface TeamPageState {
   thinkingTimeoutTimers: number[]
   loggedThinkingTimeoutRoleIds: Set<string>
   messageNodeCache: Map<string, CachedMessageNode>
+  preserveNextMessageScroll: boolean
   reconnectingRoleKeys: Set<string>
   roleReadyWaiters: Set<RoleReadyWaiter>
   temporaryPersonDrafts: TemporaryPersonDraft[]
@@ -46,6 +47,7 @@ export function createTeamPageState(): TeamPageState {
     thinkingTimeoutTimers: [],
     loggedThinkingTimeoutRoleIds: new Set<string>(),
     messageNodeCache: new Map<string, CachedMessageNode>(),
+    preserveNextMessageScroll: false,
     reconnectingRoleKeys: new Set<string>(),
     roleReadyWaiters: new Set<RoleReadyWaiter>(),
     temporaryPersonDrafts: [],

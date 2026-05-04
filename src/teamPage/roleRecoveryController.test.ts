@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
-import type { GroupChat, GroupRole, OpenTeamStore } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createRoleRecoveryController } from './roleRecoveryController'
 
@@ -44,7 +44,7 @@ describe('createRoleRecoveryController', () => {
       },
       runCommand: vi.fn(async () => undefined),
       showError: vi.fn(),
-      log: { info: vi.fn() },
+      log: { info: vi.fn(), warn: vi.fn() },
     })
       .reconnectRolesForSend(chat, [role])
       .then(() => {
@@ -55,6 +55,72 @@ describe('createRoleRecoveryController', () => {
     await vi.advanceTimersByTimeAsync(1000)
 
     expect(refreshStore).toHaveBeenCalledWith(false)
+    expect(settled).toBe(true)
+  })
+
+  it('recovers the role iframe and retries when reply resync finds no ready iframe', async () => {
+    const chat = makeChat('chat-1', ['role-1'])
+    const role = makeRole(chat.id, 'role-1', '工程师', 'ready')
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '漏了一半',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: 1,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const runCommand = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('人员 iframe 尚未就绪，请先恢复人员'))
+      .mockResolvedValue(undefined)
+    const refreshStore = vi.fn(async () => {
+      store.rolesById[role.id] = { ...store.rolesById[role.id], status: 'ready' }
+    })
+    const iframeHost = {
+      focusRoleFrame: vi.fn(() => false),
+      recoverRole: vi.fn(),
+    }
+    let settled = false
+
+    const log = { info: vi.fn(), warn: vi.fn() }
+
+    createRoleRecoveryController({
+      state: createTeamPageState(),
+      getStore: () => store,
+      getCurrentRoles: () => [store.rolesById[role.id]],
+      refreshStore,
+      switchChat: vi.fn(),
+      renderComposerState: vi.fn(),
+      setWindowMinimized: vi.fn(),
+      iframeHost,
+      runCommand,
+      showError: vi.fn(),
+      log,
+    })
+      .resyncMessageReply(message)
+      .then(() => {
+        settled = true
+      })
+
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(runCommand).toHaveBeenNthCalledWith(1, 'GROUP_MESSAGE_RESYNC_REPLY', { chatId: chat.id, roleId: role.id, messageId: message.id })
+    expect(runCommand).toHaveBeenNthCalledWith(2, 'GROUP_ROLE_RECOVER', { chatId: chat.id, roleId: role.id })
+    expect(iframeHost.recoverRole).toHaveBeenCalledWith(role)
+    expect(runCommand).toHaveBeenNthCalledWith(3, 'GROUP_MESSAGE_RESYNC_REPLY', { chatId: chat.id, roleId: role.id, messageId: message.id })
+    expect(log.warn).toHaveBeenCalledWith('message-resync:recover:start', { chatId: chat.id, roleId: role.id, messageId: message.id })
     expect(settled).toBe(true)
   })
 })

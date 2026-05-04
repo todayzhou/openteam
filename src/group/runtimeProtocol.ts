@@ -29,7 +29,15 @@ export type StopGenerationMessage = {
   replyAttemptId?: string
 }
 
-export type BackgroundToRoleMessage = SendPromptMessage | StopGenerationMessage
+export type ResyncReplyMessage = {
+  type: 'TEAM_RESYNC_REPLY'
+  chatId: string
+  roleId: string
+  messageId: string
+  currentContent?: string
+}
+
+export type BackgroundToRoleMessage = SendPromptMessage | StopGenerationMessage | ResyncReplyMessage
 
 export type RoleToBackgroundMessage =
   | { type: 'TEAM_FRAME_ROLE_READY'; chatId?: string; roleId: string; hostTabId?: number; conversationId: string; conversationUrl?: string }
@@ -37,6 +45,16 @@ export type RoleToBackgroundMessage =
   | { type: 'TEAM_SEND_ACK'; chatId: string; roleId: string; messageId: string }
   | { type: 'TEAM_ROLE_ERROR'; chatId: string; roleId: string; messageId?: string; reason: string; replyAttemptId?: string }
   | { type: 'TEAM_ROLE_STATUS'; status: RuntimeRoleStatus; error?: string }
+  | {
+      type: 'TEAM_ROLE_REPLY_RESYNC'
+      chatId?: string
+      roleId?: string
+      messageId: string
+      content: string
+      contentFormat?: 'markdown'
+      conversationId?: string
+      conversationUrl?: string
+    }
   | {
       type: 'TEAM_ROLE_REPLY'
       chatId?: string
