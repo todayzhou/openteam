@@ -10,6 +10,8 @@ export type RoleStatus = 'pending' | 'loading' | 'ready' | 'thinking' | 'stopped
 
 export type DeliveryStatus = 'pending' | 'sent' | 'received' | 'error'
 
+export type RoleTemplateType = 'builtin' | 'custom'
+
 export interface OpenTeamStore {
   version: number
   currentChatId?: string
@@ -52,6 +54,7 @@ export interface GroupChat {
 
 export interface RoleTemplate {
   id: string
+  type: RoleTemplateType
   name: string
   description?: string
   defaultChatSite?: ChatSite

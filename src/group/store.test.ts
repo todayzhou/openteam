@@ -11,6 +11,7 @@ import {
   saveStore,
   updateStoreQueued,
 } from './store'
+import { BUILTIN_ROLE_TEMPLATES } from './builtinRoleTemplates'
 import type { GroupMessage, OpenTeamStore } from './types'
 
 describe('group store', () => {
@@ -111,6 +112,56 @@ describe('group store', () => {
         defaultChatSite: 'gemini',
       },
     })
+  })
+
+  it('normalizes legacy role templates as custom templates when loading stored data', async () => {
+    stored[STORE_KEY] = {
+      roleTemplateOrder: ['template-legacy'],
+      roleTemplatesById: {
+        'template-legacy': {
+          id: 'template-legacy',
+          name: '观察员',
+          systemPrompt: '观察讨论',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    }
+
+    await expect(loadStore()).resolves.toMatchObject({
+      roleTemplatesById: {
+        'template-legacy': {
+          type: 'custom',
+          name: '观察员',
+        },
+      },
+    })
+  })
+
+  it('does not persist built-in role templates into metadata storage', async () => {
+    const store = createDefaultStore()
+    const builtinTemplate = BUILTIN_ROLE_TEMPLATES[0]
+    store.roleTemplateOrder = [builtinTemplate.id, 'template-custom']
+    store.roleTemplatesById[builtinTemplate.id] = builtinTemplate
+    store.roleTemplatesById['template-custom'] = {
+      id: 'template-custom',
+      type: 'custom',
+      name: '观察员',
+      systemPrompt: '观察讨论',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+
+    await saveStore(store)
+
+    expect(stored[META_STORE_KEY]).toMatchObject({
+      roleTemplateOrder: ['template-custom'],
+      roleTemplatesById: {
+        'template-custom': expect.objectContaining({ type: 'custom' }),
+      },
+    })
+    const meta = stored[META_STORE_KEY] as { roleTemplatesById: Record<string, unknown> }
+    expect(meta.roleTemplatesById[builtinTemplate.id]).toBeUndefined()
   })
 
   it('keeps Claude as a valid default chat site when loading stored data', async () => {

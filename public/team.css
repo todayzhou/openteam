@@ -2197,6 +2197,30 @@ select:focus {
   gap: 6px;
 }
 
+.template-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border: 1px solid rgba(132, 153, 171, 0.18);
+  border-radius: 999px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 820;
+  line-height: 1;
+}
+
+.template-type-builtin {
+  border-color: rgba(47, 216, 204, 0.34);
+  background: rgba(47, 216, 204, 0.1);
+  color: #8ff5ed;
+}
+
+.template-type-custom {
+  border-color: rgba(132, 153, 171, 0.22);
+  background: rgba(132, 153, 171, 0.08);
+}
+
 .template-editor-modal {
   width: min(520px, 100%);
 }
@@ -2234,6 +2258,34 @@ select:focus {
   gap: 8px;
   max-height: 360px;
   overflow: auto;
+}
+
+.add-person-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.template-type-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.template-type-tab {
+  min-height: 34px;
+  border: 1px solid rgba(132, 153, 171, 0.16);
+  border-radius: 8px;
+  background: rgba(132, 153, 171, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.template-type-tab.active {
+  border-color: rgba(47, 216, 204, 0.5);
+  background: rgba(47, 216, 204, 0.14);
+  color: #eaffff;
 }
 
 .select-row {

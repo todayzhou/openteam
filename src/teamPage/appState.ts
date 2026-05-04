@@ -28,6 +28,8 @@ export interface TeamPageState {
   notesPanelOpen: boolean
   activeNoteScope: 'global' | 'chat'
   peopleLibraryPage: number
+  addPersonTemplateType: 'builtin' | 'custom'
+  addPersonSearchQuery: string
   pendingSwitchAnimationFrame?: number
   thinkingTimeoutTimers: number[]
   loggedThinkingTimeoutRoleIds: Set<string>
@@ -53,6 +55,8 @@ export function createTeamPageState(): TeamPageState {
     temporaryPersonDrafts: [],
     addPersonSiteByKey: new Map<string, Set<ChatSite>>(),
     peopleLibraryPage: 0,
+    addPersonTemplateType: 'builtin',
+    addPersonSearchQuery: '',
     notesPanelOpen: false,
     activeNoteScope: 'chat',
   }
