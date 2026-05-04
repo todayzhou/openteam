@@ -6,7 +6,7 @@ type AddPersonItem =
   | { key: string; source: 'library'; roleTemplateId: string; name: string; description?: string; chatSite: ChatSite }
   | { key: string; source: 'temporary'; draftId: string; name: string; description?: string; systemPrompt: string; chatSite: ChatSite }
 
-const PEOPLE_LIBRARY_PAGE_SIZE = 8
+const PEOPLE_LIBRARY_PAGE_SIZE = 5
 const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek'] as const
 
 export interface PeopleLibraryViewDependencies {
