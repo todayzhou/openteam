@@ -50,12 +50,50 @@ describe('team page notes view', () => {
       content: editor.getJSON(),
     })
   })
+
+  it('lets the note window be dragged without leaving the viewport', () => {
+    const chat = makeChat('chat-1')
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+    }
+    const { view } = setupNotesView(store, chat)
+    const panel = document.querySelector<HTMLElement>('#notes-panel')!
+    const handle = document.querySelector<HTMLElement>('#notes-drag-handle')!
+
+    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
+      x: 420,
+      y: 80,
+      left: 420,
+      top: 80,
+      right: 860,
+      bottom: 680,
+      width: 440,
+      height: 600,
+      toJSON: () => ({}),
+    } as DOMRect)
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 760 })
+
+    view.registerNotesEvents()
+    handle.dispatchEvent(pointerEvent('pointerdown', { clientX: 440, clientY: 100, pointerId: 1 }))
+    window.dispatchEvent(pointerEvent('pointermove', { clientX: 540, clientY: 170, pointerId: 1 }))
+    window.dispatchEvent(pointerEvent('pointerup', { clientX: 540, clientY: 170, pointerId: 1 }))
+
+    expect(panel.style.left).toBe('448px')
+    expect(panel.style.top).toBe('148px')
+    expect(panel.style.right).toBe('auto')
+    expect(panel.classList.contains('dragging')).toBe(false)
+  })
 })
 
 function setupNotesView(store: OpenTeamStore, chat: GroupChat | undefined, runCommand = vi.fn(async () => undefined)): { view: ReturnType<typeof createNotesView>; editor: NoteEditorAdapter } {
   document.body.innerHTML = `
     <button id="toggle-notes-panel"></button>
     <aside id="notes-panel">
+      <div id="notes-drag-handle"></div>
       <button id="close-notes-panel"></button>
       <button id="global-note-tab" data-note-scope="global"></button>
       <button id="chat-note-tab" data-note-scope="chat"></button>
@@ -81,6 +119,7 @@ function setupNotesView(store: OpenTeamStore, chat: GroupChat | undefined, runCo
   const view = createNotesView({
     state: createTeamPageState(),
     notesPanelEl: document.querySelector<HTMLElement>('#notes-panel')!,
+    notesDragHandleEl: document.querySelector<HTMLElement>('#notes-drag-handle')!,
     toggleNotesPanelEl: document.querySelector<HTMLButtonElement>('#toggle-notes-panel')!,
     closeNotesPanelEl: document.querySelector<HTMLButtonElement>('#close-notes-panel')!,
     globalNoteTabEl: document.querySelector<HTMLButtonElement>('#global-note-tab')!,
@@ -102,6 +141,12 @@ function setupNotesView(store: OpenTeamStore, chat: GroupChat | undefined, runCo
     showError: vi.fn(),
   })
   return { view, editor }
+}
+
+function pointerEvent(type: string, options: { clientX: number; clientY: number; pointerId: number }): PointerEvent {
+  const event = new MouseEvent(type, { bubbles: true, clientX: options.clientX, clientY: options.clientY, button: 0 }) as PointerEvent
+  Object.defineProperty(event, 'pointerId', { value: options.pointerId })
+  return event
 }
 
 function note(text: string): RichNoteDocument {

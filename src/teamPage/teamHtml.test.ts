@@ -70,6 +70,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="iframe-host"')
     expect(html).toContain('id="toggle-notes-panel"')
     expect(html).toContain('id="notes-panel"')
+    expect(html).toContain('id="notes-drag-handle"')
     expect(html).toContain('id="notes-editor"')
     expect(html).toContain('id="global-note-tab"')
     expect(html).toContain('id="chat-note-tab"')
@@ -80,6 +81,18 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('人设')
     expect(html).toContain('站点')
     expect(html).not.toContain('System Prompt')
+  })
+
+  it('opens notes as a draggable floating window instead of a right drawer', () => {
+    const html = readTeamDocument()
+    const notesPanelRule = html.match(/(?:^|\n)\.notes-panel\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const notesOpenRule = html.match(/(?:^|\n)\.notes-panel\.open\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+
+    expect(notesPanelRule).toContain('position: fixed;')
+    expect(notesPanelRule).toContain('border-radius: 14px;')
+    expect(notesPanelRule).not.toContain('translateX(100%)')
+    expect(notesOpenRule).toContain('pointer-events: auto;')
+    expect(html).toMatch(/\.notes-panel-header\s*{[^}]*cursor:\s*grab;/s)
   })
 
   it('styles window controls as visible mac-style traffic lights', () => {

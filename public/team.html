@@ -137,31 +137,31 @@
         </div>
       </aside>
 
-      <aside id="notes-panel" class="panel notes-panel" aria-label="笔记面板">
-        <div class="panel-header notes-panel-header">
-          <div>
-            <h2>笔记</h2>
-            <p class="tiny">手动记录或收集 Mark 内容。</p>
-          </div>
-          <button id="close-notes-panel" class="icon-btn" type="button" aria-label="关闭笔记">×</button>
-        </div>
-        <div class="note-scope-tabs" role="tablist" aria-label="笔记范围">
-          <button id="chat-note-tab" class="note-scope-tab active" type="button" data-note-scope="chat">当前群聊</button>
-          <button id="global-note-tab" class="note-scope-tab" type="button" data-note-scope="global">全局笔记</button>
-        </div>
-        <div class="note-toolbar" aria-label="富文本工具栏">
-          <button id="note-bold" class="note-tool-btn" type="button" aria-label="加粗">B</button>
-          <button id="note-italic" class="note-tool-btn" type="button" aria-label="斜体"><em>I</em></button>
-          <button id="note-strike" class="note-tool-btn" type="button" aria-label="删除线"><s>S</s></button>
-          <button id="note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表">•</button>
-          <button id="note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表">1.</button>
-          <span class="note-toolbar-spacer"></span>
-          <button id="note-undo" class="note-tool-btn" type="button" aria-label="撤销">↶</button>
-          <button id="note-redo" class="note-tool-btn" type="button" aria-label="重做">↷</button>
-        </div>
-        <div id="notes-editor" class="notes-editor" aria-label="富文本笔记编辑器"></div>
-      </aside>
     </div>
+    <aside id="notes-panel" class="panel notes-panel" aria-label="笔记面板">
+      <div id="notes-drag-handle" class="panel-header notes-panel-header" title="拖动笔记">
+        <div>
+          <h2>笔记</h2>
+          <p class="tiny">手动记录或收集 Mark 内容。</p>
+        </div>
+        <button id="close-notes-panel" class="icon-btn" type="button" aria-label="关闭笔记">×</button>
+      </div>
+      <div class="note-scope-tabs" role="tablist" aria-label="笔记范围">
+        <button id="chat-note-tab" class="note-scope-tab active" type="button" data-note-scope="chat">当前群聊</button>
+        <button id="global-note-tab" class="note-scope-tab" type="button" data-note-scope="global">全局笔记</button>
+      </div>
+      <div class="note-toolbar" aria-label="富文本工具栏">
+        <button id="note-bold" class="note-tool-btn" type="button" aria-label="加粗">B</button>
+        <button id="note-italic" class="note-tool-btn" type="button" aria-label="斜体"><em>I</em></button>
+        <button id="note-strike" class="note-tool-btn" type="button" aria-label="删除线"><s>S</s></button>
+        <button id="note-bullet-list" class="note-tool-btn" type="button" aria-label="项目列表">•</button>
+        <button id="note-ordered-list" class="note-tool-btn" type="button" aria-label="编号列表">1.</button>
+        <span class="note-toolbar-spacer"></span>
+        <button id="note-undo" class="note-tool-btn" type="button" aria-label="撤销">↶</button>
+        <button id="note-redo" class="note-tool-btn" type="button" aria-label="重做">↷</button>
+      </div>
+      <div id="notes-editor" class="notes-editor" aria-label="富文本笔记编辑器"></div>
+    </aside>
     <span id="template-summary" hidden></span>
     <div id="template-list" hidden></div>
     <button id="window-launcher" class="launcher" type="button" aria-label="打开 OpenTeam" hidden>⌁</button>
