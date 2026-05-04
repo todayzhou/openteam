@@ -33,6 +33,8 @@ export interface ChatFrameGroupState {
 }
 
 export type IframeHostEvent =
+  | { type: 'disabled' }
+  | { type: 'enabled' }
   | { type: 'chat-activated'; chatId: string }
   | { type: 'group-created'; chatId: string; group: HTMLElement }
   | { type: 'group-highlighted'; chatId: string }
@@ -83,6 +85,7 @@ export class IframeHost {
   private activeChatSignature?: string
   private hostTabId?: number
   private disposed = false
+  private enabled = true
 
   constructor(options: IframeHostOptions) {
     this.visibleHost = options.visibleHost
@@ -97,6 +100,15 @@ export class IframeHost {
 
   setHostTabId(hostTabId: number | undefined): void {
     this.hostTabId = hostTabId
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.assertNotDisposed()
+    if (this.enabled === enabled) return
+
+    this.enabled = enabled
+    if (!enabled) this.clearFrames()
+    this.emit({ type: enabled ? 'enabled' : 'disabled' })
   }
 
   getActiveChatId(): string | undefined {
@@ -162,6 +174,7 @@ export class IframeHost {
 
   removeChat(chatId: string): void {
     this.assertNotDisposed()
+    if (!this.enabled) return
     for (const record of [...this.framesByRoleKey.values()]) {
       if (record.chatId !== chatId) continue
       this.stopAssignLoop(record)
@@ -179,6 +192,7 @@ export class IframeHost {
 
   activateChat(chat: IframeHostChat, roles: IframeHostRole[]): RoleFrameState[] {
     this.assertNotDisposed()
+    if (!this.enabled) return []
     const activationSignature = chatActivationSignature(chat, roles)
     if (this.activeChatId === chat.id && this.activeChatSignature === activationSignature) {
       return this.getChatState(chat.id)
@@ -205,6 +219,7 @@ export class IframeHost {
 
   restoreChat(chat: IframeHostChat, roles: IframeHostRole[]): RoleFrameState[] {
     this.assertNotDisposed()
+    if (!this.enabled) return []
     this.activeChatSignature = undefined
     const group = this.getOrCreateChatGroup(chat)
     const chatRoleIds = new Set(chat.roleIds)
@@ -222,6 +237,7 @@ export class IframeHost {
 
   recoverRole(role: IframeHostRole): RoleFrameState {
     this.assertNotDisposed()
+    if (!this.enabled) return disabledRoleFrameState(role)
     this.activeChatSignature = undefined
     const group = this.getOrCreateChatGroup(role.chatId)
     const key = roleKey(role.chatId, role.id)
@@ -259,6 +275,12 @@ export class IframeHost {
   dispose(): void {
     if (this.disposed) return
 
+    this.clearFrames()
+    this.disposed = true
+    this.emit({ type: 'disposed' })
+  }
+
+  private clearFrames(): void {
     for (const record of this.framesByRoleKey.values()) {
       this.stopAssignLoop(record)
       record.shell.remove()
@@ -269,8 +291,6 @@ export class IframeHost {
     this.groupsByChatId.clear()
     this.activeChatId = undefined
     this.activeChatSignature = undefined
-    this.disposed = true
-    this.emit({ type: 'disposed' })
   }
 
   private ensureRoleFrame(role: IframeHostRole): RoleFrameRecord {
@@ -398,6 +418,8 @@ export class IframeHost {
   }
 
   private startAssignLoop(record: RoleFrameRecord): void {
+    if (!this.enabled) return
+    if (this.framesByRoleKey.get(roleKey(record.chatId, record.roleId)) !== record) return
     if (record.status === 'assigned') return
 
     this.stopAssignLoop(record)
@@ -413,6 +435,8 @@ export class IframeHost {
   }
 
   private assignRole(record: RoleFrameRecord): void {
+    if (!this.enabled) return
+    if (this.framesByRoleKey.get(roleKey(record.chatId, record.roleId)) !== record) return
     record.assignmentAttempts += 1
     record.lastAssignedAt = Date.now()
     try {
@@ -483,4 +507,15 @@ function chatActivationSignature(chat: IframeHostChat, roles: IframeHostRole[]):
     .sort()
     .join('|')
   return `${chat.id}:${chat.name}:${chat.roleIds.join(',')}:${roleSignature}`
+}
+
+function disabledRoleFrameState(role: IframeHostRole): RoleFrameState {
+  return {
+    chatId: role.chatId,
+    roleId: role.id,
+    src: getSafeSupportedChatIframeSrcForRole(role.geminiConversationUrl, role),
+    active: false,
+    status: 'loading',
+    assignmentAttempts: 0,
+  }
 }

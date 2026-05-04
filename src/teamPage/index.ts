@@ -13,6 +13,7 @@ import { createPeopleLibraryView } from './peopleLibraryView'
 import { createRoleRecoveryController } from './roleRecoveryController'
 import { createRolePanelView } from './rolePanelView'
 import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeClient'
+import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
 import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
@@ -42,6 +43,12 @@ const iframeHost = createIframeHost({
   onEvent(event) {
     log.debug(`iframe-host:${event.type}`, event)
   },
+})
+const primaryCoordinator = createTeamPagePrimaryCoordinator({
+  navigator,
+  window,
+  onPrimaryChange: handlePrimaryModeChange,
+  log,
 })
 
 const runtimeClient = createTeamPageRuntimeClient({
@@ -346,8 +353,14 @@ function getTemplates(): RoleTemplate[] {
 }
 
 function syncIframeHost(): void {
+  if (!primaryCoordinator.isPrimary()) {
+    iframeHost.setEnabled(false)
+    return
+  }
+
   const chat = getCurrentChat()
   if (!chat) return
+  iframeHost.setEnabled(true)
   const roles = getCurrentRoles()
   log.debug('iframe-sync:activate-chat', {
     chatId: chat.id,
@@ -355,6 +368,19 @@ function syncIframeHost(): void {
     roleStatuses: roles.map(role => ({ id: role.id, name: role.name, status: role.status, conversationUrl: role.geminiConversationUrl })),
   })
   iframeHost.activateChat(chat, roles)
+}
+
+function handlePrimaryModeChange(isPrimary: boolean): void {
+  iframeHost.setEnabled(isPrimary)
+  document.body.dataset.teamPagePrimary = String(isPrimary)
+  if (isPrimary) {
+    log.info('team-page-primary:enabled', { hostTabId: appState.hostTabId })
+    syncIframeHost()
+    return
+  }
+
+  log.warn('team-page-primary:passive', { hostTabId: appState.hostTabId })
+  showError('已检测到另一个 OpenTeam 页面正在运行。当前页面已暂停 AI iframe，避免两个页面同时加载导致卡死。')
 }
 
 function render(): void {
@@ -391,6 +417,8 @@ function registerRuntimePush(): void {
 
 async function boot(): Promise<void> {
   await resolveHostTabId()
+  await primaryCoordinator.start()
+  window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()
   registerFloatingWindowControls()
   registerUi()

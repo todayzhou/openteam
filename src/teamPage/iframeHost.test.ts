@@ -499,6 +499,32 @@ describe('IframeHost', () => {
     expect(host.getChatState('chat-1')[0].status).toBe('assigned')
   })
 
+  it('does not create role iframes while disabled', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const host = createIframeHost({ visibleHost })
+    host.setEnabled(false)
+
+    const state = host.activateChat(makeChat('chat-1', ['role-1']), [makeRole('chat-1', 'role-1')])
+
+    expect(state).toEqual([])
+    expect(host.getRoleFrame('chat-1', 'role-1')).toBeUndefined()
+    expect(visibleHost.querySelector('iframe')).toBeNull()
+  })
+
+  it('removes existing role iframes when disabled', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const host = createIframeHost({ visibleHost })
+    host.activateChat(makeChat('chat-1', ['role-1']), [makeRole('chat-1', 'role-1')])
+    expect(visibleHost.querySelector('iframe')).not.toBeNull()
+
+    host.setEnabled(false)
+
+    expect(host.getChatState('chat-1')).toEqual([])
+    expect(visibleHost.querySelector('iframe')).toBeNull()
+  })
+
   it('emits group and role lifecycle events for runtime diagnostics', () => {
     const visibleHost = document.createElement('div')
     document.body.append(visibleHost)
