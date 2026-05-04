@@ -3,8 +3,8 @@ import type { TeamPageState } from './appState'
 
 type TemplateDraft = Pick<RoleTemplate, 'name' | 'description' | 'systemPrompt' | 'defaultChatSite' | 'chatGptGptsUrl'>
 type AddPersonItem =
-  | { key: string; source: 'library'; roleTemplateId: string; name: string; description?: string; chatSites: ChatSite[]; disabledSites: Set<ChatSite> }
-  | { key: string; source: 'temporary'; draftId: string; name: string; description?: string; systemPrompt: string; chatSites: ChatSite[]; disabledSites: Set<ChatSite> }
+  | { key: string; source: 'library'; type: RoleTemplate['type']; roleTemplateId: string; name: string; description?: string; systemPrompt: string; chatSites: ChatSite[]; disabledSites: Set<ChatSite> }
+  | { key: string; source: 'temporary'; type: 'custom'; draftId: string; name: string; description?: string; systemPrompt: string; chatSites: ChatSite[]; disabledSites: Set<ChatSite> }
 
 const PEOPLE_LIBRARY_PAGE_SIZE = 5
 const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek'] as const
@@ -24,6 +24,9 @@ export interface PeopleLibraryViewDependencies {
   peopleLibraryListEl: HTMLElement
   peopleLibraryPaginationEl: HTMLElement
   addLibraryPeopleListEl: HTMLElement
+  addPersonSearchEl: HTMLInputElement
+  addPersonBuiltinTabEl: HTMLButtonElement
+  addPersonCustomTabEl: HTMLButtonElement
   roleTemplateSelectEl: HTMLSelectElement
   templateListEl: HTMLElement
   templateNameEl: HTMLInputElement
@@ -141,6 +144,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     if (!deps.getCurrentChat()) return
     deps.addPersonModalEl.hidden = false
     deps.state.addPersonSiteMenuId = undefined
+    deps.state.addPersonTemplateType = 'builtin'
+    deps.state.addPersonSearchQuery = ''
+    deps.addPersonSearchEl.value = ''
     deps.log.info('ui:person-add-dialog:open', { chatId: deps.getCurrentChat()?.id, source: 'mixed' })
     renderAddPersonDialog()
   }
@@ -164,6 +170,8 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     deps.temporaryPersonModalEl.hidden = true
     deps.state.selectedTemplateId = undefined
     deps.state.addPersonSiteMenuId = undefined
+    deps.state.addPersonTemplateType = 'builtin'
+    deps.state.addPersonSearchQuery = ''
   }
 
   function registerPeopleLibraryEvents(): void {
@@ -189,6 +197,19 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     deps.closeAddPersonEl.addEventListener('click', () => {
       deps.addPersonModalEl.hidden = true
       deps.state.addPersonSiteMenuId = undefined
+    })
+
+    deps.addPersonSearchEl.addEventListener('input', () => {
+      deps.state.addPersonSearchQuery = deps.addPersonSearchEl.value
+      renderAddPersonDialog()
+    })
+    deps.addPersonBuiltinTabEl.addEventListener('click', () => {
+      deps.state.addPersonTemplateType = 'builtin'
+      renderAddPersonDialog()
+    })
+    deps.addPersonCustomTabEl.addEventListener('click', () => {
+      deps.state.addPersonTemplateType = 'custom'
+      renderAddPersonDialog()
     })
 
     deps.openTemporaryPersonEl.addEventListener('click', openTemporaryPersonDialog)
@@ -260,8 +281,8 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     name.className = 'role-name'
     name.textContent = template.name
     const used = document.createElement('span')
-    used.className = 'tiny'
-    used.textContent = isTemplateUsed(template.id) ? '已被群聊使用' : '可删除'
+    used.className = `template-type-badge template-type-${template.type}`
+    used.textContent = template.type === 'builtin' ? '内置' : '自定义'
     row.append(name, used)
 
     const description = document.createElement('div')
@@ -284,7 +305,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 
     const actions = document.createElement('div')
     actions.className = 'template-card-actions'
-    actions.append(edit)
+    if (template.type !== 'builtin') {
+      actions.append(edit)
+    }
 
     const remove = document.createElement('button')
     remove.type = 'button'
@@ -294,7 +317,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       event.stopPropagation()
       deleteTemplate(template)
     })
-    if (!isTemplateUsed(template.id)) actions.append(remove)
+    if (template.type !== 'builtin') {
+      if (!isTemplateUsed(template.id)) actions.append(remove)
+    }
 
     card.append(body, actions)
     return card
@@ -336,10 +361,15 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   }
 
   function renderAddPersonDialog(): void {
-    const items = addPersonItems()
+    ensureAddPersonTemplateTypeHasItems()
+    syncAddPersonTypeTabs()
+    const items = filteredAddPersonItems()
     deps.addLibraryPeopleListEl.replaceChildren()
     if (items.length === 0) {
-      deps.addLibraryPeopleListEl.append(deps.emptyCard('暂无可选人员', '先在人员库中新建人员，或点击右上角临时添加。'))
+      deps.addLibraryPeopleListEl.append(deps.emptyCard(
+        deps.state.addPersonSearchQuery.trim() ? `没有匹配的${deps.state.addPersonTemplateType === 'builtin' ? '内置' : '自定义'}人员` : `暂无${deps.state.addPersonTemplateType === 'builtin' ? '内置' : '自定义'}人员`,
+        deps.state.addPersonTemplateType === 'builtin' ? '可以切换到自定义人员，或调整搜索词。' : '先在人员库中新建人员，或点击右上角临时添加。',
+      ))
       return
     }
 
@@ -359,7 +389,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       description.textContent = item.description || '未填写描述'
       const site = document.createElement('div')
       site.className = 'template-description'
-      site.textContent = item.chatSites.length === 0 ? '所有可用站点已添加' : item.source === 'temporary' ? '临时人员' : '人员库'
+      site.textContent = item.chatSites.length === 0 ? '所有可用站点已添加' : item.source === 'temporary' ? '临时人员' : templateTypeLabel(item.type)
       content.append(name, description, site)
       label.append(checkbox, content, addPersonSiteControl(item.key, item.chatSites, item.disabledSites))
       deps.addLibraryPeopleListEl.append(label)
@@ -375,9 +405,11 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       return {
         key,
         source: 'library' as const,
+        type: template.type,
         roleTemplateId: template.id,
         name: template.name,
         description: template.description,
+        systemPrompt: template.systemPrompt,
         chatSites,
         disabledSites,
       }
@@ -389,6 +421,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       return {
         key,
         source: 'temporary' as const,
+        type: 'custom' as const,
         draftId: draft.id,
         name: draft.name,
         description: draft.description,
@@ -398,6 +431,36 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       }
     })
     return [...libraryItems, ...temporaryItems]
+  }
+
+  function filteredAddPersonItems(): AddPersonItem[] {
+    return addPersonItems().filter(item => item.type === deps.state.addPersonTemplateType && matchesAddPersonSearch(item))
+  }
+
+  function ensureAddPersonTemplateTypeHasItems(): void {
+    if (deps.state.addPersonSearchQuery.trim()) return
+    const items = addPersonItems()
+    if (items.some(item => item.type === deps.state.addPersonTemplateType)) return
+    const fallbackType = deps.state.addPersonTemplateType === 'builtin' ? 'custom' : 'builtin'
+    if (items.some(item => item.type === fallbackType)) deps.state.addPersonTemplateType = fallbackType
+  }
+
+  function matchesAddPersonSearch(item: AddPersonItem): boolean {
+    const query = deps.state.addPersonSearchQuery.trim().toLowerCase()
+    if (!query) return true
+    return [
+      item.name,
+      item.description ?? '',
+      item.systemPrompt,
+    ].some(value => value.toLowerCase().includes(query))
+  }
+
+  function syncAddPersonTypeTabs(): void {
+    const builtinActive = deps.state.addPersonTemplateType === 'builtin'
+    deps.addPersonBuiltinTabEl.className = `template-type-tab${builtinActive ? ' active' : ''}`
+    deps.addPersonCustomTabEl.className = `template-type-tab${builtinActive ? '' : ' active'}`
+    deps.addPersonBuiltinTabEl.setAttribute('aria-selected', String(builtinActive))
+    deps.addPersonCustomTabEl.setAttribute('aria-selected', String(!builtinActive))
   }
 
   function addPersonSiteControl(itemKey: string, chatSites: ChatSite[], disabledSites: Set<ChatSite>): HTMLElement {
@@ -551,6 +614,10 @@ function siteLabel(site: ChatSite | undefined): string {
   if (site === 'kimi') return 'Kimi'
   if (site === 'qwen') return '千问'
   return 'Gemini'
+}
+
+function templateTypeLabel(type: RoleTemplate['type']): string {
+  return type === 'builtin' ? '内置人员' : '自定义人员'
 }
 
 function visibleChatSite(site: ChatSite | undefined): ChatSite {

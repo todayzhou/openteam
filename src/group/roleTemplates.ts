@@ -1,4 +1,5 @@
 import { normalizeChatGptGptsUrl } from './conversationUrl'
+import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleTemplate } from './types'
 
 export interface RoleTemplateInput {
@@ -85,6 +86,7 @@ export function createRoleTemplate(
   const defaultChatSite = input.defaultChatSite ?? store.settings.defaultChatSite
   const template: RoleTemplate = {
     id,
+    type: 'custom',
     name,
     defaultChatSite,
     systemPrompt,
@@ -102,12 +104,27 @@ export function createRoleTemplate(
   return template
 }
 
+export function getCustomRoleTemplates(store: OpenTeamStore): RoleTemplate[] {
+  return store.roleTemplateOrder
+    .map(templateId => store.roleTemplatesById[templateId])
+    .filter((template): template is RoleTemplate => Boolean(template) && template.type !== 'builtin')
+}
+
+export function getAllRoleTemplates(store: OpenTeamStore): RoleTemplate[] {
+  return [...BUILTIN_ROLE_TEMPLATES, ...getCustomRoleTemplates(store)]
+}
+
+export function getRoleTemplateById(store: OpenTeamStore, templateId: string): RoleTemplate | undefined {
+  return getBuiltinRoleTemplate(templateId) ?? store.roleTemplatesById[templateId]
+}
+
 export function updateRoleTemplate(
   store: OpenTeamStore,
   templateId: string,
   patch: RoleTemplateInput,
   now: number,
 ): RoleTemplate {
+  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置人员不能编辑')
   const template = store.roleTemplatesById[templateId]
   if (!template) throw new Error(`找不到人员库人员：${templateId}`)
 
@@ -133,6 +150,7 @@ export function updateRoleTemplate(
 }
 
 export function deleteRoleTemplate(store: OpenTeamStore, templateId: string): void {
+  if (isBuiltinRoleTemplateId(templateId)) throw new Error('系统内置人员不能删除')
   const usage = getRoleTemplateUsage(store, templateId)
   if (usage.usedByChatIds.length > 0) {
     throw new Error('该人员库人员已被群聊使用，不能删除')
@@ -164,7 +182,7 @@ export function createGroupRole(
   const chat = store.chatsById[input.chatId]
   if (!chat) throw new Error(`找不到群聊：${input.chatId}`)
 
-  const template = input.templateId ? store.roleTemplatesById[input.templateId] : undefined
+  const template = input.templateId ? getRoleTemplateById(store, input.templateId) : undefined
   if (input.templateId && !template) throw new Error(`找不到人员库人员：${input.templateId}`)
 
   const name = assertValidRoleName(input.name ?? template?.name ?? '', [])
@@ -297,7 +315,7 @@ export function createGroupRolesBatch(
 
 function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index: number): PreparedGroupRoleBatchItem {
   if (item.source === 'library') {
-    const template = store.roleTemplatesById[item.roleTemplateId]
+    const template = getRoleTemplateById(store, item.roleTemplateId)
     if (!template) throw new Error(`找不到人员库人员：${item.roleTemplateId}`)
     return {
       templateId: item.roleTemplateId,

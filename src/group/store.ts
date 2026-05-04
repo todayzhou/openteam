@@ -117,8 +117,8 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     chatsById: readRecord(raw.chatsById),
     rolesById: readRecord(raw.rolesById),
     messagesById: readRecord(raw.messagesById),
-    roleTemplateOrder: readStringArray(raw.roleTemplateOrder, defaults.roleTemplateOrder),
-    roleTemplatesById: readRecord(raw.roleTemplatesById),
+    roleTemplateOrder: normalizeRoleTemplateOrder(raw.roleTemplateOrder, raw.roleTemplatesById, defaults.roleTemplateOrder),
+    roleTemplatesById: normalizeRoleTemplateRecord(raw.roleTemplatesById),
     globalNote: normalizeNoteDocument(raw.globalNote),
     chatNotesById: readNoteRecord(raw.chatNotesById),
     messageHighlightsById: readHighlightsRecord(raw.messageHighlightsById),
@@ -148,7 +148,7 @@ async function loadV2Store(rawMeta: unknown): Promise<OpenTeamStore> {
   store.currentChatId = meta.currentChatId
   store.chatOrder = chatDocuments.map(document => document.chat.id)
   store.roleTemplateOrder = [...meta.roleTemplateOrder]
-  store.roleTemplatesById = { ...meta.roleTemplatesById }
+  store.roleTemplatesById = normalizeRoleTemplateRecord(meta.roleTemplatesById)
   store.globalNote = meta.globalNote
   store.chatNotesById = { ...(meta.chatNotesById ?? {}) }
   store.messageHighlightsById = { ...(meta.messageHighlightsById ?? {}) }
@@ -183,8 +183,8 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     version: CURRENT_STORE_VERSION,
     currentChatId: store.currentChatId,
     chatOrder: chatIds,
-    roleTemplateOrder: [...store.roleTemplateOrder],
-    roleTemplatesById: { ...store.roleTemplatesById },
+    roleTemplateOrder: customRoleTemplateOrder(store),
+    roleTemplatesById: customRoleTemplatesById(store),
     globalNote: normalizeNoteDocument(store.globalNote),
     chatNotesById: readNoteRecord(store.chatNotesById),
     messageHighlightsById: readHighlightsRecord(store.messageHighlightsById),
@@ -263,8 +263,8 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
   const meta: OpenTeamMetaStore = {
     version: typeof raw.version === 'number' ? raw.version : CURRENT_STORE_VERSION,
     chatOrder: readStringArray(raw.chatOrder, []),
-    roleTemplateOrder: readStringArray(raw.roleTemplateOrder, []),
-    roleTemplatesById: readRecord(raw.roleTemplatesById),
+    roleTemplateOrder: normalizeRoleTemplateOrder(raw.roleTemplateOrder, raw.roleTemplatesById, []),
+    roleTemplatesById: normalizeRoleTemplateRecord(raw.roleTemplatesById),
     globalNote: normalizeNoteDocument(raw.globalNote),
     chatNotesById: readNoteRecord(raw.chatNotesById),
     messageHighlightsById: readHighlightsRecord(raw.messageHighlightsById),
@@ -329,6 +329,37 @@ function collectChatMessages(store: OpenTeamStore, chat: GroupChat): GroupMessag
   }
 
   return [...messagesById.values()].sort((left, right) => left.seq - right.seq || left.createdAt - right.createdAt)
+}
+
+function normalizeRoleTemplateRecord(raw: unknown): Record<string, RoleTemplate> {
+  const record = readRecord(raw)
+  const normalized: Record<string, RoleTemplate> = {}
+  for (const [id, value] of Object.entries(record)) {
+    if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string' || typeof value.systemPrompt !== 'string') continue
+    if (value.type === 'builtin') continue
+    normalized[id] = {
+      ...(value as unknown as RoleTemplate),
+      type: 'custom',
+    }
+  }
+  return normalized
+}
+
+function normalizeRoleTemplateOrder(rawOrder: unknown, rawTemplates: unknown, fallback: string[]): string[] {
+  const templates = normalizeRoleTemplateRecord(rawTemplates)
+  const ids = new Set(Object.keys(templates))
+  return readStringArray(rawOrder, fallback).filter(id => ids.has(id))
+}
+
+function customRoleTemplateOrder(store: OpenTeamStore): string[] {
+  const customIds = new Set(Object.entries(store.roleTemplatesById)
+    .filter(([, template]) => template.type !== 'builtin')
+    .map(([id]) => id))
+  return store.roleTemplateOrder.filter(id => customIds.has(id))
+}
+
+function customRoleTemplatesById(store: OpenTeamStore): Record<string, RoleTemplate> {
+  return Object.fromEntries(Object.entries(store.roleTemplatesById).filter(([, template]) => template.type !== 'builtin'))
 }
 
 function uniqueStrings(values: string[]): string[] {

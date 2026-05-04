@@ -226,6 +226,23 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('为这次加入群聊的人员统一指定千问。')
   })
 
+  it('adds search and built-in/custom tabs to the add-person dialog', () => {
+    const html = readTeamDocument()
+    const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
+    const domRefsSource = readFileSync(resolve(process.cwd(), 'src/teamPage/domRefs.ts'), 'utf8')
+
+    expect(html).toContain('id="add-person-search"')
+    expect(html).toContain('id="add-person-tab-builtin"')
+    expect(html).toContain('id="add-person-tab-custom"')
+    expect(html).toContain('搜索人员名称、描述或提示词')
+    expect(source).toContain('function filteredAddPersonItems(): AddPersonItem[]')
+    expect(source).toContain("deps.state.addPersonTemplateType === 'builtin'")
+    expect(source).toContain('matchesAddPersonSearch')
+    expect(domRefsSource).toContain("'#add-person-search'")
+    expect(domRefsSource).toContain("'#add-person-tab-builtin'")
+    expect(domRefsSource).toContain("'#add-person-tab-custom'")
+  })
+
   it('uses a clean page background without decorative side panels', () => {
     const html = readTeamDocument()
 

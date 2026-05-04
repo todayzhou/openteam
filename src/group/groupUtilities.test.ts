@@ -3,11 +3,30 @@ import { extractGeminiConversationId, extractSupportedConversationId, getSafeGem
 import { buildUnsyncedContext, getContextCursorAfterAck, getUnsyncedMessagesForRole } from './contextSync'
 import { parseGroupMentions } from './mentionParser'
 import { buildInitPrompt, buildPrompt } from './promptBuilder'
-import { createGroupRole, createGroupRolesBatch, createRoleTemplate, deleteRoleTemplate, updateGroupRole, updateRoleTemplate, validateRoleName } from './roleTemplates'
+import { createGroupRole, createGroupRolesBatch, createRoleTemplate, deleteRoleTemplate, getAllRoleTemplates, getRoleTemplateById, updateGroupRole, updateRoleTemplate, validateRoleName } from './roleTemplates'
 import { createDefaultStore } from './store'
 import type { GroupChat, GroupMessage, GroupRole } from './types'
 
 describe('role template utilities', () => {
+  it('combines built-in and custom role templates for selection', () => {
+    const store = createDefaultStore()
+    const custom = createRoleTemplate(store, { name: '观察员', systemPrompt: '观察讨论' }, 'template-custom', 1)
+
+    const templates = getAllRoleTemplates(store)
+    const builtin = templates.find(template => template.id === 'builtin-frankl')
+
+    expect(custom).toMatchObject({ type: 'custom' })
+    expect(builtin).toMatchObject({
+      type: 'builtin',
+      name: '弗兰克尔',
+      systemPrompt: expect.stringContaining('弗兰克尔式意义顾问'),
+    })
+    expect(templates[0].type).toBe('builtin')
+    expect(templates[templates.length - 1]).toBe(custom)
+    expect(getRoleTemplateById(store, 'builtin-frankl')).toBe(builtin)
+    expect(getRoleTemplateById(store, custom.id)).toBe(custom)
+  })
+
   it('creates, updates, deletes templates, and creates independent group role instances', () => {
     const store = createDefaultStore()
     store.chatsById['chat-1'] = makeChat('chat-1')
@@ -113,6 +132,32 @@ describe('role template utilities', () => {
     expect(roles[1].templateId).toBeUndefined()
     expect(store.roleTemplateOrder).toEqual(['template-1'])
     expect(Object.keys(store.roleTemplatesById)).toEqual(['template-1'])
+  })
+
+  it('creates group roles from built-in templates without storing them as custom templates', () => {
+    const store = createDefaultStore()
+    store.chatsById['chat-1'] = makeChat('chat-1')
+
+    const roles = createGroupRolesBatch(store, 'chat-1', [
+      { source: 'library', roleTemplateId: 'builtin-frankl', chatSite: 'claude' },
+    ], () => 'role-1', 1)
+
+    expect(roles).toHaveLength(1)
+    expect(roles[0]).toMatchObject({
+      templateId: 'builtin-frankl',
+      name: '弗兰克尔',
+      chatSite: 'claude',
+      systemPrompt: expect.stringContaining('弗兰克尔式意义顾问'),
+    })
+    expect(store.roleTemplateOrder).toEqual([])
+    expect(store.roleTemplatesById).toEqual({})
+  })
+
+  it('prevents direct built-in template edits and deletes', () => {
+    const store = createDefaultStore()
+
+    expect(() => updateRoleTemplate(store, 'builtin-frankl', { name: '意义顾问', systemPrompt: '改写' }, 1)).toThrow('系统内置人员不能编辑')
+    expect(() => deleteRoleTemplate(store, 'builtin-frankl')).toThrow('系统内置人员不能删除')
   })
 
   it('allows the same library person on different chat sites in one chat', () => {

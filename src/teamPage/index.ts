@@ -1,5 +1,6 @@
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
 import { createDefaultStore } from '../group/store'
+import { getAllRoleTemplates } from '../group/roleTemplates'
 import { createTeamPageState } from './appState'
 import { createAllNotesView } from './allNotesView'
 import { createChatHeaderView } from './chatHeaderView'
@@ -32,7 +33,7 @@ const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl } = tea
 const { openPeopleLibraryEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
 const { notesPanelEl, notesDragHandleEl, toggleNotesPanelEl, closeNotesPanelEl, globalNoteTabEl, chatNoteTabEl, notesEditorEl } = teamDomRefs
 const { noteBoldEl, noteItalicEl, noteStrikeEl, noteBulletListEl, noteOrderedListEl, noteUndoEl, noteRedoEl } = teamDomRefs
-const { peopleLibrarySummaryEl, peopleLibraryListEl, peopleLibraryPaginationEl, addLibraryPeopleListEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
+const { peopleLibrarySummaryEl, peopleLibraryListEl, peopleLibraryPaginationEl, addLibraryPeopleListEl, addPersonSearchEl, addPersonBuiltinTabEl, addPersonCustomTabEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
 const { openTemporaryPersonEl, closeTemporaryPersonEl, addRoleFormEl, addLibraryPeopleFormEl, addTemporaryPersonFormEl, peopleLibraryFormEl } = teamDomRefs
 const { templateSiteGeminiEl, templateSiteChatGptEl, templateSiteClaudeEl, templateSiteDeepSeekEl, templateSiteQwenEl, templateSiteKimiEl, templateChatGptGptsFieldEl, templateChatGptGptsUrlEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
 const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl } = teamDomRefs
@@ -212,6 +213,9 @@ const peopleLibraryView = createPeopleLibraryView({
   peopleLibraryListEl,
   peopleLibraryPaginationEl,
   addLibraryPeopleListEl,
+  addPersonSearchEl,
+  addPersonBuiltinTabEl,
+  addPersonCustomTabEl,
   roleTemplateSelectEl,
   templateListEl,
   templateNameEl,
@@ -360,7 +364,7 @@ function getCurrentMessages(): GroupMessage[] {
 }
 
 function getTemplates(): RoleTemplate[] {
-  return store.roleTemplateOrder.map(templateId => store.roleTemplatesById[templateId]).filter((template): template is RoleTemplate => Boolean(template))
+  return getAllRoleTemplates(store)
 }
 
 function syncIframeHost(): void {

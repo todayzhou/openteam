@@ -281,6 +281,13 @@
         <div class="modal-grid single-column">
           <form id="add-library-people-form" class="modal-form modal-card modal-grid-wide">
             <h3>选择人员</h3>
+            <div class="add-person-toolbar">
+              <input id="add-person-search" type="search" placeholder="搜索人员名称、描述或提示词" autocomplete="off" />
+              <div class="template-type-tabs" role="tablist" aria-label="人员类型">
+                <button id="add-person-tab-builtin" class="template-type-tab active" type="button" data-template-type="builtin">内置人员</button>
+                <button id="add-person-tab-custom" class="template-type-tab" type="button" data-template-type="custom">自定义人员</button>
+              </div>
+            </div>
             <div id="add-library-people-list" class="select-list"></div>
             <button class="btn btn-primary" type="submit">加入选中人员</button>
           </form>

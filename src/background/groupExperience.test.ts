@@ -141,6 +141,49 @@ describe('background group chat experience handlers', () => {
     expect(deleted.store.roleTemplateOrder).toEqual(['template-used'])
   })
 
+  it('protects built-in role templates from update and delete commands', async () => {
+    const store = makeStore()
+    const harness = await setupBackground(store)
+
+    const updateDenied = await harness.invoke({
+      type: 'ROLE_TEMPLATE_UPDATE',
+      templateId: 'builtin-frankl',
+      name: '意义顾问',
+      systemPrompt: '改写',
+    }) as { ok: boolean; error: string }
+    const deleteDenied = await harness.invoke({ type: 'ROLE_TEMPLATE_DELETE', templateId: 'builtin-frankl' }) as { ok: boolean; error: string }
+
+    expect(updateDenied.ok).toBe(false)
+    expect(updateDenied.error).toBe('系统内置人员不能编辑')
+    expect(deleteDenied.ok).toBe(false)
+    expect(deleteDenied.error).toBe('系统内置人员不能删除')
+  })
+
+  it('creates chat roles from built-in templates through the background batch command', async () => {
+    const store = makeStore()
+    store.chatsById['chat-1'] = makeChat('chat-1')
+    store.chatOrder = ['chat-1']
+    const harness = await setupBackground(store)
+
+    const accepted = await harness.invoke({
+      type: 'GROUP_ROLES_CREATE_BATCH',
+      chatId: 'chat-1',
+      items: [
+        { source: 'library', roleTemplateId: 'builtin-frankl', chatSite: 'claude' },
+      ],
+    }) as { ok: boolean; roles: GroupRole[]; store: OpenTeamStore }
+
+    expect(accepted.ok).toBe(true)
+    expect(accepted.roles[0]).toMatchObject({
+      templateId: 'builtin-frankl',
+      name: '弗兰克尔',
+      chatSite: 'claude',
+      systemPrompt: expect.stringContaining('弗兰克尔式意义顾问'),
+    })
+    expect(accepted.store.roleTemplateOrder).toEqual([])
+    expect(accepted.store.roleTemplatesById).toEqual({})
+  })
+
   it('saves rich note documents for global and chat scopes', async () => {
     const store = makeStore()
     store.chatsById['chat-1'] = makeChat('chat-1')
@@ -1046,6 +1089,7 @@ function makeChat(id: string, roleIds: string[] = []): GroupChat {
 function makeTemplate(id: string, name: string, systemPrompt: string): RoleTemplate {
   return {
     id,
+    type: 'custom',
     name,
     systemPrompt,
     createdAt: 1,
