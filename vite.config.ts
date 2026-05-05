@@ -1,11 +1,55 @@
 /// <reference types="vitest" />
 import { configDefaults, defineConfig } from 'vitest/config'
 import { build as buildWithEsbuild } from 'esbuild'
-import { resolve } from 'path'
-import { copyFileSync, mkdirSync, readFileSync } from 'fs'
+import { join, resolve } from 'path'
+import { copyFileSync, mkdirSync, readFileSync, readdirSync } from 'fs'
 
 export function hasTopLevelStaticImport(source: string): boolean {
   return /^\s*import(?:[\s{*"']|\w)/m.test(source)
+}
+
+export function createViteBuildHardeningOptions(mode: string): { minify: false | 'esbuild'; sourcemap: false } {
+  return {
+    minify: mode === 'development' ? false : 'esbuild',
+    sourcemap: false,
+  }
+}
+
+export function createEsbuildScriptHardeningOptions(mode: string): { minify: boolean; sourcemap: false; legalComments: 'none' } {
+  return {
+    minify: mode !== 'development',
+    sourcemap: false,
+    legalComments: 'none',
+  }
+}
+
+function mustBeSelfContainedScript(fileName: string): boolean {
+  return /(?:content|PageWorldBridge)\.js$/.test(fileName)
+}
+
+export function assertCompliantReleaseScript(fileName: string, source: string): void {
+  if (mustBeSelfContainedScript(fileName) && hasTopLevelStaticImport(source)) {
+    throw new Error(`${fileName} must be self-contained because Chrome content_scripts are not ES modules`)
+  }
+  if (/(?:sourceMappingURL|sourceURL)=/.test(source)) {
+    throw new Error(`${fileName} must not expose a source map reference in release builds`)
+  }
+  if (/\beval\s*\(|\b(?:new\s+)?Function\s*\(/.test(source)) {
+    throw new Error(`${fileName} must not use dynamic code execution in release builds`)
+  }
+}
+
+export function collectJavaScriptFiles(directory: string): string[] {
+  const files: string[] = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...collectJavaScriptFiles(entryPath))
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      files.push(entryPath)
+    }
+  }
+  return files
 }
 
 export default defineConfig(({ mode }) => ({
@@ -19,6 +63,7 @@ export default defineConfig(({ mode }) => ({
       async closeBundle() {
         mkdirSync('dist', { recursive: true })
         copyFileSync('public/manifest.json', 'dist/manifest.json')
+        const esbuildHardeningOptions = createEsbuildScriptHardeningOptions(mode)
 
         await buildWithEsbuild({
           entryPoints: [resolve(__dirname, 'src/content/index.ts')],
@@ -30,38 +75,11 @@ export default defineConfig(({ mode }) => ({
           define: {
             __OPENTEAM_DEV__: JSON.stringify(mode === 'development'),
           },
-          legalComments: 'none',
+          ...esbuildHardeningOptions,
         })
 
-        await buildWithEsbuild({
-          entryPoints: [resolve(__dirname, 'src/content/kimiPageWorldBridge.ts')],
-          outfile: resolve(__dirname, 'dist/kimiPageWorldBridge.js'),
-          bundle: true,
-          format: 'iife',
-          platform: 'browser',
-          target: 'chrome114',
-          define: {
-            __OPENTEAM_DEV__: JSON.stringify(mode === 'development'),
-          },
-          legalComments: 'none',
-        })
-
-        await buildWithEsbuild({
-          entryPoints: [resolve(__dirname, 'src/content/qwenPageWorldBridge.ts')],
-          outfile: resolve(__dirname, 'dist/qwenPageWorldBridge.js'),
-          bundle: true,
-          format: 'iife',
-          platform: 'browser',
-          target: 'chrome114',
-          define: {
-            __OPENTEAM_DEV__: JSON.stringify(mode === 'development'),
-          },
-          legalComments: 'none',
-        })
-
-        const contentScript = readFileSync('dist/content.js', 'utf8')
-        if (hasTopLevelStaticImport(contentScript)) {
-          throw new Error('dist/content.js must be self-contained because Chrome content_scripts are not ES modules')
+        for (const scriptPath of collectJavaScriptFiles('dist')) {
+          assertCompliantReleaseScript(scriptPath, readFileSync(scriptPath, 'utf8'))
         }
       }
     }
@@ -69,6 +87,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    ...createViteBuildHardeningOptions(mode),
     rollupOptions: {
       input: {
         background: resolve(__dirname, 'src/background/index.ts'),

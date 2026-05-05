@@ -73,35 +73,5 @@
       "urlFilter": "||chat.deepseek.com/",
       "resourceTypes": ["sub_frame"]
     }
-  },
-  {
-    "id": 6,
-    "priority": 1,
-    "action": {
-      "type": "modifyHeaders",
-      "responseHeaders": [
-        { "header": "content-security-policy", "operation": "remove" },
-        { "header": "x-frame-options", "operation": "remove" }
-      ]
-    },
-    "condition": {
-      "urlFilter": "||www.kimi.com/",
-      "resourceTypes": ["sub_frame"]
-    }
-  },
-  {
-    "id": 7,
-    "priority": 1,
-    "action": {
-      "type": "modifyHeaders",
-      "responseHeaders": [
-        { "header": "content-security-policy", "operation": "remove" },
-        { "header": "x-frame-options", "operation": "remove" }
-      ]
-    },
-    "condition": {
-      "urlFilter": "||www.qianwen.com/",
-      "resourceTypes": ["sub_frame"]
-    }
   }
 ]
