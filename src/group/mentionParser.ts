@@ -6,6 +6,7 @@ export type ParsedGroupMention =
       content: string
       targetRoleIds: string[]
       mentionedRoleIds: string[]
+      mentionsAll?: true
     }
   | {
       ok: false
@@ -17,13 +18,17 @@ export interface RoleMentionLabelOptions {
   externalModelNamesById?: Record<string, string>
 }
 
-export function parseGroupMentions(raw: string, roles: GroupRole[], options: RoleMentionLabelOptions = {}): ParsedGroupMention {
+export interface ParseGroupMentionsOptions extends RoleMentionLabelOptions {
+  defaultTarget?: 'all' | 'none'
+}
+
+export function parseGroupMentions(raw: string, roles: GroupRole[], options: ParseGroupMentionsOptions = {}): ParsedGroupMention {
   const trimmed = raw.trim()
   if (!trimmed) return { ok: false, error: '消息内容不能为空' }
 
   const allRoleIds = roles.map(role => role.id)
   if (!trimmed.includes('@')) {
-    return { ok: true, content: trimmed, targetRoleIds: allRoleIds, mentionedRoleIds: [] }
+    return { ok: true, content: trimmed, targetRoleIds: defaultTargetRoleIds(allRoleIds, options), mentionedRoleIds: [] }
   }
 
   const mentionTargets = roles.flatMap(role => [
@@ -42,9 +47,10 @@ export function parseGroupMentions(raw: string, roles: GroupRole[], options: Rol
       continue
     }
 
-    if (mentionMatches(trimmed, index, 'all')) {
+    const allMentionLabel = ['all', '所有人'].find(label => mentionMatches(trimmed, index, label))
+    if (allMentionLabel) {
       targetsAll = true
-      index += 4
+      index += allMentionLabel.length + 1
       continue
     }
 
@@ -65,8 +71,9 @@ export function parseGroupMentions(raw: string, roles: GroupRole[], options: Rol
   return {
     ok: true,
     content: parsedContent,
-    targetRoleIds: targetsAll ? allRoleIds : targetRoleIds.size > 0 ? [...targetRoleIds] : allRoleIds,
+    targetRoleIds: targetsAll ? allRoleIds : targetRoleIds.size > 0 ? [...targetRoleIds] : defaultTargetRoleIds(allRoleIds, options),
     mentionedRoleIds: [...targetRoleIds],
+    ...(targetsAll ? { mentionsAll: true as const } : {}),
   }
 }
 
@@ -102,6 +109,10 @@ function mentionMatches(raw: string, atIndex: number, target: string): boolean {
   if (!raw.startsWith(`@${target}`, atIndex)) return false
   const next = raw[atIndex + target.length + 1]
   return next === undefined || /\s|[，。！？,.!?;；:：]/.test(next)
+}
+
+function defaultTargetRoleIds(allRoleIds: string[], options: ParseGroupMentionsOptions): string[] {
+  return options.defaultTarget === 'none' ? [] : allRoleIds
 }
 
 function compactContent(raw: string): string {

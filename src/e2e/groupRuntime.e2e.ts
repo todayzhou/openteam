@@ -111,7 +111,7 @@ describe('OpenTeam extension E2E runtime flow', () => {
     const role = await createRole(harness, chat.id, '产品经理')
     await readyFrame(harness, chat.id, role.id)
 
-    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: chat.id, raw: '请给一个风险判断' }) as { ok: boolean; message: { id: string } }
+    const sent = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: chat.id, raw: '@产品经理 请给一个风险判断' }) as { ok: boolean; message: { id: string } }
     expect(sent.ok).toBe(true)
     const firstPrompt = harness.tabsSendMessage.mock.calls.find(call => call[1]?.messageId === sent.message.id)?.[1]
     expect(firstPrompt?.replyAttemptId).toBeTruthy()

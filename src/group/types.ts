@@ -131,6 +131,7 @@ export interface GroupMessage {
   roleName?: string
   targetRoleIds?: string[]
   mentionedRoleIds?: string[]
+  mentionsAll?: boolean
   references?: MessageReference[]
   createdAt: number
   status: DeliveryStatus

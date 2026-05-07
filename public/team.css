@@ -2044,6 +2044,10 @@ select:focus {
   font-size: 11px;
 }
 
+.mention-avatar-all {
+  background: linear-gradient(135deg, #2fd8cc, #3b82f6);
+}
+
 .role-tone-0 { background: linear-gradient(135deg, #76eaa8, #1d9f70); }
 .role-tone-1 { background: linear-gradient(135deg, #7aa7ff, #3d64df); }
 .role-tone-2 { background: linear-gradient(135deg, #ffc25d, #c77b24); }

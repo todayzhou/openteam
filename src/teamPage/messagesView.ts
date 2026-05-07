@@ -74,7 +74,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (roles.length === 0) {
         deps.messagesEl.append(emptyChatPeopleCard('暂无人员', '先添加人员，再开始群聊协作。'))
       } else {
-        deps.messagesEl.append(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '唤醒人员后，在下方输入任务；无 @ 默认发送给全部人员。'))
+        deps.messagesEl.append(startupNotice ? deps.emptyCard(startupNotice.title, startupNotice.body) : deps.emptyCard('等待第一条消息', '直接发送会记录消息；@ 人员或 @所有人 后触发回复。'))
       }
     }
 
@@ -334,19 +334,26 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       highlights: deps.getStore().messageHighlightsById?.[message.id],
       targetRoleIds: message.targetRoleIds,
       mentionedRoleIds: message.mentionedRoleIds,
+      mentionsAll: message.mentionsAll,
       showName,
       showAvatar,
     })
   }
 
   function renderMessageMentions(message: GroupMessage): HTMLElement | undefined {
-    if (!message.mentionedRoleIds?.length) return undefined
+    if (!message.mentionsAll && !message.mentionedRoleIds?.length) return undefined
     const store = deps.getStore()
-    const roles = message.mentionedRoleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
-    if (roles.length === 0) return undefined
+    const roles = (message.mentionedRoleIds ?? []).map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
+    if (!message.mentionsAll && roles.length === 0) return undefined
 
     const mentions = document.createElement('div')
     mentions.className = 'message-mentions'
+    if (message.mentionsAll) {
+      const mention = document.createElement('span')
+      mention.className = 'message-mention'
+      mention.textContent = '@所有人'
+      mentions.append(mention)
+    }
     for (const role of roles) {
       const mention = document.createElement('span')
       mention.className = 'message-mention'

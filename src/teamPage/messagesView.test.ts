@@ -265,6 +265,79 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.role-site-badge')?.textContent).toBe('OpenRouter Claude')
   })
 
+  it('shows all-members mentions on user messages', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-user'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      chatSite: 'deepseek',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const userMessage: GroupMessage = {
+      id: 'msg-user',
+      chatId: chat.id,
+      seq: 1,
+      type: 'user',
+      content: '一起看一下',
+      targetRoleIds: [role.id],
+      mentionsAll: true,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [userMessage.id]: userMessage },
+    }
+    const messagesEl = document.createElement('section')
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [userMessage],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    expect(messagesEl.querySelector('.message-mention')?.textContent).toBe('@所有人')
+    expect(messagesEl.querySelector('.message-body')?.textContent).toContain('一起看一下')
+  })
+
   it('uses API-specific actions for completed external model replies', () => {
     const now = Date.now()
     const chat: GroupChat = {

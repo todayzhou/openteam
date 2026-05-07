@@ -260,7 +260,7 @@ describe('background group chat experience handlers', () => {
       { type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900, conversationId: '__default__', conversationUrl: 'https://gemini.google.com/' },
       { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' },
     )
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '你好' }) as { ok: boolean }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 你好' }) as { ok: boolean }
 
     expect(response.ok).toBe(true)
     const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
@@ -286,7 +286,7 @@ describe('background group chat experience handlers', () => {
       { type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900, conversationId: '__default__', conversationUrl: 'https://gemini.google.com/' },
       { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' },
     )
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请评估这个方案' }) as { ok: boolean }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 请评估这个方案' }) as { ok: boolean }
 
     expect(response.ok).toBe(true)
     const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
@@ -310,10 +310,10 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/' })
-    const first = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '第一条' }) as { ok: boolean; message: { id: string } }
+    const first = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 第一条' }) as { ok: boolean; message: { id: string } }
     await harness.invoke({ type: 'TEAM_SEND_ACK', chatId: 'chat-1', roleId: 'role-1', messageId: first.message.id })
     await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: first.message.id, content: '第一条回复' })
-    const second = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '第二条' }) as { ok: boolean }
+    const second = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 第二条' }) as { ok: boolean }
 
     expect(first.ok).toBe(true)
     expect(second.ok).toBe(true)
@@ -338,7 +338,7 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/existing-conversation' })
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请评估这个方案' }) as { ok: boolean }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 请评估这个方案' }) as { ok: boolean }
 
     expect(response.ok).toBe(true)
     const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
@@ -361,7 +361,7 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/test' })
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '你好' }) as { ok: boolean }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 你好' }) as { ok: boolean }
 
     expect(response.ok).toBe(true)
     const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
@@ -396,7 +396,7 @@ describe('background group chat experience handlers', () => {
     const harness = await setupBackground(store)
 
     await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/existing-conversation' })
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请评估这个方案' }) as { ok: boolean }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 请评估这个方案' }) as { ok: boolean }
 
     expect(response.ok).toBe(true)
     const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
@@ -448,7 +448,7 @@ describe('background group chat experience handlers', () => {
       )
     }
 
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请一起评估这个方案' }) as { ok: boolean; message: { id: string } }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 请一起评估这个方案' }) as { ok: boolean; message: { id: string } }
 
     expect(response.ok).toBe(true)
     expect(promptRoleIds(harness)).toEqual(['role-1', 'role-2'])
@@ -473,7 +473,7 @@ describe('background group chat experience handlers', () => {
     ))
 
     await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/test' })
-    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '请评估这个方案' }) as { ok: boolean; message: { id: string } }
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 请评估这个方案' }) as { ok: boolean; message: { id: string } }
 
     expect(response.ok).toBe(true)
     const stored = await harness.getStore()

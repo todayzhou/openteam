@@ -87,7 +87,7 @@ describe('background message handlers', () => {
     expect(routes.map(route => route.type)).toEqual(MESSAGE_ROUTE_TYPES)
 
     const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
-    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '帮我评审一下' }, {})
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 帮我评审一下' }, {})
 
     expect(response).toMatchObject({
       ok: true,
@@ -96,6 +96,7 @@ describe('background message handlers', () => {
         chatId: 'chat-1',
         content: '帮我评审一下',
         targetRoleIds: ['role-1'],
+        mentionsAll: true,
         deliveryStatus: { 'role-1': 'pending' },
       },
       deliveries: [{ roleId: 'role-1' }],
@@ -119,6 +120,66 @@ describe('background message handlers', () => {
       lastPromptMessageId: 'msg-1',
       replyAttemptId: 'attempt-1',
     })
+    expect(broadcastStoreUpdated).toHaveBeenCalledWith(expect.objectContaining({
+      messagesById: expect.objectContaining({ 'msg-1': expect.any(Object) }),
+    }))
+  })
+
+  it('stores no-mention messages without delivering prompts to group roles', async () => {
+    vi.resetModules()
+    let draftStore: OpenTeamStore | undefined
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const store = createStoreWithReadyRole()
+          const result = await mutator(store)
+          draftStore = store
+          return { store, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    const broadcastStoreUpdated = vi.fn()
+    const sendPrompt = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated,
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => binding),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '先记一下这个背景' }, {})
+
+    expect(response).toMatchObject({
+      ok: true,
+      message: {
+        id: 'msg-1',
+        chatId: 'chat-1',
+        content: '先记一下这个背景',
+        targetRoleIds: [],
+        status: 'received',
+        deliveryStatus: {},
+      },
+      deliveries: [],
+    })
+    expect(sendPrompt).not.toHaveBeenCalled()
+    expect(draftStore?.rolesById['role-1']?.status).toBe('ready')
+    expect(draftStore?.rolesById['role-1']?.lastPromptMessageId).toBeUndefined()
+    expect(draftStore?.rolesById['role-1']?.replyAttemptId).toBeUndefined()
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(expect.objectContaining({
       messagesById: expect.objectContaining({ 'msg-1': expect.any(Object) }),
     }))
@@ -182,7 +243,7 @@ describe('background message handlers', () => {
     })
 
     const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
-    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '用 API 回答' }, {})
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 用 API 回答' }, {})
 
     expect(response).toMatchObject({
       ok: true,
@@ -266,7 +327,7 @@ describe('background message handlers', () => {
     })
 
     const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
-    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '流式回答' }, {}) as { store: OpenTeamStore } | undefined
+    const response = await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 流式回答' }, {}) as { store: OpenTeamStore } | undefined
 
     expect(externalModelClient.stream).toHaveBeenCalledWith(expect.objectContaining({
       model: expect.objectContaining({ id: 'model-1' }),

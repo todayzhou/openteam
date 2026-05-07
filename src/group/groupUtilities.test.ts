@@ -291,12 +291,19 @@ describe('role template utilities', () => {
 describe('mention parser', () => {
   const roles = [makeRole('role-product', '产品'), makeRole('role-pm', '产品经理'), makeRole('role-eng', '工程师')]
 
-  it('routes no-mention messages to all roles', () => {
-    expect(parseGroupMentions('分析这个方案', roles)).toEqual({
+  it('can keep no-mention messages as chat records without notifying roles', () => {
+    expect(parseGroupMentions('分析这个方案', roles, { defaultTarget: 'none' })).toEqual({
       ok: true,
       content: '分析这个方案',
-      targetRoleIds: ['role-product', 'role-pm', 'role-eng'],
+      targetRoleIds: [],
       mentionedRoleIds: [],
+    })
+  })
+
+  it('keeps the legacy all-role default when no target option is supplied', () => {
+    expect(parseGroupMentions('分析这个方案', roles)).toMatchObject({
+      ok: true,
+      targetRoleIds: ['role-product', 'role-pm', 'role-eng'],
     })
   })
 
@@ -309,18 +316,26 @@ describe('mention parser', () => {
     })
   })
 
-  it('routes multiple mentions and @all', () => {
+  it('routes multiple mentions, @all, and @所有人', () => {
     expect(parseGroupMentions('@工程师 @产品经理 评估风险', roles)).toEqual({
       ok: true,
       content: '评估风险',
       targetRoleIds: ['role-eng', 'role-pm'],
       mentionedRoleIds: ['role-eng', 'role-pm'],
     })
-    expect(parseGroupMentions('@all @工程师 评估风险', roles)).toEqual({
+    expect(parseGroupMentions('@all @工程师 评估风险', roles)).toMatchObject({
       ok: true,
       content: '评估风险',
       targetRoleIds: ['role-product', 'role-pm', 'role-eng'],
       mentionedRoleIds: ['role-eng'],
+      mentionsAll: true,
+    })
+    expect(parseGroupMentions('@所有人 评估风险', roles, { defaultTarget: 'none' })).toMatchObject({
+      ok: true,
+      content: '评估风险',
+      targetRoleIds: ['role-product', 'role-pm', 'role-eng'],
+      mentionedRoleIds: [],
+      mentionsAll: true,
     })
   })
 

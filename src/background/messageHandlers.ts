@@ -79,9 +79,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const roles = getChatRoles(store, chat)
-      const parsed = parseGroupMentions(raw, roles, roleMentionLabelOptionsFromSettings(store.settings))
+      const parsed = parseGroupMentions(raw, roles, { ...roleMentionLabelOptionsFromSettings(store.settings), defaultTarget: 'none' })
       if (!parsed.ok) throw new Error(parsed.error)
-      if (parsed.targetRoleIds.length === 0) throw new Error('当前群聊没有可投递人员')
       deps.log.debug('message-send:parsed-targets', { chatId: chat.id, targetRoleIds: parsed.targetRoleIds })
 
       const targetRoles = parsed.targetRoleIds.map(roleId => store.rolesById[roleId]).filter((role): role is GroupRole => Boolean(role))
@@ -116,9 +115,10 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         content: parsed.content,
         targetRoleIds: parsed.targetRoleIds,
         mentionedRoleIds: parsed.mentionedRoleIds.length > 0 ? parsed.mentionedRoleIds : undefined,
+        mentionsAll: parsed.mentionsAll,
         references: reference ? [reference] : undefined,
         createdAt: timestamp,
-        status: 'pending',
+        status: parsed.targetRoleIds.length > 0 ? 'pending' : 'received',
         deliveryStatus: Object.fromEntries(parsed.targetRoleIds.map(roleId => [roleId, 'pending'])),
       }
 
@@ -126,8 +126,12 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       chat.messageIds.push(userMessage.id)
       chat.nextMessageSeq += 1
       deps.log.info('message-send:stored', { chatId: chat.id, messageId: userMessage.id, targetCount: parsed.targetRoleIds.length })
-      chat.status = 'running'
       chat.updatedAt = timestamp
+      if (parsed.targetRoleIds.length === 0) {
+        return { message: userMessage, deliveries: [], externalDeliveries: [] }
+      }
+
+      chat.status = 'running'
 
       const messages = getChatMessages(store, chat)
       const deliveries: PromptDelivery[] = []
