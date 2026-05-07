@@ -225,6 +225,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="new-template"')
     expect(html).toContain('id="person-template-modal"')
     expect(html).toContain('id="close-person-template"')
+    expect(personTemplateModal).toContain('id="template-name" type="text" maxlength="50"')
     expect(peopleLibraryModal).not.toContain('id="people-library-form"')
     expect(peopleLibraryModal).not.toContain('id="template-name"')
     expect(personTemplateModal).not.toContain('id="delete-template"')

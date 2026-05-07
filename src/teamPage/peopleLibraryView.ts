@@ -1,3 +1,4 @@
+import { ROLE_NAME_MAX_CHARACTERS } from '../group/roleTemplates'
 import type { ChatSite, ExternalModelConfig, GroupChat, OpenTeamStore, RoleModelSource, RoleTemplate } from '../group/types'
 import type { TeamPageState } from './appState'
 
@@ -658,7 +659,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
 
   function validatePersonDraft(draft: Pick<TemplateDraft, 'name' | 'description' | 'systemPrompt'>): string | undefined {
     if (!draft.name) return '人员名称不能为空'
-    if (Array.from(draft.name).length > 10) return '人员名称最多 10 个字'
+    if (Array.from(draft.name).length > ROLE_NAME_MAX_CHARACTERS) return `人员名称最多 ${ROLE_NAME_MAX_CHARACTERS} 个字`
     return undefined
   }
 

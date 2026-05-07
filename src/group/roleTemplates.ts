@@ -2,6 +2,8 @@ import { normalizeChatGptGptsUrl } from './conversationUrl'
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
 
+export const ROLE_NAME_MAX_CHARACTERS = 50
+
 export interface RoleTemplateInput {
   name: string
   description?: string
@@ -65,7 +67,7 @@ interface IntlWithSegmenter {
 export function validateRoleName(name: string, existingNames: string[] = []): string | undefined {
   const trimmed = name.trim()
   if (!trimmed) return '人员名称不能为空'
-  if (countUserPerceivedCharacters(trimmed) > 10) return '人员名称不能超过 10 个字'
+  if (countUserPerceivedCharacters(trimmed) > ROLE_NAME_MAX_CHARACTERS) return `人员名称不能超过 ${ROLE_NAME_MAX_CHARACTERS} 个字`
   if (/\s/.test(trimmed)) return '人员名称不能包含空白字符'
   if (trimmed.includes('@')) return '人员名称不能包含 @'
   if (trimmed.toLowerCase() === 'all') return '人员名称不能是 all'

@@ -64,6 +64,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const builtinTemplateDetailPromptEl = document.createElement('pre')
   const closeBuiltinTemplateDetailEl = document.createElement('button')
   const runCommand = vi.fn(async () => undefined)
+  const showError = vi.fn()
   const view = createPeopleLibraryView({
     state: createTeamPageState(),
     getStore: () => options.store,
@@ -127,7 +128,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
       return element
     },
     runCommand,
-    showError: vi.fn(),
+    showError,
     log: { info: vi.fn() },
   })
   return {
@@ -156,6 +157,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     templateChatGptGptsFieldEl,
     templateChatGptGptsUrlEl,
     peopleLibraryFormEl,
+    showError,
   }
 }
 
@@ -333,6 +335,27 @@ describe('team page people library view boundary', () => {
       defaultExternalModelId: undefined,
       chatGptGptsUrl: undefined,
     })
+  })
+
+  it('allows library people names up to 50 characters', async () => {
+    const store = createDefaultStore()
+    const {
+      view,
+      runCommand,
+      showError,
+      templateNameEl,
+      peopleLibraryFormEl,
+    } = setupPeopleLibraryView({ store, templates: [] })
+    const longName = '研'.repeat(50)
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    templateNameEl.value = longName
+    peopleLibraryFormEl.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(showError).not.toHaveBeenCalled()
+    expect(runCommand).toHaveBeenCalledWith('ROLE_TEMPLATE_CREATE', expect.objectContaining({ name: longName }))
   })
 
   it('filters the people library by built-in and custom tabs', () => {

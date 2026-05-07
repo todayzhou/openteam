@@ -278,7 +278,8 @@ describe('role template utilities', () => {
 
   it('validates role names', () => {
     expect(validateRoleName('')).toBe('人员名称不能为空')
-    expect(validateRoleName('超过十个字符的人员名称')).toBe('人员名称不能超过 10 个字')
+    expect(validateRoleName('研'.repeat(50))).toBeUndefined()
+    expect(validateRoleName('研'.repeat(51))).toBe('人员名称不能超过 50 个字')
     expect(validateRoleName('A B')).toBe('人员名称不能包含空白字符')
     expect(validateRoleName('@A')).toBe('人员名称不能包含 @')
     expect(validateRoleName('all')).toBe('人员名称不能是 all')
