@@ -124,11 +124,36 @@ describe('team.html chat creation UI', () => {
 
     expect(html).toContain('aria-label="查看全部笔记"')
     expect(html).toContain('id="open-all-notes"')
+    expect(html).toContain('data-tooltip="全部笔记"')
     expect(html).not.toContain('aria-label="消息"')
     expect(html).not.toContain('aria-label="实验"')
+    expect(html).not.toContain('>✎</button>')
     expect(html).toMatch(/\.all-notes-modal\s*{[^}]*width:\s*min\(980px,\s*calc\(100vw - 48px\)\);/s)
     expect(html).toMatch(/\.all-notes-workspace\s*{[^}]*grid-template-columns:\s*240px minmax\(0,\s*1fr\);/s)
     expect(html).toMatch(/\.all-note-target\.deleted-chat\s*{[^}]*border-color:\s*rgba\(248,\s*184,\s*78,\s*0\.22\);/s)
+  })
+
+  it('promotes people library and external models from settings into the left rail', () => {
+    const html = readTeamDocument()
+    const railActions = html.match(/<div class="rail-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
+    const settingsMenu = html.match(/<div id="settings-menu" class="settings-menu" hidden>(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
+
+    expect(railActions).toContain('id="open-people-library"')
+    expect(railActions).toContain('aria-label="群聊"')
+    expect(railActions).toContain('data-tooltip="群聊"')
+    expect(railActions).toContain('aria-label="打开人员库"')
+    expect(railActions).toContain('data-tooltip="人员库"')
+    expect(railActions).toContain('id="open-external-models"')
+    expect(railActions).toContain('aria-label="添加大模型"')
+    expect(railActions).toContain('data-tooltip="添加大模型"')
+    expect(railActions).toContain('<svg aria-hidden="true"')
+    expect(railActions).not.toContain('>⌁</button>')
+    expect(railActions).not.toContain('>人</button>')
+    expect(railActions).not.toContain('>模</button>')
+    expect(settingsMenu).not.toContain('id="open-people-library"')
+    expect(settingsMenu).not.toContain('id="open-external-models"')
+    expect(html).toMatch(/\.rail-btn\[data-tooltip\]::after\s*{[^}]*content:\s*attr\(data-tooltip\);/s)
+    expect(html).toMatch(/\.rail-btn\[data-tooltip\]:hover::after,\s*\.rail-btn\[data-tooltip\]:focus-visible::after\s*{[^}]*opacity:\s*1;/s)
   })
 
   it('styles window controls as visible mac-style traffic lights', () => {
