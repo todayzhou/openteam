@@ -115,6 +115,11 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     const signature = messageSignature(message, showName, showAvatar)
     const cached = deps.state.messageNodeCache.get(message.id)
     if (cached?.signature === signature) return cached.node
+    const streamingSignature = streamingMessageSignature(message, showName, showAvatar)
+    if (cached?.streamingSignature && streamingSignature && cached.streamingSignature === streamingSignature && patchStreamingMessageNode(cached.node, message)) {
+      cacheMessageNode(message.id, signature, cached.node, streamingSignature)
+      return cached.node
+    }
 
     const article = document.createElement('article')
     article.className = `message-row message ${message.type}${showName ? '' : ' compact'}${showAvatar ? '' : ' no-avatar'}`
@@ -125,7 +130,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       pill.className = 'message-system-pill'
       pill.textContent = message.content
       article.append(pill)
-      cacheMessageNode(message.id, signature, article)
+      cacheMessageNode(message.id, signature, article, streamingSignature)
       return article
     }
 
@@ -179,7 +184,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       tools.className = 'message-tools'
       const role = roleForMessage(message)
       if (message.roleId && message.status === 'pending' && role) {
-        tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
+        tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true }))
       } else if (message.roleId && role?.modelSource === 'external') {
         tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
       } else if (message.roleId) {
@@ -194,17 +199,33 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     stack.append(bubble)
     inner.append(avatar, stack)
     article.append(inner)
-    cacheMessageNode(message.id, signature, article)
+    cacheMessageNode(message.id, signature, article, streamingSignature)
     return article
   }
 
-  function cacheMessageNode(messageId: string, signature: string, node: HTMLElement): void {
-    deps.state.messageNodeCache.set(messageId, { signature, node })
+  function cacheMessageNode(messageId: string, signature: string, node: HTMLElement, streamingSignature?: string): void {
+    deps.state.messageNodeCache.set(messageId, { signature, node, streamingSignature })
     while (deps.state.messageNodeCache.size > MAX_CACHED_MESSAGE_NODES) {
       const oldestMessageId = deps.state.messageNodeCache.keys().next().value
       if (!oldestMessageId) return
       deps.state.messageNodeCache.delete(oldestMessageId)
     }
+  }
+
+  function patchStreamingMessageNode(node: HTMLElement, message: GroupMessage): boolean {
+    const body = node.querySelector<HTMLElement>('.message-body')
+    if (!body) return false
+    body.className = 'message-body thinking-dots'
+    body.replaceChildren()
+    if (!message.content.trim()) {
+      body.textContent = '正在回复中 '
+    } else if (shouldRenderMarkdownMessage(message)) {
+      renderMarkdownMessageBody(body, message.content)
+    } else {
+      renderPlainMessageBody(body, message.content)
+    }
+    renderSavedHighlights(body, message)
+    return true
   }
 
   function renderMarkdownMessageBody(body: HTMLElement, content: string): void {
@@ -230,13 +251,29 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     return message.contentFormat === 'markdown' || message.type === 'assistant'
   }
 
-  function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void): HTMLButtonElement {
+  function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean } = {}): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'message-tool-btn'
     button.setAttribute('aria-label', label)
     setMessageButtonIcon(button, icon)
-    button.addEventListener('click', () => onClick(button))
+    let activatedOnPointerDown = false
+    if (options.activateOnPointerDown) {
+      button.addEventListener('pointerdown', event => {
+        if (typeof PointerEvent !== 'undefined' && event instanceof PointerEvent && event.button !== 0) return
+        event.preventDefault()
+        event.stopPropagation()
+        activatedOnPointerDown = true
+        onClick(button)
+      })
+    }
+    button.addEventListener('click', () => {
+      if (activatedOnPointerDown) {
+        activatedOnPointerDown = false
+        return
+      }
+      onClick(button)
+    })
     return button
   }
 
@@ -340,6 +377,23 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     })
   }
 
+  function streamingMessageSignature(message: GroupMessage, showName = true, showAvatar = true): string | undefined {
+    if (message.type !== 'assistant' || message.status !== 'pending') return undefined
+    return JSON.stringify({
+      type: message.type,
+      roleId: message.roleId,
+      roleName: message.roleName,
+      roleSite: roleForMessage(message)?.chatSite,
+      contentFormat: message.contentFormat,
+      createdAt: message.createdAt,
+      status: message.status,
+      references: message.references,
+      highlights: deps.getStore().messageHighlightsById?.[message.id],
+      showName,
+      showAvatar,
+    })
+  }
+
   function renderMessageMentions(message: GroupMessage): HTMLElement | undefined {
     if (!message.mentionsAll && !message.mentionedRoleIds?.length) return undefined
     const store = deps.getStore()
@@ -421,7 +475,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
     tools.append(
       stopped
         ? createMessageIconButton('重新发送', 'retry', () => deps.retryRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
-        : createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))),
+        : createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true }),
     )
     bubble.append(tools)
     stack.append(bubble)

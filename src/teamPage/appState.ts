@@ -1,7 +1,7 @@
 import type { ChatSite, MessageReference, OpenTeamStore, RoleTemplate } from '../group/types'
 import { createDefaultStore } from '../group/store'
 
-export type CachedMessageNode = { signature: string; node: HTMLElement }
+export type CachedMessageNode = { signature: string; node: HTMLElement; streamingSignature?: string }
 export type TemporaryPersonDraft = Pick<RoleTemplate, 'name' | 'description' | 'systemPrompt'> & { id: string; chatSite: ChatSite }
 
 export interface RoleReadyWaiter {

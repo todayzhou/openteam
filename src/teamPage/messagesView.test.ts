@@ -417,6 +417,165 @@ describe('team page messages view boundary', () => {
     expect(retryRoleReply).toHaveBeenCalledWith(role, message.id)
   })
 
+  it('stops a streaming external reply on pointer down before stream renders can replace the button', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-assistant'],
+      nextMessageSeq: 2,
+      status: 'running',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '产品经理',
+      modelSource: 'external',
+      externalModelId: 'model-1',
+      status: 'thinking',
+      contextCursor: 0,
+      lastPromptMessageId: 'msg-user',
+      replyAttemptId: 'attempt-1',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-assistant',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '已经流式返回的内容',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'pending',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+    const stopRoleReply = vi.fn(async () => undefined)
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '产',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply,
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    const stopButton = messagesEl.querySelector<HTMLButtonElement>('[aria-label="停止回复"]')
+    stopButton?.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
+
+    expect(stopRoleReply).toHaveBeenCalledWith(role)
+  })
+
+  it('keeps the streaming stop button stable while assistant content updates', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-assistant'],
+      nextMessageSeq: 2,
+      status: 'running',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '产品经理',
+      modelSource: 'external',
+      externalModelId: 'model-1',
+      status: 'thinking',
+      contextCursor: 0,
+      lastPromptMessageId: 'msg-user',
+      replyAttemptId: 'attempt-1',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-assistant',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '第一段',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'pending',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+    const view = createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '产',
+      messageTitle: message => message.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    })
+
+    view.renderMessages()
+    const firstButton = messagesEl.querySelector<HTMLButtonElement>('[aria-label="停止回复"]')
+    message.content = '第一段第二段'
+    view.renderMessages()
+
+    expect(messagesEl.querySelector<HTMLButtonElement>('[aria-label="停止回复"]')).toBe(firstButton)
+    expect(messagesEl.querySelector('.message-body')?.textContent).toContain('第一段第二段')
+  })
+
   it('requests a full reply resync for the current assistant message without retrying the prompt', async () => {
     const now = Date.now()
     const chat: GroupChat = {

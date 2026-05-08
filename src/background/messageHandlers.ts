@@ -365,8 +365,11 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
       if (role.lastPromptMessageId !== active.messageId) return
-      role.status = 'stopped'
-      role.replyAttemptId = deps.newId('stopped')
+      const finalizedVisibleReply = active.isExternal ? finalizeActiveExternalAssistantReply(store, chat, role, active.messageId) : false
+      if (!finalizedVisibleReply) {
+        role.status = 'stopped'
+        role.replyAttemptId = deps.newId('stopped')
+      }
       role.updatedAt = timestamp
       chat.status = deps.getChatStatusFromRoles(store, chat)
       chat.updatedAt = timestamp
@@ -919,7 +922,8 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
     const stream = typeof client.stream === 'function'
       ? client.stream({ model: delivery.model, prompt: delivery.prompt, abortSignal: controller.signal })
       : streamCompleteFallback(client, { model: delivery.model, prompt: delivery.prompt, abortSignal: controller.signal })
-    for await (const chunk of stream) {
+    for await (const chunk of abortableChunks(stream, controller.signal)) {
+      throwIfAborted(controller.signal)
       if (!chunk) continue
       content += chunk
       const update = await updateExternalAssistantContent(deps, delivery, replyMessageId, content)
@@ -929,6 +933,7 @@ async function sendExternalModelDelivery(deps: MessageHandlersDependencies, clie
       }
       await deps.broadcastStoreUpdated(update.store)
     }
+    throwIfAborted(controller.signal)
 
     if (!content.trim()) throw new Error('外部模型返回格式无效')
     const finalized = await finishExternalAssistantReply(deps, delivery, replyMessageId, content)
@@ -1067,11 +1072,25 @@ async function markExternalAssistantStopped(
     const chat = requireChat(store, delivery.chatId)
     const role = requireRole(store, chat.id, delivery.roleId)
     const reply = store.messagesById[replyMessageId]
-    if (isAssistantMessageForRole(reply, chat, role)) {
+    const hasContent = Boolean(content.trim())
+    const replyAlreadyFinalized = isAssistantMessageForRole(reply, chat, role) && reply.status !== 'pending'
+    if (isAssistantMessageForRole(reply, chat, role) && !replyAlreadyFinalized) {
       reply.content = content
-      reply.status = content.trim() ? 'received' : 'error'
+      reply.status = hasContent ? 'received' : 'error'
     }
-    if (role.lastPromptMessageId === delivery.messageId) role.status = 'stopped'
+
+    const userMessage = store.messagesById[delivery.messageId]
+    if (userMessage?.deliveryStatus?.[role.id] && !replyAlreadyFinalized) {
+      userMessage.deliveryStatus[role.id] = hasContent ? 'received' : 'error'
+      updateUserMessageDeliveryStatus(userMessage)
+    }
+
+    const stoppedSamePrompt = role.lastPromptMessageId === delivery.messageId
+    if (stoppedSamePrompt) {
+      role.status = 'stopped'
+      if (hasContent) delete role.lastPromptMessageId
+    }
+    if (hasContent && stoppedSamePrompt) delete role.replyAttemptId
     role.updatedAt = timestamp
     chat.status = deps.getChatStatusFromRoles(store, chat)
     chat.updatedAt = timestamp
@@ -1086,6 +1105,64 @@ async function* streamCompleteFallback(client: ExternalModelClient, input: { mod
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError'
+}
+
+function finalizeActiveExternalAssistantReply(store: OpenTeamStore, chat: GroupChat, role: GroupRole, promptMessageId: string): boolean {
+  const reply = findPendingAssistantAfterPrompt(store, chat, role, promptMessageId)
+  if (!reply) return false
+
+  if (!reply.content.trim()) reply.content = '已停止回复'
+  reply.status = 'received'
+
+  const userMessage = store.messagesById[promptMessageId]
+  if (userMessage?.deliveryStatus?.[role.id]) {
+    userMessage.deliveryStatus[role.id] = 'received'
+    updateUserMessageDeliveryStatus(userMessage)
+  }
+
+  role.status = 'stopped'
+  delete role.lastPromptMessageId
+  delete role.replyAttemptId
+  return true
+}
+
+function findPendingAssistantAfterPrompt(store: OpenTeamStore, chat: GroupChat, role: GroupRole, promptMessageId: string): AssistantGroupMessage | undefined {
+  const promptIndex = chat.messageIds.indexOf(promptMessageId)
+  if (promptIndex < 0) return undefined
+
+  for (let index = chat.messageIds.length - 1; index > promptIndex; index -= 1) {
+    const message = store.messagesById[chat.messageIds[index]]
+    if (isAssistantMessageForRole(message, chat, role) && message.status === 'pending') return message
+  }
+  return undefined
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+}
+
+async function* abortableChunks<T>(stream: AsyncIterable<T>, signal: AbortSignal): AsyncIterable<T> {
+  const iterator = stream[Symbol.asyncIterator]()
+  let abortListener: (() => void) | undefined
+  const abortPromise = new Promise<never>((_, reject) => {
+    abortListener = () => reject(new DOMException('Aborted', 'AbortError'))
+    if (signal.aborted) {
+      abortListener()
+      return
+    }
+    signal.addEventListener('abort', abortListener, { once: true })
+  })
+
+  try {
+    while (true) {
+      const next = await Promise.race([iterator.next(), abortPromise])
+      if (next.done) return
+      yield next.value
+    }
+  } finally {
+    if (abortListener) signal.removeEventListener('abort', abortListener)
+    if (signal.aborted) Promise.resolve(iterator.return?.()).catch(() => undefined)
+  }
 }
 
 function deepSeekBatchKey(chatId: string, messageId: string): string {
