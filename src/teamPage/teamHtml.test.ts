@@ -147,8 +147,10 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="orchestration-max-rounds" type="number" min="1" max="50" value="1"')
     expect(html).toContain('一个画布节点代表一个可执行阶段')
     expect(html).toContain('不需要 @ 人员')
-    expect(html).toMatch(/\.orchestration-layout\s*{[^}]*grid-template-columns:\s*250px minmax\(420px, 1fr\) 280px;/s)
-    expect(html).toMatch(/\.orchestration-stage-canvas\s*{[^}]*min-height:\s*620px;/s)
+    expect(html).toContain('class="orchestration-task-strip"')
+    expect(html).toContain('class="orchestration-footer"')
+    expect(html).toMatch(/\.orchestration-layout\s*{[^}]*grid-template-columns:\s*220px minmax\(450px, 1fr\) 300px;/s)
+    expect(html).toMatch(/\.orchestration-stage-canvas\s*{[^}]*min-height:\s*520px;/s)
   })
 
   it('promotes people library and external models from settings into the left rail', () => {

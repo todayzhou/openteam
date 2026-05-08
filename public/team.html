@@ -471,10 +471,12 @@
           </div>
           <button id="close-orchestration" class="icon-btn" type="button" aria-label="关闭编排任务">×</button>
         </div>
+        <div class="orchestration-task-strip">
+          <label class="field" for="orchestration-task">任务</label>
+          <textarea id="orchestration-task" placeholder="描述要让编排流程完成的任务；不需要 @ 人员。"></textarea>
+        </div>
         <div class="orchestration-layout">
           <aside class="orchestration-sidebar">
-            <label class="field" for="orchestration-task">任务</label>
-            <textarea id="orchestration-task" placeholder="描述要让编排流程完成的任务；不需要 @ 人员。"></textarea>
             <div class="section-title">
               <h3>人员</h3>
               <span class="tiny">拖到画布或添加为阶段</span>
@@ -486,16 +488,24 @@
             <p id="orchestration-empty-hint" class="orchestration-empty-hint"></p>
           </section>
           <aside class="orchestration-settings">
-            <label class="field" for="orchestration-max-rounds">最大轮数</label>
-            <input id="orchestration-max-rounds" type="number" min="1" max="50" value="1" />
-            <p class="tiny">默认 1 轮，最多 50 轮；没有审核阶段时仅运行一轮，最大轮数只在审核要求继续时生效。</p>
+            <div class="orchestration-settings-heading">
+              <h3>阶段设置</h3>
+              <span class="tiny">选择画布节点后编辑</span>
+            </div>
             <div id="orchestration-stage-settings" class="orchestration-stage-settings"></div>
             <div id="orchestration-review-settings" class="orchestration-review-settings"></div>
-            <div class="template-actions">
-              <button id="save-orchestration" class="btn" type="button">保存</button>
-              <button id="run-orchestration" class="btn btn-primary" type="button">运行</button>
-            </div>
           </aside>
+        </div>
+        <div class="orchestration-footer">
+          <label class="field orchestration-rounds-field" for="orchestration-max-rounds">
+            <span>最大轮数</span>
+            <input id="orchestration-max-rounds" type="number" min="1" max="50" value="1" />
+          </label>
+          <p class="tiny">默认 1 轮，最多 50 轮；没有审核阶段时仅运行一轮，最大轮数只在审核要求继续时生效。</p>
+          <div class="template-actions orchestration-actions">
+            <button id="save-orchestration" class="btn" type="button">保存</button>
+            <button id="run-orchestration" class="btn btn-primary" type="button">运行</button>
+          </div>
         </div>
       </section>
     </div>

@@ -73,9 +73,10 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
     graph = new Graph({
       container: deps.rootEl,
       autoResize: true,
-      grid: true,
+      grid: { size: 18, visible: true, type: 'dot', args: { color: 'rgba(87, 216, 221, 0.14)' } },
       panning: true,
       mousewheel: { enabled: true, modifiers: ['ctrl', 'meta'] },
+      connecting: { connector: 'smooth', router: 'manhattan' },
     })
     graph.on('node:click', ({ node }) => {
       const stageId = node?.getData().stageId
@@ -88,34 +89,45 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
     if (!graph) return
     graph.clearCells()
     stages.forEach((stage, index) => {
-      const roleLabel = stage.roleIds.map(deps.getRoleName).join(' + ') || '未选择人员'
+      const roleNames = stage.roleIds.map(deps.getRoleName)
+      const roleLabel = roleNames.join('  ·  ') || '未选择人员'
       const isReview = stage.kind === 'review'
       const selected = selectedStageId === stage.id
+      const parallelLabel = stage.roleIds.length > 1 ? `并行 x${stage.roleIds.length}` : '单人'
+      const stepLabel = isReview ? 'REVIEW' : `STEP ${String(index + 1).padStart(2, '0')}`
       graph?.addNode({
         id: stage.id,
         shape: 'rect',
-        x: 36 + index * 220,
-        y: isReview ? 112 : 56,
-        width: 172,
-        height: 82,
-        label: `${isReview ? '审核' : `阶段 ${index + 1}`}\n${stage.name}\n${roleLabel}`,
+        x: 36 + index * 244,
+        y: isReview ? 132 : 62,
+        width: 204,
+        height: 116,
+        label: `${stepLabel}  ·  ${parallelLabel}\n${stage.name}\n${roleLabel}`,
         data: { stageId: stage.id },
         attrs: {
+          root: { 'data-stage-id': stage.id },
           body: {
-            fill: isReview ? '#221936' : '#101d2b',
-            stroke: selected ? '#57d8dd' : isReview ? '#b18cff' : '#35536a',
-            strokeWidth: selected ? 3 : 1,
-            rx: 12,
-            ry: 12,
+            fill: isReview ? '#241936' : '#0f1e2c',
+            stroke: selected ? '#57d8dd' : isReview ? '#b18cff' : '#31546d',
+            strokeWidth: selected ? 3 : 1.4,
+            rx: 18,
+            ry: 18,
+            filter: selected ? 'drop-shadow(0 0 16px rgba(87, 216, 221, 0.3))' : 'drop-shadow(0 12px 28px rgba(0, 0, 0, 0.28))',
           },
-          label: { fill: '#edf5f7', fontSize: 12, lineHeight: 18 },
+          label: {
+            fill: '#edf5f7',
+            fontSize: 13,
+            fontWeight: 720,
+            lineHeight: 22,
+            textWrap: { width: 176, height: 84, ellipsis: true },
+          },
         },
       })
       if (index > 0) {
         graph?.addEdge({
           source: stages[index - 1].id,
           target: stage.id,
-          attrs: { line: { stroke: '#57d8dd', strokeWidth: 2, targetMarker: 'block' } },
+          attrs: { line: { stroke: '#57d8dd', strokeWidth: 2.2, strokeDasharray: isReview ? '0' : '6 6', targetMarker: { name: 'block', width: 8, height: 6 } } },
         })
       }
     })

@@ -106,7 +106,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     if (deps.orchestrationModalEl.hidden) return
     draft.maxRounds = clampMaxRounds(Number(deps.orchestrationMaxRoundsEl.value || DEFAULT_ORCHESTRATION_MAX_ROUNDS))
     deps.orchestrationHintEl.hidden = draft.stages.length > 0
-    deps.orchestrationHintEl.textContent = '暂无保存流程。将左侧人员添加到阶段；一个阶段可包含多个人员并行执行。没有审核阶段时只运行一轮，最大轮数仅在审核要求继续时生效。'
+    deps.orchestrationHintEl.textContent = '从左侧添加人员，串联阶段；同一阶段内多人并行执行。'
     renderPeopleList()
     renderStageSettings()
     if (mounted) canvas?.render(draft.stages, draft.selectedStageId)
@@ -129,13 +129,18 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       card.addEventListener('dragstart', event => {
         event.dataTransfer?.setData('application/x-openteam-role-id', role.id)
       })
+      const avatar = document.createElement('span')
+      avatar.className = `orchestration-person-avatar ${roleToneClass(role.id)}`
+      avatar.textContent = roleInitial(role.name)
+      const body = document.createElement('div')
+      body.className = 'orchestration-person-body'
       const name = document.createElement('strong')
       name.textContent = role.name
       const description = document.createElement('span')
       description.className = 'tiny'
       description.textContent = role.description || '拖到画布或添加到阶段'
       const actions = document.createElement('div')
-      actions.className = 'chat-row'
+      actions.className = 'orchestration-person-actions'
       const addStage = document.createElement('button')
       addStage.className = 'btn btn-ghost'
       addStage.type = 'button'
@@ -153,7 +158,8 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       review.textContent = '设为审核'
       review.addEventListener('click', () => setReviewStage(role.id))
       actions.append(addStage, addParallel, review)
-      card.append(name, description, actions)
+      body.append(name, description, actions)
+      card.append(avatar, body)
       deps.orchestrationPeopleListEl.append(card)
     }
   }
@@ -218,7 +224,15 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       stage.review = { reviewerRoleIds: stage.roleIds, instructions: criteria.value }
     })
     criteriaField.append(criteria)
-    deps.orchestrationReviewSettingsEl.append(intro, reviewerField, criteriaField)
+    const preview = document.createElement('div')
+    preview.className = 'orchestration-json-preview'
+    const previewTitle = document.createElement('span')
+    previewTitle.className = 'tiny'
+    previewTitle.textContent = '审核返回 JSON 预览'
+    const schema = document.createElement('pre')
+    schema.textContent = '{\n  "decision": "pass | continue | stop",\n  "reason": "审核说明",\n  "failedCriteria": [],\n  "nextRoundInstruction": "需要继续时的补充任务"\n}'
+    preview.append(previewTitle, schema)
+    deps.orchestrationReviewSettingsEl.append(intro, reviewerField, criteriaField, preview)
   }
 
   function settingsNote(message: string): HTMLElement {
@@ -387,6 +401,16 @@ function cloneStages(stages: OrchestrationStage[]): OrchestrationStage[] {
 function clampMaxRounds(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_ORCHESTRATION_MAX_ROUNDS
   return Math.min(MAX_ORCHESTRATION_MAX_ROUNDS, Math.max(1, Math.trunc(value)))
+}
+
+function roleInitial(name: string): string {
+  return name.trim().slice(0, 1).toUpperCase() || '员'
+}
+
+function roleToneClass(seed: string): string {
+  const tones = ['tone-blue', 'tone-green', 'tone-purple', 'tone-orange']
+  const total = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return tones[total % tones.length]
 }
 
 function newId(prefix: string): string {
