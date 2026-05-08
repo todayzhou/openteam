@@ -133,7 +133,27 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.all-note-target\.deleted-chat\s*{[^}]*border-color:\s*rgba\(248,\s*184,\s*78,\s*0\.22\);/s)
   })
 
-  it('adds a stage orchestration modal and chat-header entry before members', () => {
+  it('pins every modal close icon to the top-right corner of the whole dialog', () => {
+    const html = readTeamDocument()
+    const closeButtonIds = [
+      'close-all-notes',
+      'close-people-library',
+      'close-external-models',
+      'close-person-template',
+      'close-builtin-template-detail',
+      'close-add-person',
+      'close-temporary-person',
+      'close-orchestration',
+    ]
+
+    for (const id of closeButtonIds) {
+      expect(html).toMatch(new RegExp(`<button id="${id}" class="icon-btn modal-close"`))
+    }
+    expect(html).toMatch(/\.modal\s*{[^}]*position:\s*relative;/s)
+    expect(html).toMatch(/\.modal-close\s*{[^}]*position:\s*absolute;[^}]*top:\s*14px;[^}]*right:\s*14px;/s)
+  })
+
+  it('adds an orchestration modal and chat-header entry before members without exposing stage wording', () => {
     const html = readTeamDocument()
     const chatRow = html.match(/<div class="chat-row">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
     const railActions = html.match(/<div class="rail-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
@@ -149,12 +169,26 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="orchestration-stage-settings"')
     expect(html).toContain('id="orchestration-review-settings"')
     expect(html).toContain('id="orchestration-max-rounds" type="number" min="1" max="50" value="1"')
-    expect(html).toContain('一个画布节点代表一个可执行阶段')
+    expect(html).toContain('画布节点按连线顺序执行')
+    expect(html).toContain('拖到画布创建节点')
+    expect(html).toContain('节点设置')
+    expect(html).toContain('没有审核节点时会按最大轮数重复执行')
+    expect(html).not.toContain('仅运行一轮')
+    expect(html).not.toContain('添加为阶段')
+    expect(html).not.toContain('阶段设置')
+    expect(html).not.toContain('审核阶段')
     expect(html).toContain('不需要 @ 人员')
     expect(html).toContain('class="orchestration-task-strip"')
     expect(html).toContain('class="orchestration-footer"')
     expect(html).toMatch(/\.orchestration-layout\s*{[^}]*grid-template-columns:\s*220px minmax\(450px, 1fr\) 300px;/s)
     expect(html).toMatch(/\.orchestration-stage-canvas\s*{[^}]*min-height:\s*520px;/s)
+    expect(html).toMatch(/\.orchestration-stage-canvas \.x6-edge \.connection-wrap,[\s\S]*?\.orchestration-stage-canvas \.x6-edge path\[stroke="transparent"\]\s*{[^}]*stroke:\s*transparent;[^}]*stroke-width:\s*14px;/s)
+    expect(html).toMatch(/\.orchestration-stage-canvas \.x6-edge \.connection\s*{[^}]*filter:/s)
+    expect(html).toMatch(/\.orchestration-stage-canvas \.x6-edge \.vertices \.vertex,[\s\S]*?\.orchestration-stage-canvas \.x6-edge \.arrowheads \.arrowhead\s*{[^}]*stroke:\s*#7de6ea;/s)
+    expect(html).not.toMatch(/\.orchestration-stage-canvas \.x6-edge path\s*{[^}]*stroke:\s*#7de6ea;/s)
+    expect(html).not.toContain('.x6-edge path:nth-child(2)')
+    expect(html).toMatch(/\.orchestration-settings\s*{[^}]*overflow:\s*auto;/s)
+    expect(html).toMatch(/\.orchestration-json-preview pre\s*{[^}]*max-height:\s*130px;/s)
   })
 
   it('promotes people library and external models from settings into the left rail', () => {

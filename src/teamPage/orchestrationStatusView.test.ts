@@ -76,7 +76,7 @@ function baseFixture(status: OrchestrationRun['status'] = 'running') {
 }
 
 describe('orchestration status view', () => {
-  it('renders active run round, step, running roles, and waiting stages', () => {
+  it('renders active run round, step, running roles, and waiting nodes without stage wording', () => {
     const fixture = baseFixture('running')
     const view = createOrchestrationStatusView({
       getStore: () => fixture.store,
@@ -92,6 +92,7 @@ describe('orchestration status view', () => {
     expect(node?.textContent).toContain('编排运行中 · 第 1 轮 · 第 1 步 / 共 3 步')
     expect(node?.textContent).toContain('产品')
     expect(node?.textContent).toContain('实现、复核')
+    expect(node?.textContent).not.toContain('阶段')
   })
 
   it('renders terminal states with distinct classes', () => {
@@ -122,7 +123,7 @@ describe('orchestration status view', () => {
     expect(stoppedNode?.textContent).toContain('编排已停止')
   })
 
-  it('dispatches stop, retry stage, skip stage, and retry review actions when applicable', async () => {
+  it('dispatches stop, retry node, skip node, and retry review actions when applicable', async () => {
     const running = baseFixture('running')
     const runCommand = vi.fn(async () => undefined)
     const runningNode = createOrchestrationStatusView({
@@ -152,6 +153,9 @@ describe('orchestration status view', () => {
     failedNode?.querySelector<HTMLButtonElement>('button:nth-of-type(2)')?.click()
     await flushAsync()
     expect(failedReconnectRolesForSend).toHaveBeenCalledWith(failed.chat, [failed.roles[0]])
+    expect(failedNode?.textContent).toContain('重试节点')
+    expect(failedNode?.textContent).toContain('跳过节点')
+    expect(failedNode?.textContent).not.toContain('阶段')
     expect(failedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: failed.chat.id, stageId: 'stage-1' })
     expect(failedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_SKIP_STAGE', { chatId: failed.chat.id, stageId: 'stage-1' })
 

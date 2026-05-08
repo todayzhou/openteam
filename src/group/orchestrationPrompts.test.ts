@@ -17,15 +17,20 @@ describe('orchestration prompt builders', () => {
     })
 
     expect(prompt).toContain('User task:\nCreate a launch plan.')
+    expect(prompt).toContain('Flow steps:')
     expect(prompt).toContain('1. Research (roles, id: stage-research; roles: role-researcher)')
     expect(prompt).toContain('2. Draft (roles, id: stage-draft; roles: role-writer, role-editor)')
     expect(prompt).toContain('Current round: 2 / 3')
-    expect(prompt).toContain('Current stage: Draft (roles, id: stage-draft)')
+    expect(prompt).toContain('Current step: Draft (roles, id: stage-draft)')
+    expect(prompt).toContain('Node task:\nTurn the research into a launch-ready draft.')
+    expect(prompt).not.toContain('Flow stages:')
+    expect(prompt).not.toContain('Current stage:')
+    expect(prompt).not.toContain('Stage task:')
     expect(prompt).toContain('Your role: Writer')
     expect(prompt).toContain('Role responsibility:\nDrafts the plan')
     expect(prompt).toContain('Role persona:\nWrite clearly.')
     expect(prompt).toContain('Previous review instruction for this round:\nAddress launch risks.')
-    expect(prompt).toContain('[Researcher, stage: stage-research, seq: 1]\nResearch summary')
+    expect(prompt).toContain('[Researcher, step: stage-research, seq: 1]\nResearch summary')
   })
 
   it('gives same-stage parallel roles the same prior-stage context only', () => {
@@ -67,7 +72,7 @@ describe('orchestration prompt builders', () => {
 
     expect(prompt).toContain('Review criteria:\nPlan must include risks and owner.')
     expect(prompt).toContain('Current round: 1 / 3')
-    expect(prompt).toContain('Current-round outputs:\n[Writer, stage: stage-draft, seq: 1]\nDraft output')
+    expect(prompt).toContain('Current-round outputs:\n[Writer, step: stage-draft, seq: 1]\nDraft output')
     expect(prompt).toContain('Decision enum: pass | continue | stop')
     expect(prompt).toContain('"nextRoundInstruction": "string; required and non-empty when decision is continue"')
     expect(prompt).toContain('Output only JSON')
@@ -102,7 +107,7 @@ function makeFlow(): OrchestrationFlow {
     name: 'Launch flow',
     stages: [
       { id: 'stage-research', kind: 'roles', name: 'Research', roleIds: ['role-researcher'] },
-      { id: 'stage-draft', kind: 'roles', name: 'Draft', roleIds: ['role-writer', 'role-editor'] },
+      { id: 'stage-draft', kind: 'roles', name: 'Draft', roleIds: ['role-writer', 'role-editor'], description: 'Turn the research into a launch-ready draft.' },
       { id: 'stage-review', kind: 'review', name: 'Review', roleIds: [], review: { reviewerRoleIds: ['role-reviewer'], instructions: 'Check completeness.' } },
     ],
     maxRounds: 3,

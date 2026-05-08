@@ -7,8 +7,11 @@ import { createOrchestrationCanvas } from './orchestrationCanvas'
 interface MockEdgeEvent {
   getSourceCellId?: () => string | undefined
   getTargetCellId?: () => string | undefined
+  getSourcePortId?: () => string | undefined
+  getTargetPortId?: () => string | undefined
   getSource?: () => unknown
   getTarget?: () => unknown
+  getVertices?: () => Array<{ x?: number; y?: number }>
 }
 
 class MockGraph {
@@ -72,6 +75,7 @@ describe('orchestration canvas', () => {
     const canvas = createOrchestrationCanvas({
       rootEl,
       getRoleName: roleId => ({ 'role-1': '产品', 'role-2': '工程', 'role-3': '评审' })[roleId] ?? roleId,
+      getRoleSiteLabel: roleId => ({ 'role-1': 'ChatGPT', 'role-3': 'API · Claude' })[roleId] ?? 'Gemini',
       onStageSelected,
       onRoleDropped: vi.fn(),
       loadX6,
@@ -81,9 +85,35 @@ describe('orchestration canvas', () => {
 
     expect(loadX6).toHaveBeenCalledTimes(1)
     expect(MockGraph.instances[0].options.container).toBe(rootEl)
+    expect(MockGraph.instances[0].options.interacting).toEqual(expect.objectContaining({
+      edgeMovable: true,
+      arrowheadMovable: true,
+      vertexMovable: true,
+    }))
     expect(MockGraph.instances[0].fromJSONCalls).toBe(1)
     expect(MockGraph.instances[0].nodes).toHaveLength(2)
     expect(MockGraph.instances[0].edges).toHaveLength(0)
+    expect(MockGraph.instances[0].nodes[0]).toEqual(expect.objectContaining({
+      shape: 'rect',
+      width: 124,
+      height: 56,
+      label: expect.stringContaining('ChatGPT'),
+    }))
+    expect((MockGraph.instances[0].nodes[0] as { label?: string }).label).not.toContain('▸')
+    expect((MockGraph.instances[0].nodes[0] as { label?: string }).label).not.toContain('执行')
+    expect(MockGraph.instances[0].nodes[1]).toEqual(expect.objectContaining({
+      shape: 'polygon',
+      width: 104,
+      height: 78,
+    }))
+    expect((MockGraph.instances[0].nodes[1] as { ports?: { items?: Array<{ id: string; group: string }> } }).ports?.items).toEqual([
+      { id: 'in', group: 'in' },
+      { id: 'pass', group: 'pass' },
+      { id: 'continue', group: 'continue' },
+    ])
+    expect((MockGraph.instances[0].nodes[1] as { label?: string }).label).toContain('API · Claude')
+    expect((MockGraph.instances[0].nodes[1] as { label?: string }).label).not.toContain('审核')
+    expect((MockGraph.instances[0].nodes[1] as { attrs?: { body?: { refPoints?: string } } }).attrs?.body?.refPoints).toBe('0,10 10,0 20,10 10,20')
     MockGraph.instances[0].handlers.get('node:click')?.({ node: { getData: () => ({ stageId: 'review-1' }) } })
     expect(onStageSelected).toHaveBeenCalledWith('review-1')
   })
@@ -105,17 +135,97 @@ describe('orchestration canvas', () => {
     await canvas.mount(stages, undefined, graphEdges)
 
     expect(MockGraph.instances[0].edges).toEqual([
-      expect.objectContaining({ source: expect.objectContaining({ cell: 'stage-1' }), target: expect.objectContaining({ cell: 'review-1' }) }),
+      expect.objectContaining({
+        source: expect.objectContaining({ cell: 'stage-1' }),
+        target: expect.objectContaining({ cell: 'review-1' }),
+        labels: undefined,
+        tools: expect.objectContaining({
+          name: 'edge-tools',
+          items: expect.arrayContaining([
+            expect.objectContaining({ name: 'vertices' }),
+            expect.objectContaining({ name: 'source-arrowhead' }),
+            expect.objectContaining({ name: 'target-arrowhead' }),
+          ]),
+        }),
+      }),
     ])
     MockGraph.instances[0].handlers.get('edge:connected')?.({
       edge: {
-        getSourceCellId: () => 'review-1',
-        getTargetCellId: () => 'stage-1',
+        getSource: () => ({ cell: 'review-1', port: 'continue' }),
+        getTarget: () => ({ cell: 'stage-1', port: 'in' }),
       },
     })
     expect(onGraphChanged).toHaveBeenLastCalledWith([
       { sourceStageId: 'stage-1', targetStageId: 'review-1' },
-      { sourceStageId: 'review-1', targetStageId: 'stage-1' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-1', sourcePort: 'continue', targetPort: 'in' },
+    ])
+  })
+
+  it('reports edge vertex drags so bent lines persist with the draft', async () => {
+    MockGraph.instances = []
+    const rootEl = document.createElement('div')
+    const onGraphChanged = vi.fn()
+    const canvas = createOrchestrationCanvas({
+      rootEl,
+      getRoleName: roleId => roleId,
+      onStageSelected: vi.fn(),
+      onRoleDropped: vi.fn(),
+      onGraphChanged,
+      loadX6: async () => ({ Graph: MockGraph }),
+    })
+
+    await canvas.mount(stages, undefined, [{ sourceStageId: 'stage-1', targetStageId: 'review-1' }])
+    MockGraph.instances[0].handlers.get('edge:change:vertices')?.({
+      edge: {
+        getSource: () => ({ cell: 'stage-1', port: 'out' }),
+        getTarget: () => ({ cell: 'review-1', port: 'in' }),
+        getVertices: () => [{ x: 148, y: 96 }, { x: 196, y: 132 }],
+      },
+    })
+
+    expect(onGraphChanged).toHaveBeenLastCalledWith([
+      {
+        sourceStageId: 'stage-1',
+        targetStageId: 'review-1',
+        sourcePort: 'out',
+        targetPort: 'in',
+        vertices: [{ x: 148, y: 96 }, { x: 196, y: 132 }],
+      },
+    ])
+  })
+
+  it('labels review outgoing edges from their explicit pass and continue ports', async () => {
+    MockGraph.instances = []
+    const rootEl = document.createElement('div')
+    const canvas = createOrchestrationCanvas({
+      rootEl,
+      getRoleName: roleId => roleId,
+      onStageSelected: vi.fn(),
+      onRoleDropped: vi.fn(),
+      loadX6: async () => ({ Graph: MockGraph }),
+    })
+    const branchStages: OrchestrationStage[] = [
+      { id: 'stage-1', kind: 'roles', name: 'Build', roleIds: ['role-1'] },
+      { id: 'review-1', kind: 'review', name: 'Review', roleIds: ['role-2'], review: { reviewerRoleIds: ['role-2'], instructions: 'Check' } },
+      { id: 'stage-2', kind: 'roles', name: 'Ship', roleIds: ['role-3'] },
+    ]
+
+    await canvas.mount(branchStages, undefined, [
+      { sourceStageId: 'review-1', targetStageId: 'stage-1', sourcePort: 'pass' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-2', sourcePort: 'continue' },
+    ])
+
+    expect(MockGraph.instances[0].edges).toEqual([
+      expect.objectContaining({
+        source: expect.objectContaining({ cell: 'review-1', port: 'pass' }),
+        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: '#7de6ea', strokeWidth: 1.3, strokeDasharray: undefined }) }),
+        labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '通过', fontSize: 9 }) }) })],
+      }),
+      expect.objectContaining({
+        source: expect.objectContaining({ cell: 'review-1', port: 'continue' }),
+        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: '#7de6ea', strokeWidth: 1.3, strokeDasharray: undefined }) }),
+        labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '不通过', fontSize: 9 }) }) })],
+      }),
     ])
   })
 

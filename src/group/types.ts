@@ -92,13 +92,27 @@ export interface OrchestrationStage {
   id: string
   kind: OrchestrationStageKind
   name: string
+  description?: string
   roleIds: string[]
   review?: OrchestrationReviewConfig
 }
 
+export interface OrchestrationGraphEdgeVertex {
+  x: number
+  y: number
+}
+
+export interface OrchestrationGraphEdge {
+  sourceStageId: string
+  targetStageId: string
+  sourcePort?: 'out' | 'pass' | 'continue'
+  targetPort?: 'in'
+  vertices?: OrchestrationGraphEdgeVertex[]
+}
+
 export interface OrchestrationGraphSnapshot {
   stageNodes: OrchestrationStage[]
-  edges: Array<{ sourceStageId: string; targetStageId: string }>
+  edges: OrchestrationGraphEdge[]
 }
 
 export interface OrchestrationFlow {

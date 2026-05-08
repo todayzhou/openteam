@@ -221,7 +221,7 @@
             <h2 id="all-notes-title">全部笔记</h2>
             <p class="tiny">全局、群聊、已删除群聊</p>
           </div>
-          <button id="close-all-notes" class="icon-btn" type="button" aria-label="关闭全部笔记">×</button>
+          <button id="close-all-notes" class="icon-btn modal-close" type="button" aria-label="关闭全部笔记">×</button>
         </div>
         <div class="all-notes-workspace">
           <div id="all-notes-list" class="all-notes-list" aria-label="笔记范围"></div>
@@ -257,7 +257,7 @@
           </div>
           <div class="chat-row">
             <button id="new-template" class="btn btn-primary" type="button">新建</button>
-            <button id="close-people-library" class="icon-btn" type="button" aria-label="关闭人员库">×</button>
+            <button id="close-people-library" class="icon-btn modal-close" type="button" aria-label="关闭人员库">×</button>
           </div>
         </div>
         <div class="people-library-content">
@@ -287,7 +287,7 @@
             <h2 id="external-models-title">外部模型</h2>
             <p class="tiny">配置 OpenAI 或 Anthropic 兼容 API，人员可直接选择这些模型。</p>
           </div>
-          <button id="close-external-models" class="icon-btn" type="button" aria-label="关闭外部模型">×</button>
+          <button id="close-external-models" class="icon-btn modal-close" type="button" aria-label="关闭外部模型">×</button>
         </div>
         <div id="external-models-list" class="template-list"></div>
         <form id="external-model-form" class="modal-form">
@@ -330,7 +330,7 @@
             <h2 id="template-form-title">新建人员</h2>
             <p class="tiny">维护人员名称、人设和默认站点。</p>
           </div>
-          <button id="close-person-template" class="icon-btn" type="button" aria-label="关闭人员编辑">×</button>
+          <button id="close-person-template" class="icon-btn modal-close" type="button" aria-label="关闭人员编辑">×</button>
         </div>
         <form id="people-library-form" class="modal-form">
           <div class="field">
@@ -401,7 +401,7 @@
             <h2 id="builtin-template-detail-title">内置人员</h2>
             <p id="builtin-template-detail-meta" class="tiny">系统内置人员</p>
           </div>
-          <button id="close-builtin-template-detail" class="icon-btn" type="button" aria-label="关闭内置人员详情">×</button>
+          <button id="close-builtin-template-detail" class="icon-btn modal-close" type="button" aria-label="关闭内置人员详情">×</button>
         </div>
         <pre id="builtin-template-detail-prompt" class="template-prompt-preview"></pre>
       </section>
@@ -416,7 +416,7 @@
           </div>
           <div class="modal-header-actions">
             <button id="open-temporary-person" class="btn btn-ghost" type="button">临时添加</button>
-          <button id="close-add-person" class="icon-btn" type="button" aria-label="关闭添加人员">×</button>
+          <button id="close-add-person" class="icon-btn modal-close" type="button" aria-label="关闭添加人员">×</button>
           </div>
         </div>
         <div class="modal-grid single-column">
@@ -443,7 +443,7 @@
             <h2 id="temporary-person-title">临时添加</h2>
             <p class="tiny">临时人员会先进入待选列表，确认后才加入当前群聊。</p>
           </div>
-          <button id="close-temporary-person" class="icon-btn" type="button" aria-label="关闭临时添加">×</button>
+          <button id="close-temporary-person" class="icon-btn modal-close" type="button" aria-label="关闭临时添加">×</button>
         </div>
           <form id="add-temporary-person-form" class="modal-form">
             <div class="field">
@@ -468,9 +468,9 @@
         <div class="modal-header">
           <div>
             <h2 id="orchestration-title">编排任务</h2>
-            <p class="tiny">一个画布节点代表一个可执行阶段；阶段内多个群聊人员会并行执行。</p>
+            <p class="tiny">画布节点按连线顺序执行；同一个节点内的多个人员会并行工作。</p>
           </div>
-          <button id="close-orchestration" class="icon-btn" type="button" aria-label="关闭编排任务">×</button>
+          <button id="close-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭编排任务">×</button>
         </div>
         <div class="orchestration-task-strip">
           <label class="field" for="orchestration-task">任务</label>
@@ -480,7 +480,7 @@
           <aside class="orchestration-sidebar">
             <div class="section-title">
               <h3>人员</h3>
-              <span class="tiny">拖到画布或添加为阶段</span>
+              <span class="tiny">拖到画布创建节点</span>
             </div>
             <div id="orchestration-people-list" class="orchestration-people-list"></div>
           </aside>
@@ -490,7 +490,7 @@
           </section>
           <aside class="orchestration-settings">
             <div class="orchestration-settings-heading">
-              <h3>阶段设置</h3>
+              <h3>节点设置</h3>
               <span class="tiny">选择画布节点后编辑</span>
             </div>
             <div id="orchestration-stage-settings" class="orchestration-stage-settings"></div>
@@ -502,7 +502,7 @@
             <span>最大轮数</span>
             <input id="orchestration-max-rounds" type="number" min="1" max="50" value="1" />
           </label>
-          <p class="tiny">默认 1 轮，最多 50 轮；没有审核阶段时仅运行一轮，最大轮数只在审核要求继续时生效。</p>
+          <p class="tiny">默认 1 轮，最多 50 轮；没有审核节点时会按最大轮数重复执行，有审核节点时通过即结束、继续时进入下一轮。</p>
           <div class="template-actions orchestration-actions">
             <button id="save-orchestration" class="btn" type="button">保存</button>
             <button id="run-orchestration" class="btn btn-primary" type="button">运行</button>

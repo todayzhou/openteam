@@ -1,4 +1,4 @@
-import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
+import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 import { DEFAULT_ORCHESTRATION_MAX_ROUNDS, MAX_ORCHESTRATION_MAX_ROUNDS } from '../group/types'
 import { createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
 
@@ -99,9 +99,11 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     canvas = createOrchestrationCanvas({
       rootEl: deps.orchestrationCanvasEl,
       getRoleName,
+      getRoleSiteLabel,
       onStageSelected(stageId) {
         draft.selectedStageId = stageId
-        render()
+        renderStageSettings()
+        canvas?.selectStage(stageId)
       },
       onRoleDropped(roleId) {
         addRoleAsStage(roleId)
@@ -148,15 +150,26 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       avatar.textContent = roleInitial(role.name)
       const body = document.createElement('div')
       body.className = 'orchestration-person-body'
+      const row = document.createElement('div')
+      row.className = 'orchestration-person-title'
       const name = document.createElement('strong')
       name.textContent = role.name
+      row.append(name, roleSitePill(role))
       const description = document.createElement('span')
       description.className = 'tiny'
       description.textContent = role.description || '拖到画布创建节点'
-      body.append(name, description)
+      body.append(row, description)
       card.append(avatar, body)
       deps.orchestrationPeopleListEl.append(card)
     }
+  }
+
+  function roleSitePill(role: GroupRole): HTMLElement {
+    const model = roleModelDisplay(role, deps.getStore())
+    const pill = document.createElement('span')
+    pill.className = `site-pill orchestration-person-site ${model.className}`
+    pill.textContent = model.label
+    return pill
   }
 
   function renderStageSettings(): void {
@@ -171,8 +184,17 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       return
     }
 
+    const header = document.createElement('div')
+    header.className = 'orchestration-node-editor-header'
     const title = document.createElement('h3')
     title.textContent = selected.kind === 'review' ? '审核节点' : '执行节点'
+    const closeButton = document.createElement('button')
+    closeButton.className = 'icon-btn orchestration-node-editor-close'
+    closeButton.type = 'button'
+    closeButton.ariaLabel = '关闭节点设置'
+    closeButton.textContent = '×'
+    closeButton.addEventListener('click', clearSelectedStage)
+    header.append(title, closeButton)
     const kindField = document.createElement('label')
     kindField.className = 'field'
     kindField.textContent = '节点类型'
@@ -186,43 +208,45 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     kindField.append(kindSelect)
     const nameField = document.createElement('label')
     nameField.className = 'field'
-    nameField.textContent = '阶段名称'
+    nameField.textContent = '节点名称'
     const nameInput = document.createElement('input')
     nameInput.value = selected.name
     nameInput.addEventListener('input', () => {
-      selected.name = nameInput.value.trim() || (selected.kind === 'review' ? '审核' : '执行阶段')
+      selected.name = nameInput.value.trim() || (selected.kind === 'review' ? '审核' : '执行节点')
       canvas?.render(draft.stages, draft.selectedStageId, draft.graphEdges)
     })
     nameField.append(nameInput)
+    const descriptionField = document.createElement('label')
+    descriptionField.className = 'field'
+    descriptionField.textContent = '任务描述'
+    const descriptionInput = document.createElement('textarea')
+    descriptionInput.value = selected.description ?? ''
+    descriptionInput.placeholder = '给这个节点单独补充任务说明，例如：先澄清目标，只输出优先级和风险。'
+    descriptionInput.addEventListener('input', () => {
+      const description = descriptionInput.value.trim()
+      if (description) selected.description = description
+      else delete selected.description
+    })
+    descriptionField.append(descriptionInput)
+    const rolesField = document.createElement('div')
+    rolesField.className = 'field'
+    rolesField.textContent = selected.kind === 'review' ? '审核人员' : '执行人员'
     const roles = document.createElement('div')
     roles.className = 'stage-role-chips'
-    for (const roleId of selected.roleIds) roles.append(roleChip(roleId, selected))
+    for (const roleId of selectedRoleIds(selected)) roles.append(roleChip(roleId))
+    rolesField.append(roles)
     const remove = document.createElement('button')
     remove.className = 'btn btn-danger'
     remove.type = 'button'
-    remove.textContent = '删除阶段'
+    remove.textContent = '删除节点'
     remove.addEventListener('click', () => removeStage(selected.id))
-    deps.orchestrationStageSettingsEl.append(title, kindField, nameField, roles, remove)
+    deps.orchestrationStageSettingsEl.append(header, kindField, nameField, descriptionField, rolesField, remove)
 
     if (selected.kind === 'review') renderReviewSettings(selected)
   }
 
   function renderReviewSettings(stage: OrchestrationStage): void {
-    const intro = settingsNote('审核阶段是最终阶段，由一个群聊人员根据标准判断通过、继续或停止。')
-    const reviewerField = document.createElement('label')
-    reviewerField.className = 'field'
-    reviewerField.textContent = '审核人员'
-    const reviewerSelect = document.createElement('select')
-    reviewerSelect.append(new Option('选择审核人员', ''))
-    for (const role of deps.getCurrentRoles()) reviewerSelect.append(new Option(role.name, role.id))
-    reviewerSelect.value = stage.review?.reviewerRoleIds[0] ?? stage.roleIds[0] ?? ''
-    reviewerSelect.addEventListener('change', () => {
-      stage.roleIds = reviewerSelect.value ? [reviewerSelect.value] : []
-      stage.review = { reviewerRoleIds: stage.roleIds, instructions: stage.review?.instructions ?? '' }
-      canvas?.render(draft.stages, draft.selectedStageId, draft.graphEdges)
-    })
-    reviewerField.append(reviewerSelect)
-
+    const intro = settingsNote('审核节点由一个群聊人员根据标准判断通过、继续或停止。')
     const criteriaField = document.createElement('label')
     criteriaField.className = 'field'
     criteriaField.textContent = '审核标准'
@@ -241,7 +265,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     const schema = document.createElement('pre')
     schema.textContent = '{\n  "decision": "pass | continue | stop",\n  "reason": "审核说明",\n  "failedCriteria": [],\n  "nextRoundInstruction": "需要继续时的补充任务"\n}'
     preview.append(previewTitle, schema)
-    deps.orchestrationReviewSettingsEl.append(intro, reviewerField, criteriaField, preview)
+    deps.orchestrationReviewSettingsEl.append(intro, criteriaField, preview)
   }
 
   function settingsNote(message: string): HTMLElement {
@@ -251,21 +275,16 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     return note
   }
 
-  function roleChip(roleId: string, stage: OrchestrationStage): HTMLElement {
+  function roleChip(roleId: string): HTMLElement {
     const chip = document.createElement('span')
     chip.className = 'stage-role-chip'
     chip.textContent = getRoleName(roleId)
-    const remove = document.createElement('button')
-    remove.type = 'button'
-    remove.setAttribute('aria-label', `移除 ${getRoleName(roleId)}`)
-    remove.textContent = '×'
-    remove.addEventListener('click', () => {
-      stage.roleIds = stage.roleIds.filter(id => id !== roleId)
-      if (stage.kind === 'review') stage.review = { reviewerRoleIds: stage.roleIds, instructions: stage.review?.instructions ?? '' }
-      render()
-    })
-    chip.append(remove)
     return chip
+  }
+
+  function selectedRoleIds(stage: OrchestrationStage): string[] {
+    if (stage.kind === 'review') return stage.review?.reviewerRoleIds.length ? stage.review.reviewerRoleIds : stage.roleIds
+    return stage.roleIds
   }
 
   function addRoleAsStage(roleId: string): void {
@@ -296,6 +315,12 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     draft.graphEdges = draft.graphEdges.filter(edge => edge.sourceStageId !== stageId && edge.targetStageId !== stageId)
     draft.selectedStageId = undefined
     render()
+  }
+
+  function clearSelectedStage(): void {
+    draft.selectedStageId = undefined
+    renderStageSettings()
+    canvas?.selectStage(undefined)
   }
 
   async function save(): Promise<void> {
@@ -375,16 +400,16 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       return false
     }
     if (draft.stages.length === 0) {
-      deps.showError('请至少添加一个执行阶段')
+      deps.showError('请至少添加一个流程节点')
       return false
     }
     if (draft.stages.some(stage => stage.roleIds.length === 0)) {
-      deps.showError('每个阶段都需要至少一个人员')
+      deps.showError('每个节点都需要至少一个人员')
       return false
     }
     const review = draft.stages.find(stage => stage.kind === 'review')
     if (review && (!review.review?.reviewerRoleIds.length || !review.review.instructions?.trim())) {
-      deps.showError('审核阶段需要审核人员和审核标准')
+      deps.showError('审核节点需要审核人员和审核标准')
       return false
     }
     const rawMaxRounds = Number(deps.orchestrationMaxRoundsEl.value)
@@ -401,6 +426,11 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
 
   function getRoleName(roleId: string): string {
     return deps.getStore().rolesById[roleId]?.name ?? '未知人员'
+  }
+
+  function getRoleSiteLabel(roleId: string): string {
+    const role = deps.getStore().rolesById[roleId]
+    return role ? roleModelDisplay(role, deps.getStore()).label : ''
   }
 
   function getDraftRoles(): GroupRole[] {
@@ -435,7 +465,13 @@ function cloneStages(stages: OrchestrationStage[]): OrchestrationStage[] {
 }
 
 function cloneGraphEdges(edges: OrchestrationGraphSnapshot['edges']): OrchestrationGraphSnapshot['edges'] {
-  return edges.map(edge => ({ sourceStageId: edge.sourceStageId, targetStageId: edge.targetStageId }))
+  return edges.map(edge => ({
+    sourceStageId: edge.sourceStageId,
+    targetStageId: edge.targetStageId,
+    ...(edge.sourcePort ? { sourcePort: edge.sourcePort } : {}),
+    ...(edge.targetPort ? { targetPort: edge.targetPort } : {}),
+    ...(edge.vertices && edge.vertices.length > 0 ? { vertices: edge.vertices.map(vertex => ({ x: vertex.x, y: vertex.y })) } : {}),
+  }))
 }
 
 function sequentialGraphEdges(stages: OrchestrationStage[]): OrchestrationGraphSnapshot['edges'] {
@@ -448,10 +484,18 @@ function filterGraphEdges(edges: OrchestrationGraphSnapshot['edges'], stages: Or
   const result: OrchestrationGraphSnapshot['edges'] = []
   for (const edge of edges) {
     if (!stageIds.has(edge.sourceStageId) || !stageIds.has(edge.targetStageId) || edge.sourceStageId === edge.targetStageId) continue
-    const key = `${edge.sourceStageId}->${edge.targetStageId}`
+    const sourcePort = edge.sourcePort ?? ''
+    const targetPort = edge.targetPort ?? ''
+    const key = `${edge.sourceStageId}:${sourcePort}->${edge.targetStageId}:${targetPort}`
     if (seen.has(key)) continue
     seen.add(key)
-    result.push({ sourceStageId: edge.sourceStageId, targetStageId: edge.targetStageId })
+    result.push({
+      sourceStageId: edge.sourceStageId,
+      targetStageId: edge.targetStageId,
+      ...(edge.sourcePort ? { sourcePort: edge.sourcePort } : {}),
+      ...(edge.targetPort ? { targetPort: edge.targetPort } : {}),
+      ...(edge.vertices && edge.vertices.length > 0 ? { vertices: edge.vertices.map(vertex => ({ x: vertex.x, y: vertex.y })) } : {}),
+    })
   }
   return result
 }
@@ -507,6 +551,31 @@ function roleToneClass(seed: string): string {
   const tones = ['tone-blue', 'tone-green', 'tone-purple', 'tone-orange']
   const total = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0)
   return tones[total % tones.length]
+}
+
+function roleModelDisplay(role: Pick<GroupRole, 'modelSource' | 'externalModelId' | 'chatSite'>, store: OpenTeamStore): { label: string; className: string } {
+  if (role.modelSource === 'external' && role.externalModelId) {
+    return { label: externalModelLabel(store.settings.externalModelsById[role.externalModelId]), className: 'site-pill-external' }
+  }
+  const site = visibleChatSite(role.chatSite ?? store.settings.defaultChatSite)
+  return { label: siteLabel(site), className: `site-pill-${site}` }
+}
+
+function siteLabel(site: ChatSite): string {
+  if (site === 'chatgpt') return 'ChatGPT'
+  if (site === 'claude') return 'Claude'
+  if (site === 'deepseek') return 'DeepSeek'
+  if (site === 'kimi') return 'Kimi'
+  if (site === 'qwen') return '千问'
+  return 'Gemini'
+}
+
+function externalModelLabel(model: ExternalModelConfig | undefined): string {
+  return model ? `API · ${model.name}` : 'API · 未配置'
+}
+
+function visibleChatSite(site: ChatSite): ChatSite {
+  return ['gemini', 'chatgpt', 'claude', 'deepseek', 'kimi', 'qwen'].includes(site) ? site : 'gemini'
 }
 
 function newId(prefix: string): string {

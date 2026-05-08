@@ -8,6 +8,8 @@ import { createOrchestrationModalView, orderStagesByGraph } from './orchestratio
 class MockGraph {
   static instances: MockGraph[] = []
   nodes: Array<{ id?: string; data?: Record<string, unknown> }> = []
+  clearCalls = 0
+  addNodeCalls = 0
   handlers = new Map<string, Array<(args: { node?: { getData(): Record<string, unknown> } }) => void>>()
 
   static latest(): MockGraph {
@@ -19,8 +21,12 @@ class MockGraph {
   constructor(public options: Record<string, unknown>) {
     MockGraph.instances.push(this)
   }
-  clearCells(): void { this.nodes = [] }
+  clearCells(): void {
+    this.clearCalls += 1
+    this.nodes = []
+  }
   addNode(node: unknown): unknown {
+    this.addNodeCalls += 1
     this.nodes.push(node as { id?: string; data?: Record<string, unknown> })
     return node
   }
@@ -30,6 +36,12 @@ class MockGraph {
   }
   selectNode(stageId: string): void {
     for (const handler of this.handlers.get('node:click') ?? []) handler({ node: { getData: () => ({ stageId }) } })
+  }
+  getNodes(): Array<{ getData(): Record<string, unknown>; attr(path: string, value: unknown): void }> {
+    return this.nodes.map(node => ({
+      getData: () => node.data ?? {},
+      attr: vi.fn(),
+    }))
   }
   dispose(): void {}
 }
@@ -78,13 +90,17 @@ function createHarness(): Harness {
   `
   const store = createDefaultStore()
   const chat: GroupChat = { id: 'chat-1', name: '测试群聊', mode: 'collaborative', roleIds: ['role-1', 'role-2'], messageIds: [], nextMessageSeq: 1, status: 'ready', createdAt: 1, updatedAt: 1 }
-  const roleOne: GroupRole = { id: 'role-1', chatId: 'chat-1', name: '产品', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
-  const roleTwo: GroupRole = { id: 'role-2', chatId: 'chat-1', name: '评审', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+  const roleOne: GroupRole = { id: 'role-1', chatId: 'chat-1', name: '产品', chatSite: 'chatgpt', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+  const roleTwo: GroupRole = { id: 'role-2', chatId: 'chat-1', name: '评审', modelSource: 'external', externalModelId: 'model-1', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
   store.currentChatId = chat.id
   store.chatOrder = [chat.id]
   store.chatsById[chat.id] = chat
   store.rolesById[roleOne.id] = roleOne
   store.rolesById[roleTwo.id] = roleTwo
+  store.settings.externalModelOrder = ['model-1']
+  store.settings.externalModelsById = {
+    'model-1': { id: 'model-1', name: 'OpenRouter Claude', format: 'openai', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'key', modelName: 'anthropic/claude-sonnet-4', createdAt: 1, updatedAt: 1 },
+  }
   return {
     refs: {
       openOrchestrationEl: document.querySelector('#open-orchestration') as HTMLButtonElement,
@@ -128,7 +144,7 @@ describe('orchestration modal view', () => {
     MockGraph.instances = []
   })
 
-  it('opens with drag-only people cards and creates one single-role node per drop', async () => {
+  it('opens with drag-only people cards and creates one single-role node per drop without exposing stages', async () => {
     const harness = createHarness()
     const view = createView(harness)
     view.registerOrchestrationEvents()
@@ -141,6 +157,8 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('新阶段')
     expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('并行加入')
     expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('设为审核')
+    expect(harness.refs.orchestrationModalEl.textContent).not.toContain('阶段')
+    expect([...harness.refs.orchestrationPeopleListEl.querySelectorAll('.site-pill')].map(item => item.textContent)).toEqual(['ChatGPT', 'API · OpenRouter Claude'])
 
     dropRole(harness, 'role-1')
     dropRole(harness, 'role-2')
@@ -181,8 +199,82 @@ describe('orchestration modal view', () => {
     expect(stageId).toBeTruthy()
     MockGraph.latest().selectNode(stageId as string)
 
-    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('阶段名称')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('节点名称')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('任务描述')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).not.toContain('阶段')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('执行人员')
+    expect(harness.refs.orchestrationStageSettingsEl.querySelector('.stage-role-chip button')).toBeNull()
     expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(false)
+  })
+
+  it('does not rebuild the graph when selecting a node for editing', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+    await flushAsync()
+    dropRole(harness, 'role-1')
+    dropRole(harness, 'role-2')
+    const graph = MockGraph.latest()
+    const clearCalls = graph.clearCalls
+    const addNodeCalls = graph.addNodeCalls
+    const stageId = graph.nodes[0].id
+    expect(stageId).toBeTruthy()
+
+    graph.selectNode(stageId as string)
+
+    expect(graph.clearCalls).toBe(clearCalls)
+    expect(graph.addNodeCalls).toBe(addNodeCalls)
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('任务描述')
+  })
+
+  it('closes node settings without rebuilding the canvas', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+    await flushAsync()
+    dropRole(harness, 'role-1')
+    const graph = MockGraph.latest()
+    const stageId = graph.nodes[0].id
+    expect(stageId).toBeTruthy()
+    graph.selectNode(stageId as string)
+    const clearCalls = graph.clearCalls
+    const addNodeCalls = graph.addNodeCalls
+
+    const closeButton = harness.refs.orchestrationStageSettingsEl.querySelector<HTMLButtonElement>('[aria-label="关闭节点设置"]')
+    expect(closeButton).not.toBeNull()
+    closeButton?.click()
+
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toBe('')
+    expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(true)
+    expect(graph.clearCalls).toBe(clearCalls)
+    expect(graph.addNodeCalls).toBe(addNodeCalls)
+  })
+
+  it('saves a selected node task description with the orchestration flow', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+    await flushAsync()
+    dropRole(harness, 'role-1')
+    const stageId = MockGraph.latest().nodes[0].id as string
+    MockGraph.latest().selectNode(stageId)
+    const description = harness.refs.orchestrationStageSettingsEl.querySelector('textarea') as HTMLTextAreaElement
+    description.value = '先澄清用户目标，并输出优先级列表。'
+    description.dispatchEvent(new Event('input', { bubbles: true }))
+    harness.refs.orchestrationTaskEl.value = '保存这次任务'
+
+    harness.refs.saveOrchestrationEl.click()
+    await flushAsync()
+
+    const savePayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_FLOW_SAVE')?.[1] as { flow?: OrchestrationFlow }
+    expect(savePayload.flow?.stages[0].description).toBe('先澄清用户目标，并输出优先级列表。')
+    expect(savePayload.flow?.graph?.stageNodes[0].description).toBe('先澄清用户目标，并输出优先级列表。')
   })
 
   it('restores a saved orchestration flow for the current chat after refresh', async () => {
@@ -193,12 +285,12 @@ describe('orchestration modal view', () => {
       name: '已保存流程',
       description: '保存过的任务',
       stages: [
-        { id: 'stage-saved-1', kind: 'roles', name: '旧阶段 1', roleIds: ['role-1'] },
+        { id: 'stage-saved-1', kind: 'roles', name: '旧阶段 1', roleIds: ['role-1'], description: '保存过的节点说明' },
         { id: 'stage-saved-2', kind: 'roles', name: '旧阶段 2', roleIds: ['role-2'] },
       ],
       graph: {
         stageNodes: [
-          { id: 'stage-saved-1', kind: 'roles', name: '旧阶段 1', roleIds: ['role-1'] },
+          { id: 'stage-saved-1', kind: 'roles', name: '旧阶段 1', roleIds: ['role-1'], description: '保存过的节点说明' },
           { id: 'stage-saved-2', kind: 'roles', name: '旧阶段 2', roleIds: ['role-2'] },
         ],
         edges: [{ sourceStageId: 'stage-saved-1', targetStageId: 'stage-saved-2' }],
@@ -219,6 +311,7 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationStageSettingsEl.querySelector('input')).toBeNull()
     MockGraph.latest().selectNode('stage-saved-1')
     expect((harness.refs.orchestrationStageSettingsEl.querySelector('input') as HTMLInputElement).value).toBe('旧阶段 1')
+    expect((harness.refs.orchestrationStageSettingsEl.querySelector('textarea') as HTMLTextAreaElement).value).toBe('保存过的节点说明')
     expect(harness.refs.orchestrationMaxRoundsEl.value).toBe('3')
     expect(harness.refs.orchestrationTaskEl.value).toBe('保存过的任务')
     harness.refs.orchestrationTaskEl.value = '继续执行'
@@ -261,6 +354,9 @@ describe('orchestration modal view', () => {
     const typeSelect = harness.refs.orchestrationStageSettingsEl.querySelector('select[data-stage-kind]') as HTMLSelectElement
     typeSelect.value = 'review'
     typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(harness.refs.orchestrationStageSettingsEl.querySelector('.stage-role-chip button')).toBeNull()
+    expect(harness.refs.orchestrationReviewSettingsEl.textContent).not.toContain('审核人员')
+    expect(harness.refs.orchestrationReviewSettingsEl.querySelector('select')).toBeNull()
 
     harness.refs.runOrchestrationEl.click()
     await Promise.resolve()
@@ -269,7 +365,7 @@ describe('orchestration modal view', () => {
     harness.refs.orchestrationTaskEl.value = '完成方案评审'
     harness.refs.runOrchestrationEl.click()
     await Promise.resolve()
-    expect(harness.errors).toContain('审核阶段需要审核人员和审核标准')
+    expect(harness.errors).toContain('审核节点需要审核人员和审核标准')
 
     const criteria = harness.refs.orchestrationReviewSettingsEl.querySelector('textarea') as HTMLTextAreaElement
     criteria.value = '必须包含结论'

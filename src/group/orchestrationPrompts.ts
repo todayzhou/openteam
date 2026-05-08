@@ -34,16 +34,17 @@ export function buildOrchestrationRolePrompt(input: BuildOrchestrationRolePrompt
 
   return trimPromptSections([
     `User task:\n${input.userTask}`,
-    `Flow stages:\n${flowText}`,
+    `Flow steps:\n${flowText}`,
     `Current round: ${input.currentRound} / ${input.maxRounds ?? input.flow.maxRounds}`,
-    `Current stage: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
+    `Current step: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
+    input.currentStage.description ? `Node task:\n${input.currentStage.description}` : undefined,
     `Your role: ${input.role.name}`,
     input.role.description ? `Role responsibility:\n${input.role.description}` : undefined,
     input.role.systemPrompt ? `Role persona:\n${input.role.systemPrompt}` : undefined,
     previousReviewInstruction ? `Previous review instruction for this round:\n${previousReviewInstruction}` : undefined,
     previousReview ? `Previous review result:\n${previousReview}` : undefined,
-    priorContext ? `Prior completed stage messages:\n${priorContext}` : 'Prior completed stage messages:\nNone.',
-    'Respond only for your assigned role in the current stage. Use the completed prior-stage context, but do not assume access to live outputs from peers running in the same stage.',
+    priorContext ? `Prior completed step messages:\n${priorContext}` : 'Prior completed step messages:\nNone.',
+    'Respond only for your assigned role in the current step. Use the completed prior-step context, but do not assume access to live outputs from peers running in the same step.',
   ], input.maxContextChars)
 }
 
@@ -53,7 +54,8 @@ export function buildOrchestrationReviewPrompt(input: BuildOrchestrationReviewPr
     `User task:\n${input.userTask}`,
     `Review criteria:\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || 'Decide whether the current round output satisfies the user task.'}`,
     `Current round: ${input.currentRound} / ${input.maxRounds ?? input.flow.maxRounds}`,
-    `Current stage: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
+    `Current step: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
+    input.currentStage.description ? `Node task:\n${input.currentStage.description}` : undefined,
     `Current-round outputs:\n${outputs || 'None.'}`,
     'Decision enum: pass | continue | stop',
     `Output only JSON matching this schema:\n${reviewSchema()}`,
@@ -73,8 +75,8 @@ function formatMessageList(messages: GroupMessage[]): string {
   return messages
     .map(message => {
       const source = message.roleName ?? message.roleId ?? message.type
-      const stage = message.orchestrationStageId ? `, stage: ${message.orchestrationStageId}` : ''
-      return `[${source}${stage}, seq: ${message.seq}]\n${message.content}`
+      const step = message.orchestrationStageId ? `, step: ${message.orchestrationStageId}` : ''
+      return `[${source}${step}, seq: ${message.seq}]\n${message.content}`
     })
     .join('\n\n')
 }

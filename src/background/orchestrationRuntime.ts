@@ -204,7 +204,7 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
       })
       stageRun.status = 'completed'
       stageRun.completedAt = timestamp
-      return applyReviewDecision(store, chat, run, parsed.decision.decision, timestamp)
+      return applyReviewDecision(store, chat, run, stageRun, parsed.decision.decision, timestamp)
     }
 
     if (!allRoleRunsFinished(stageRun)) return { next: false as const }
@@ -251,7 +251,7 @@ export async function retryOrchestrationStage(deps: OrchestrationRuntimeDependen
     const chat = requireChat(store, chatId)
     const run = requireActiveRun(store, chat)
     const stageRun = findRetryableStageRun(run, stageId)
-    if (!stageRun) throw new Error('找不到可重试的编排阶段')
+    if (!stageRun) throw new Error('找不到可重试的编排节点')
     removeStageRunAndFollowing(run, stageRun)
     run.status = 'running'
     delete run.error
@@ -271,7 +271,7 @@ export async function skipOrchestrationStage(deps: OrchestrationRuntimeDependenc
     const chat = requireChat(store, chatId)
     const run = requireActiveRun(store, chat)
     const stageRun = findRetryableStageRun(run, stageId)
-    if (!stageRun) throw new Error('找不到可跳过的编排阶段')
+    if (!stageRun) throw new Error('找不到可跳过的编排节点')
     stageRun.status = 'skipped'
     stageRun.completedAt = timestamp
     for (const roleRun of Object.values(stageRun.roleRuns)) {
@@ -392,14 +392,14 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
       stageRun.status = 'error'
       stageRun.completedAt = timestamp
       run.status = 'error'
-      run.error = failedRoleRun.error ?? '阶段投递失败'
+      run.error = failedRoleRun.error ?? '节点投递失败'
       chat.status = 'error'
     } else if (targetRoleIds.length === 0 || allRoleRunsFinished(stageRun)) {
       stageRun.status = targetRoleIds.length === 0 ? 'skipped' : 'error'
       stageRun.completedAt = timestamp
       if (stageRun.status === 'error') {
         run.status = 'error'
-        run.error = '阶段没有可投递人员'
+        run.error = '节点没有可投递人员'
         chat.status = 'error'
       }
     }
@@ -475,9 +475,15 @@ async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDepende
 }
 
 function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
+  const stageDescription = stage.description?.trim()
   const content = stage.kind === 'review'
     ? buildOrchestrationReviewPrompt({ userTask, flow, currentStage: stage, currentRound: run.currentRound, maxRounds: run.maxRounds, currentRoundOutputs: getCurrentRoundOutputs(store, chat, run), maxContextChars: store.settings.maxContextChars })
-    : `Orchestration stage ${stageIndex + 1}: ${stage.name}\nRound ${run.currentRound} / ${run.maxRounds}\n\n${userTask}`
+    : [
+      `Orchestration step ${stageIndex + 1}: ${stage.name}`,
+      `Round ${run.currentRound} / ${run.maxRounds}`,
+      stageDescription ? `Node task:\n${stageDescription}` : undefined,
+      userTask,
+    ].filter((line): line is string => Boolean(line)).join('\n\n')
 
   return {
     id: deps.newId('msg'),
@@ -527,7 +533,7 @@ function nextStageDecision(store: OpenTeamStore, chat: GroupChat, run: Orchestra
   return { next: false }
 }
 
-function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, decision: 'pass' | 'continue' | 'stop', timestamp: number): NextStageDecision {
+function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stageRun: OrchestrationStageRun, decision: 'pass' | 'continue' | 'stop', timestamp: number): NextStageDecision {
   if (decision === 'stop') {
     run.status = 'stopped'
     run.completedAt = timestamp
@@ -540,7 +546,8 @@ function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: Orchest
     run.currentRound += 1
     run.updatedAt = timestamp
     const flow = requireFlow(store, chat.id, run.flowId)
-    return { next: true, runId: run.id, stageIndices: rootStageIndices(flow) }
+    const branchTargets = reviewBranchStageIndices(flow, stageRun.stageId, 'continue')
+    return { next: true, runId: run.id, stageIndices: branchTargets.length > 0 ? branchTargets : rootStageIndices(flow) }
   }
   if (decision === 'continue' && run.currentRound >= run.maxRounds) {
     run.error = '已达到最大轮次，编排自动完成'
@@ -564,11 +571,11 @@ function requireFlow(store: OpenTeamStore, chatId: string, flowId: string): Orch
 }
 
 function validateExecutableFlow(store: OpenTeamStore, chat: GroupChat, flow: OrchestrationFlow): void {
-  if (!Array.isArray(flow.stages) || flow.stages.length === 0) throw new Error('编排流程没有可执行阶段')
+  if (!Array.isArray(flow.stages) || flow.stages.length === 0) throw new Error('编排流程没有可执行节点')
   if (rootStageIndices(flow).length === 0) throw new Error('编排流程存在循环，无法找到起始节点')
   for (const stage of flow.stages) {
-    if (stage.kind === 'roles' && stage.roleIds.length === 0) throw new Error(`角色阶段缺少人员：${stage.name}`)
-    if (stage.kind === 'review' && stage.review?.reviewerRoleIds?.length !== 1) throw new Error(`复核阶段必须绑定一个复核人员：${stage.name}`)
+    if (stage.kind === 'roles' && stage.roleIds.length === 0) throw new Error(`执行节点缺少人员：${stage.name}`)
+    if (stage.kind === 'review' && stage.review?.reviewerRoleIds?.length !== 1) throw new Error(`复核节点必须绑定一个复核人员：${stage.name}`)
     const roleIds = stage.kind === 'review' ? stage.review?.reviewerRoleIds ?? [] : stage.roleIds
     for (const roleId of roleIds) requireRole(store, chat.id, roleId)
   }
@@ -648,16 +655,36 @@ function findReadyStageIndices(flow: OrchestrationFlow, run: OrchestrationRun): 
 }
 
 function rootStageIndices(flow: OrchestrationFlow): number[] {
-  const targetIds = new Set(effectiveGraphEdges(flow).map(edge => edge.targetStageId))
+  const targetIds = new Set(dependencyGraphEdges(flow).map(edge => edge.targetStageId))
   return flow.stages.map((stage, index) => targetIds.has(stage.id) ? undefined : index).filter((index): index is number => typeof index === 'number')
 }
 
 function incomingEdgesByTarget(flow: OrchestrationFlow): Map<string, string[]> {
   const incoming = new Map<string, string[]>()
-  for (const edge of effectiveGraphEdges(flow)) {
+  for (const edge of dependencyGraphEdges(flow)) {
     incoming.set(edge.targetStageId, [...incoming.get(edge.targetStageId) ?? [], edge.sourceStageId])
   }
   return incoming
+}
+
+function dependencyGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {
+  return effectiveGraphEdges(flow).filter(edge => reviewEdgeBranch(flow, edge) !== 'continue')
+}
+
+function reviewBranchStageIndices(flow: OrchestrationFlow, reviewStageId: string, branch: 'pass' | 'continue'): number[] {
+  const stageIndexById = new Map(flow.stages.map((stage, index) => [stage.id, index]))
+  return effectiveGraphEdges(flow)
+    .filter(edge => edge.sourceStageId === reviewStageId && reviewEdgeBranch(flow, edge) === branch)
+    .map(edge => stageIndexById.get(edge.targetStageId))
+    .filter((index): index is number => typeof index === 'number')
+}
+
+function reviewEdgeBranch(flow: OrchestrationFlow, edge: OrchestrationGraphSnapshot['edges'][number]): 'pass' | 'continue' | undefined {
+  const sourceIndex = flow.stages.findIndex(stage => stage.id === edge.sourceStageId)
+  const targetIndex = flow.stages.findIndex(stage => stage.id === edge.targetStageId)
+  const source = flow.stages[sourceIndex]
+  if (!source || source.kind !== 'review' || sourceIndex < 0 || targetIndex < 0) return undefined
+  return targetIndex <= sourceIndex ? 'continue' : 'pass'
 }
 
 function effectiveGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {
@@ -690,7 +717,7 @@ function removeStageRunAndFollowing(run: OrchestrationRun, stageRun: Orchestrati
 
 function firstReviewerRoleId(stage: OrchestrationStage): string {
   const roleId = stage.review?.reviewerRoleIds[0]
-  if (!roleId) throw new Error(`复核阶段缺少复核人员：${stage.name}`)
+  if (!roleId) throw new Error(`复核节点缺少复核人员：${stage.name}`)
   return roleId
 }
 

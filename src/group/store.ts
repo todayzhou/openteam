@@ -437,8 +437,34 @@ function normalizeOrchestrationGraphSnapshot(raw: unknown): OrchestrationFlow['g
   if (!isRecord(raw)) return undefined
   return {
     stageNodes: normalizeOrchestrationStages(raw.stageNodes),
-    edges: Array.isArray(raw.edges) ? raw.edges as NonNullable<OrchestrationFlow['graph']>['edges'] : [],
+    edges: normalizeOrchestrationGraphEdges(raw.edges),
   }
+}
+
+function normalizeOrchestrationGraphEdges(raw: unknown): NonNullable<OrchestrationFlow['graph']>['edges'] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter(isRecord).flatMap(edge => {
+    if (typeof edge.sourceStageId !== 'string' || typeof edge.targetStageId !== 'string') return []
+    const sourcePort = edge.sourcePort === 'out' || edge.sourcePort === 'pass' || edge.sourcePort === 'continue' ? edge.sourcePort : undefined
+    const targetPort = edge.targetPort === 'in' ? edge.targetPort : undefined
+    const vertices = normalizeOrchestrationEdgeVertices(edge.vertices)
+    return [{
+      sourceStageId: edge.sourceStageId,
+      targetStageId: edge.targetStageId,
+      ...(sourcePort ? { sourcePort } : {}),
+      ...(targetPort ? { targetPort } : {}),
+      ...(vertices ? { vertices } : {}),
+    }]
+  })
+}
+
+function normalizeOrchestrationEdgeVertices(raw: unknown): NonNullable<NonNullable<OrchestrationFlow['graph']>['edges'][number]['vertices']> | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const vertices = raw.flatMap(vertex => {
+    if (!isRecord(vertex) || typeof vertex.x !== 'number' || typeof vertex.y !== 'number' || !Number.isFinite(vertex.x) || !Number.isFinite(vertex.y)) return []
+    return [{ x: vertex.x, y: vertex.y }]
+  })
+  return vertices.length > 0 ? vertices : undefined
 }
 
 function normalizeOrchestrationRunRecord(raw: unknown): Record<string, OrchestrationRun> {

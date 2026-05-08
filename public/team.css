@@ -2513,6 +2513,7 @@ select:focus {
 }
 
 .modal {
+  position: relative;
   width: min(820px, 100%);
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
@@ -2654,12 +2655,27 @@ select:focus {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+  padding-right: 42px;
 }
 
 .modal-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  background: rgba(132, 153, 171, 0.1);
+  color: #c7d8e3;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .modal-grid {
@@ -2957,6 +2973,10 @@ select:focus {
   display: none;
 }
 
+.orchestration-settings {
+  overflow: auto;
+}
+
 .orchestration-settings-heading h3 {
   margin: 0;
   font-size: 15px;
@@ -3035,11 +3055,34 @@ select:focus {
   gap: 2px;
 }
 
+.orchestration-person-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .orchestration-person-body strong,
 .orchestration-person-body .tiny {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.orchestration-person-title strong {
+  min-width: 0;
+}
+
+.orchestration-person-site {
+  min-height: 20px;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  cursor: default;
+  font-size: 10px;
+}
+
+.orchestration-person-site::after {
+  content: none;
 }
 
 .orchestration-workspace {
@@ -3075,12 +3118,31 @@ select:focus {
   cursor: move;
 }
 
-.orchestration-stage-canvas .x6-edge path:nth-child(2) {
+.orchestration-stage-canvas .x6-edge .connection-wrap,
+.orchestration-stage-canvas .x6-edge path[stroke="transparent"] {
+  stroke: transparent;
+  stroke-width: 14px;
+  opacity: 0;
+  filter: none;
+}
+
+.orchestration-stage-canvas .x6-edge .connection-wrap {
+  cursor: grab;
+}
+
+.orchestration-stage-canvas .x6-edge .connection {
   filter: drop-shadow(0 0 4px rgba(125, 230, 234, 0.28));
 }
 
-.orchestration-stage-canvas .x6-edge:hover path:nth-child(2) {
-  stroke-width: 2.4;
+.orchestration-stage-canvas .x6-edge:hover .connection {
+  stroke-width: 1.8;
+}
+
+.orchestration-stage-canvas .x6-edge .vertices .vertex,
+.orchestration-stage-canvas .x6-edge .arrowheads .arrowhead {
+  fill: #07111b;
+  stroke: #7de6ea;
+  stroke-width: 1.7px;
 }
 
 .orchestration-empty-hint {
@@ -3113,6 +3175,21 @@ select:focus {
 .orchestration-stage-settings h3 {
   margin: 0;
   font-size: 15px;
+}
+
+.orchestration-node-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.orchestration-node-editor-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .orchestration-note {
@@ -3159,6 +3236,7 @@ select:focus {
 }
 
 .orchestration-json-preview pre {
+  max-height: 130px;
   margin: 0;
   overflow: auto;
   color: #b9f7ef;

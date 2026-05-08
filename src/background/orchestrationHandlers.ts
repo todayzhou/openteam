@@ -96,7 +96,7 @@ async function persistFlowDraft(deps: OrchestrationHandlersDependencies, flow: O
 function requireFlowPayload(value: unknown): OrchestrationFlow {
   if (!isRecord(value)) throw new Error('编排流程格式无效')
   if (typeof value.id !== 'string' || typeof value.chatId !== 'string' || typeof value.name !== 'string') throw new Error('编排流程格式无效')
-  if (!Array.isArray(value.stages)) throw new Error('编排流程阶段格式无效')
+  if (!Array.isArray(value.stages)) throw new Error('编排流程节点格式无效')
   return value as unknown as OrchestrationFlow
 }
 

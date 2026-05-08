@@ -75,8 +75,8 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
       .filter(roleRun => roleRun.status === 'running')
       .map(roleRun => rolesById.get(roleRun.roleId) ?? roleRun.roleId)
     if (running.length > 0) return running.join('、')
-    if (current.status === 'running') return current.kind === 'review' ? '复核中' : '阶段执行中'
-    if (current.status === 'error') return current.kind === 'review' ? '复核失败' : '阶段失败'
+    if (current.status === 'running') return current.kind === 'review' ? '复核中' : '节点执行中'
+    if (current.status === 'error') return current.kind === 'review' ? '复核失败' : '节点失败'
     return undefined
   }
 
@@ -98,9 +98,9 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
       if (current.kind === 'review') {
         actions.append(actionButton('重试复核', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_REVIEW', { chatId: chat.id })))
       } else {
-        actions.append(actionButton('重试阶段', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: chat.id, stageId: current.stageId })))
+        actions.append(actionButton('重试节点', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: chat.id, stageId: current.stageId })))
       }
-      actions.append(actionButton('跳过阶段', 'btn-ghost', () => runAction('GROUP_ORCHESTRATION_SKIP_STAGE', { chatId: chat.id, stageId: current.stageId })))
+      actions.append(actionButton('跳过节点', 'btn-ghost', () => runAction('GROUP_ORCHESTRATION_SKIP_STAGE', { chatId: chat.id, stageId: current.stageId })))
     }
     return actions.childElementCount > 0 ? actions : undefined
   }
