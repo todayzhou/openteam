@@ -1,9 +1,6 @@
-import { buildUnsyncedContext } from '../group/contextSync'
 import { extractSupportedConversationId, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
-import { buildExternalModelPrompt, type ExternalMemoryPatch } from '../group/externalModelContext'
 import { parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
-import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RuntimeFrameBinding } from '../group/types'
@@ -11,6 +8,7 @@ import { createExternalModelClient, type ExternalModelClient } from './externalM
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
 import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
+import { getExternalModelForRole, isExternalModelRole, prepareRolePromptDelivery, type ExternalPromptDelivery, type PreparedRolePromptDelivery } from './rolePromptDelivery'
 import { messageTabId, rememberHost, senderFrameId, senderTabId, type RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
@@ -19,15 +17,6 @@ import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orch
 const STALE_THINKING_MS = 120_000
 const DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS = [2_000, 2_000, 4_000, 8_000, 15_000] as const
 const DEFAULT_ROLE_ERROR_RETRY_DELAYS_MS = [2_000, 8_000] as const
-
-interface ExternalPromptDelivery {
-  roleId: string
-  chatId: string
-  messageId: string
-  replyAttemptId: string
-  model: ExternalModelConfig
-  prompt: string
-}
 
 interface ExternalModelRunRegistry {
   register(chatId: string, roleId: string, replyAttemptId: string, controller: AbortController): void
@@ -162,49 +151,24 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const deliveries: PromptDelivery[] = []
       const externalDeliveries: ExternalPromptDelivery[] = []
       for (const role of deliverableTargetRoles) {
-        const roleId = role.id
-        const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-        const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
-        const replyAttemptId = deps.newId('attempt')
-        if (isExternalModelRole(role)) {
-          const model = requireExternalModelForRole(store, role)
-          const prompt = buildExternalModelPrompt(store, chat, role, userMessage, roles)
-          if (prompt.memoryPatch) applyExternalMemoryPatch(store, prompt.memoryPatch, timestamp)
-          externalDeliveries.push({
-            roleId,
-            chatId: chat.id,
-            messageId: userMessage.id,
-            replyAttemptId,
-            model,
-            prompt: prompt.content,
-          })
-        } else {
-          const binding = deps.runtimeFrames.getByRole(chat.id, role.id)!
-          const unsyncedContext = buildUnsyncedContext(chat, role, messages, userMessage, store.settings.maxContextChars)
-          const content = buildPrompt({ chat, role, userMessage, roles, unsyncedContext, reference, includePersona: includesPersona })
-          deliveries.push({
-            roleId,
-            chatSite: role.chatSite ?? store.settings.defaultChatSite,
-            tabId: binding.tabId,
-            frameId: binding.frameId,
-            message: { type: 'TEAM_SEND_PROMPT', chatId: chat.id, roleId, messageId: userMessage.id, replyAttemptId, content, includesPersona },
-          })
-        }
-        if (!includesPersona && !isExternalModelRole(role)) {
+        const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage, roles, messages, reference, timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+        if (prepared.delivery) deliveries.push(prepared.delivery)
+        if (prepared.externalDelivery) externalDeliveries.push(prepared.externalDelivery)
+        if (!prepared.includesPersona && prepared.delivery) {
           deps.log.debug('prompt:persona-skipped', {
             chatId: chat.id,
             roleId: role.id,
             messageId: userMessage.id,
             conversationUrlPresent: Boolean(role.geminiConversationUrl),
             contextCursor: role.contextCursor,
-            roleHistoryCount,
+            roleHistoryCount: prepared.roleHistoryCount,
             personaLength: readPersonaLength(role),
           })
         }
 
         role.status = 'thinking'
         role.lastPromptMessageId = userMessage.id
-        role.replyAttemptId = replyAttemptId
+        role.replyAttemptId = prepared.replyAttemptId
         role.updatedAt = timestamp
       }
       for (const role of unavailable) {
@@ -262,49 +226,18 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const roles = getChatRoles(store, chat)
       const messages = getChatMessages(store, chat)
       const reference = userMessage.references?.[0]
-      const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-      const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
-      const replyAttemptId = deps.newId('attempt')
+      const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage, roles, messages, reference, timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
 
       userMessage.deliveryStatus ??= {}
       userMessage.deliveryStatus[role.id] = 'pending'
       userMessage.status = 'pending'
       role.status = 'thinking'
       role.lastPromptMessageId = userMessage.id
-      role.replyAttemptId = replyAttemptId
+      role.replyAttemptId = prepared.replyAttemptId
       role.updatedAt = timestamp
       chat.status = 'running'
       chat.updatedAt = timestamp
-
-      if (isExternalModelRole(role)) {
-        const model = requireExternalModelForRole(store, role)
-        const prompt = buildExternalModelPrompt(store, chat, role, userMessage, roles)
-        if (prompt.memoryPatch) applyExternalMemoryPatch(store, prompt.memoryPatch, timestamp)
-        return {
-          externalDelivery: {
-            roleId,
-            chatId: chat.id,
-            messageId: userMessage.id,
-            replyAttemptId,
-            model,
-            prompt: prompt.content,
-          },
-        }
-      }
-
-      const binding = deps.runtimeFrames.getByRole(chat.id, role.id)
-      if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，请先恢复人员')
-      const unsyncedContext = buildUnsyncedContext(chat, role, messages, userMessage, store.settings.maxContextChars)
-      const content = buildPrompt({ chat, role, userMessage, roles, unsyncedContext, reference, includePersona: includesPersona })
-      return {
-        delivery: {
-          roleId,
-          chatSite: role.chatSite ?? store.settings.defaultChatSite,
-          tabId: binding.tabId,
-          frameId: binding.frameId,
-          message: { type: 'TEAM_SEND_PROMPT' as const, chatId: chat.id, roleId, messageId: userMessage.id, replyAttemptId, content, includesPersona },
-        },
-      }
+      return prepared
     })
 
     await deps.broadcastStoreUpdated(store)
@@ -888,51 +821,24 @@ async function prepareRoleErrorRetry(
 
     const roles = getChatRoles(store, chat)
     const messages = getChatMessages(store, chat)
-    const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-    const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
-    const nextReplyAttemptId = deps.newId('attempt')
+    const reference = userMessage.references?.[0]
+    let prepared: PreparedRolePromptDelivery
+    try {
+      prepared = prepareRolePromptDelivery({ store, chat, role, userMessage, roles, messages, reference, timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+    } catch {
+      return undefined
+    }
 
     userMessage.deliveryStatus ??= {}
     userMessage.deliveryStatus[role.id] = 'pending'
     updateUserMessageDeliveryStatus(userMessage)
     role.status = 'thinking'
     role.lastPromptMessageId = userMessage.id
-    role.replyAttemptId = nextReplyAttemptId
+    role.replyAttemptId = prepared.replyAttemptId
     role.updatedAt = timestamp
     chat.status = 'running'
     chat.updatedAt = timestamp
-
-    if (isExternalModelRole(role)) {
-      const model = getExternalModelForRole(store, role)
-      if (!model) return undefined
-      const prompt = buildExternalModelPrompt(store, chat, role, userMessage, roles)
-      if (prompt.memoryPatch) applyExternalMemoryPatch(store, prompt.memoryPatch, timestamp)
-      return {
-        externalDelivery: {
-          roleId,
-          chatId: chat.id,
-          messageId: userMessage.id,
-          replyAttemptId: nextReplyAttemptId,
-          model,
-          prompt: prompt.content,
-        },
-      }
-    }
-
-    const binding = deps.runtimeFrames.getByRole(chat.id, role.id)
-    if (!binding?.ready) return undefined
-    const reference = userMessage.references?.[0]
-    const unsyncedContext = buildUnsyncedContext(chat, role, messages, userMessage, store.settings.maxContextChars)
-    const content = buildPrompt({ chat, role, userMessage, roles, unsyncedContext, reference, includePersona: includesPersona })
-    return {
-      delivery: {
-        roleId,
-        chatSite: role.chatSite ?? store.settings.defaultChatSite,
-        tabId: binding.tabId,
-        frameId: binding.frameId,
-        message: { type: 'TEAM_SEND_PROMPT' as const, chatId: chat.id, roleId, messageId: userMessage.id, replyAttemptId: nextReplyAttemptId, content, includesPersona },
-      },
-    }
+    return prepared
   })
 
   if (!result) return undefined
@@ -1471,42 +1377,6 @@ function externalModelRunKey(chatId: string, roleId: string, replyAttemptId: str
   return `${chatId}:${roleId}:${replyAttemptId}`
 }
 
-function isExternalModelRole(role: GroupRole): boolean {
-  return role.modelSource === 'external'
-}
-
-function getExternalModelForRole(store: OpenTeamStore, role: GroupRole): ExternalModelConfig | undefined {
-  if (!isExternalModelRole(role) || !role.externalModelId) return undefined
-  return store.settings.externalModelsById[role.externalModelId]
-}
-
-function requireExternalModelForRole(store: OpenTeamStore, role: GroupRole): ExternalModelConfig {
-  const model = getExternalModelForRole(store, role)
-  if (!model) throw new Error(`找不到外部模型：${role.externalModelId ?? role.name}`)
-  return model
-}
-
-function applyExternalMemoryPatch(store: OpenTeamStore, patch: ExternalMemoryPatch, timestamp: number): void {
-  if (patch.scope === 'chat') {
-    store.externalChatMemoriesById ??= {}
-    store.externalChatMemoriesById[patch.id] = {
-      chatId: patch.id,
-      summary: patch.summary,
-      summarizedThroughSeq: patch.summarizedThroughSeq,
-      updatedAt: timestamp,
-    }
-    return
-  }
-
-  store.externalRoleMemoriesById ??= {}
-  store.externalRoleMemoriesById[patch.id] = {
-    roleId: patch.id,
-    summary: patch.summary,
-    summarizedThroughSeq: patch.summarizedThroughSeq,
-    updatedAt: timestamp,
-  }
-}
-
 function isStaleThinkingRole(role: GroupRole, timestamp: number): boolean {
   return role.status === 'thinking' && timestamp - role.updatedAt >= STALE_THINKING_MS
 }
@@ -1524,19 +1394,6 @@ function recoverDeliverableRoleStatus(role: GroupRole, timestamp: number, log: M
   delete role.lastPromptMessageId
   delete role.replyAttemptId
   role.updatedAt = timestamp
-}
-
-function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number): boolean {
-  return !roleUsesChatGptGptsPersona(role) && roleHistoryCount === 0
-}
-
-function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {
-  return messages.filter(message => message.id !== currentMessageId && isRoleHistoryMessage(message, role.id)).length
-}
-
-function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
-  if (message.roleId === roleId) return true
-  return Array.isArray(message.targetRoleIds) && message.targetRoleIds.includes(roleId)
 }
 
 function readPersonaLength(role: GroupRole): number {

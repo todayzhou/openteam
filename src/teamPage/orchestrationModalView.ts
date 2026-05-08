@@ -247,13 +247,13 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   }
 
   function renderReviewSettings(stage: OrchestrationStage): void {
-    const intro = settingsNote('审核节点由一个群聊人员根据标准判断通过、继续或停止。')
+    const intro = settingsNote('审核节点由一个群聊人员根据标准判断通过或不通过。')
     const criteriaField = document.createElement('label')
     criteriaField.className = 'field'
     criteriaField.textContent = '审核标准'
     const criteria = document.createElement('textarea')
     criteria.value = stage.review?.instructions ?? ''
-    criteria.placeholder = '例如：答案需要覆盖风险、方案和下一步行动。未满足时返回 continue。'
+    criteria.placeholder = '例如：答案需要覆盖风险、方案和下一步行动。未满足时返回 fail。'
     criteria.addEventListener('input', () => {
       stage.review = { reviewerRoleIds: stage.roleIds, instructions: criteria.value }
     })
@@ -264,7 +264,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     previewTitle.className = 'tiny'
     previewTitle.textContent = '审核返回 JSON 预览'
     const schema = document.createElement('pre')
-    schema.textContent = '{\n  "decision": "pass | continue | stop",\n  "reason": "审核说明",\n  "failedCriteria": [],\n  "nextRoundInstruction": "需要继续时的补充任务"\n}'
+    schema.textContent = '{\n  "decision": "pass | fail",\n  "reason": "审核说明",\n  "failedCriteria": [],\n  "nextRoundInstruction": "不通过时的补充任务"\n}'
     preview.append(previewTitle, schema)
     deps.orchestrationReviewSettingsEl.append(intro, criteriaField, preview)
   }

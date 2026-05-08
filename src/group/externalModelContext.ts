@@ -7,6 +7,10 @@ export interface ExternalModelPromptResult {
   memoryPatch?: ExternalMemoryPatch
 }
 
+export interface BuildExternalModelPromptOptions {
+  responseInstruction?: string
+}
+
 export type ExternalMemoryPatch =
   | { scope: 'role'; id: string; summary: string; summarizedThroughSeq: number }
   | { scope: 'chat'; id: string; summary: string; summarizedThroughSeq: number }
@@ -17,13 +21,14 @@ export function buildExternalModelPrompt(
   role: GroupRole,
   userMessage: GroupMessage,
   roles: GroupRole[],
+  options: BuildExternalModelPromptOptions = {},
 ): ExternalModelPromptResult {
   const scopedMessages = externalContextMessages(store, chat, role, userMessage)
   const scope = chat.mode === 'collaborative' ? 'chat' : 'role'
   const memory = scope === 'chat' ? store.externalChatMemoriesById?.[chat.id] : store.externalRoleMemoriesById?.[role.id]
   const contextAfterMemory = scopedMessages.filter(message => message.seq > (memory?.summarizedThroughSeq ?? 0) && message.id !== userMessage.id)
   const budget = Math.max(240, store.settings.maxContextChars)
-  const directPrompt = buildPromptWithExternalContext(chat, role, userMessage, roles, contextAfterMemory, budget)
+  const directPrompt = buildPromptWithExternalContext(chat, role, userMessage, roles, contextAfterMemory, budget, options)
   const withSummary = joinSections([
     memory?.summary ? `历史摘要：\n${memory.summary}` : undefined,
     directPrompt,
@@ -40,7 +45,7 @@ export function buildExternalModelPrompt(
   const summary = compressMessages(memory?.summary, summarizedMessages)
   const compressedPrompt = joinSections([
     summary ? `历史摘要：\n${summary}` : undefined,
-    buildPromptWithExternalContext(chat, role, userMessage, roles, [], budget),
+    buildPromptWithExternalContext(chat, role, userMessage, roles, [], budget, options),
   ])
 
   return {
@@ -58,6 +63,7 @@ function buildPromptWithExternalContext(
   roles: GroupRole[],
   contextMessages: GroupMessage[],
   maxContextChars: number,
+  options: BuildExternalModelPromptOptions,
 ): string {
   const basePrompt = buildPrompt({
     chat,
@@ -68,6 +74,7 @@ function buildPromptWithExternalContext(
     maxContextChars,
     reference: userMessage.references?.[0],
     includePersona: true,
+    responseInstruction: options.responseInstruction,
   })
   if (chat.mode === 'collaborative' || contextMessages.length === 0) return basePrompt
 

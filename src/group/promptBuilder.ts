@@ -11,6 +11,7 @@ export interface BuildPromptInput {
   maxContextChars?: number
   reference?: MessageReference
   includePersona?: boolean
+  responseInstruction?: string
 }
 
 export function buildPrompt(input: BuildPromptInput): string {
@@ -26,7 +27,7 @@ export function buildIndependentPrompt(input: BuildPromptInput): string {
     buildRoleBlock(input.role, input.includePersona ?? true),
     buildReferenceBlock(reference),
     `用户消息：\n${input.userMessage.content}`,
-    `请以「${input.role.name}」身份回复。${reference ? '请明确说明你同意或不同意哪里，以及下一步建议。' : ''}`,
+    input.responseInstruction ?? `请以「${input.role.name}」身份回复。${reference ? '请明确说明你同意或不同意哪里，以及下一步建议。' : ''}`,
   ])
 }
 
@@ -41,7 +42,7 @@ export function buildCollaborativePrompt(input: BuildPromptInput): string {
     buildContextBlock(input),
     buildReferenceBlock(reference),
     `用户最新消息：\n${input.userMessage.content}`,
-    `请以「${input.role.name}」身份回复。你可以参考、补充或反驳其他成员观点。${reference ? '请明确回应用户引用的观点。' : ''}`,
+    input.responseInstruction ?? `请以「${input.role.name}」身份回复。你可以参考、补充或反驳其他成员观点。${reference ? '请明确回应用户引用的观点。' : ''}`,
   ])
 }
 

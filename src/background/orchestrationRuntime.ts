@@ -1,12 +1,10 @@
-import { buildOrchestrationReviewPrompt, buildOrchestrationRolePrompt } from '../group/orchestrationPrompts'
+import { buildOrchestrationReviewMessageContent, buildOrchestrationRoleMessageContent } from '../group/orchestrationPrompts'
 import { parseReviewDecision } from '../group/orchestrationReview'
 import {
   DEFAULT_ORCHESTRATION_MAX_ROUNDS,
   MAX_ORCHESTRATION_MAX_ROUNDS,
-  type ExternalModelConfig,
   type GroupChat,
   type GroupMessage,
-  type GroupRole,
   type OpenTeamStore,
   type OrchestrationFlow,
   type OrchestrationGraphSnapshot,
@@ -18,17 +16,9 @@ import {
 import type { ExternalModelClient } from './externalModelClient'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
 import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
+import { prepareRolePromptDelivery, type ExternalPromptDelivery } from './rolePromptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
-
-interface ExternalPromptDelivery {
-  roleId: string
-  chatId: string
-  messageId: string
-  replyAttemptId: string
-  model: ExternalModelConfig
-  prompt: string
-}
 
 export interface OrchestrationRuntimeDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
@@ -319,7 +309,7 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
 
     const taskMessage = getRunTaskMessage(store, chat, run)
     if (!taskMessage) throw new Error('找不到编排任务消息')
-    const promptMessage = createStagePromptMessage(deps, store, chat, run, flow, stage, stageIndex, taskMessage.content, timestamp)
+    const promptMessage = createStagePromptMessage(deps, chat, run, stage, stageIndex, taskMessage.content, timestamp)
     const targetRoleIds = stage.kind === 'review' ? [firstReviewerRoleId(stage)] : stage.roleIds
     promptMessage.targetRoleIds = targetRoleIds
     promptMessage.mentionedRoleIds = targetRoleIds
@@ -347,47 +337,25 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
 
     const deliveries: PromptDelivery[] = []
     const externalDeliveries: ExternalPromptDelivery[] = []
+    const messages = getChatMessages(store, chat)
+    const roles = getChatRoles(store, chat)
     for (const roleId of targetRoleIds) {
       const role = requireRole(store, chat.id, roleId)
-      const replyAttemptId = deps.newId('attempt')
       stageRun.roleRuns[role.id] = { roleId: role.id, status: 'running', messageId: promptMessage.id, startedAt: timestamp }
-      role.status = 'thinking'
-      role.lastPromptMessageId = promptMessage.id
-      role.replyAttemptId = replyAttemptId
-      role.updatedAt = timestamp
-      const rolePrompt = stage.kind === 'review'
-        ? promptMessage.content
-        : buildOrchestrationRolePrompt({
-          userTask: taskMessage.content,
-          flow,
-          currentStage: stage,
-          role,
-          currentRound: run.currentRound,
-          maxRounds: run.maxRounds,
-          priorStageMessages: getPriorRoundMessages(store, chat, run),
-          previousReviewResult: lastReviewResult(run),
-          maxContextChars: store.settings.maxContextChars,
-        })
-      if (isExternalModelRole(role)) {
-        const model = requireExternalModelForRole(store, role)
-        externalDeliveries.push({ roleId: role.id, chatId: chat.id, messageId: promptMessage.id, replyAttemptId, model, prompt: rolePrompt })
-      } else {
-        const binding = deps.runtimeFrames.getByRole(chat.id, role.id)
-        if (!binding?.ready) {
-          stageRun.roleRuns[role.id].status = 'error'
-          stageRun.roleRuns[role.id].error = '人员 iframe 尚未就绪，请先恢复人员'
-          role.status = 'error'
-          delete role.lastPromptMessageId
-          delete role.replyAttemptId
-          continue
-        }
-        deliveries.push({
-          roleId: role.id,
-          chatSite: role.chatSite ?? store.settings.defaultChatSite,
-          tabId: binding.tabId,
-          frameId: binding.frameId,
-          message: { type: 'TEAM_SEND_PROMPT', chatId: chat.id, roleId: role.id, messageId: promptMessage.id, replyAttemptId, content: rolePrompt, includesPersona: true },
-        })
+      try {
+        const prepared = prepareRolePromptDelivery({ store, chat, role, userMessage: promptMessage, roles, messages, timestamp, newId: deps.newId, runtimeFrames: deps.runtimeFrames })
+        if (prepared.delivery) deliveries.push(prepared.delivery)
+        if (prepared.externalDelivery) externalDeliveries.push(prepared.externalDelivery)
+        role.status = 'thinking'
+        role.lastPromptMessageId = promptMessage.id
+        role.replyAttemptId = prepared.replyAttemptId
+        role.updatedAt = timestamp
+      } catch (error) {
+        stageRun.roleRuns[role.id].status = 'error'
+        stageRun.roleRuns[role.id].error = error instanceof Error ? error.message : String(error)
+        role.status = 'error'
+        delete role.lastPromptMessageId
+        delete role.replyAttemptId
       }
     }
     const failedRoleRun = Object.values(stageRun.roleRuns).find(roleRun => roleRun.status === 'error')
@@ -485,14 +453,10 @@ async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDepende
   }
 }
 
-function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
-  const stageDescription = stage.description?.trim()
+function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, chat: GroupChat, run: OrchestrationRun, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
   const content = stage.kind === 'review'
-    ? buildOrchestrationReviewPrompt({ userTask, flow, currentStage: stage, currentRound: run.currentRound, maxRounds: run.maxRounds, currentRoundOutputs: getCurrentRoundOutputs(store, chat, run), maxContextChars: store.settings.maxContextChars })
-    : [
-      stageDescription ? `Node task:\n${stageDescription}` : undefined,
-      userTask,
-    ].filter((line): line is string => Boolean(line)).join('\n\n')
+    ? buildOrchestrationReviewMessageContent({ userTask, currentStage: stage })
+    : buildOrchestrationRoleMessageContent({ userTask, currentStage: stage, previousReviewResult: lastReviewResult(run) })
 
   return {
     id: deps.newId('msg'),
@@ -508,15 +472,6 @@ function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store:
     createdAt: timestamp,
     status: 'pending',
   }
-}
-
-function getPriorRoundMessages(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun): GroupMessage[] {
-  const stageIds = new Set(run.stageRuns.filter(stageRun => stageRun.round === run.currentRound && stageRun.status === 'completed').map(stageRun => stageRun.stageId))
-  return getChatMessages(store, chat).filter(message => message.type === 'assistant' && message.orchestrationRunId === run.id && message.orchestrationStageId && stageIds.has(message.orchestrationStageId))
-}
-
-function getCurrentRoundOutputs(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun): GroupMessage[] {
-  return getChatMessages(store, chat).filter(message => message.type === 'assistant' && message.orchestrationRunId === run.id && message.orchestrationRound === run.currentRound)
 }
 
 function lastReviewResult(run: OrchestrationRun): OrchestrationReviewResult | undefined {
@@ -542,23 +497,15 @@ function nextStageDecision(store: OpenTeamStore, chat: GroupChat, run: Orchestra
   return { next: false }
 }
 
-function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stageRun: OrchestrationStageRun, decision: 'pass' | 'continue' | 'stop', timestamp: number): NextStageDecision {
-  if (decision === 'stop') {
-    run.status = 'stopped'
-    run.completedAt = timestamp
-    delete store.activeOrchestrationRunIdByChatId[chat.id]
-    chat.status = 'ready'
-    chat.updatedAt = timestamp
-    return { next: false }
-  }
-  if (decision === 'continue' && run.currentRound < run.maxRounds) {
+function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stageRun: OrchestrationStageRun, decision: 'pass' | 'fail', timestamp: number): NextStageDecision {
+  if (decision === 'fail' && run.currentRound < run.maxRounds) {
     run.currentRound += 1
     run.updatedAt = timestamp
     const flow = requireFlow(store, chat.id, run.flowId)
-    const branchTargets = reviewBranchStageIndices(flow, stageRun.stageId, 'continue')
+    const branchTargets = reviewBranchStageIndices(flow, stageRun.stageId, 'fail')
     return { next: true, runId: run.id, stageIndices: branchTargets.length > 0 ? branchTargets : rootStageIndices(flow) }
   }
-  if (decision === 'continue' && run.currentRound >= run.maxRounds) {
+  if (decision === 'fail' && run.currentRound >= run.maxRounds) {
     run.error = '已达到最大轮次，编排自动完成'
   }
   return nextStageDecision(store, chat, run, timestamp, { allowNextRound: decision !== 'pass' })
@@ -692,10 +639,10 @@ function incomingEdgesByTarget(flow: OrchestrationFlow): Map<string, string[]> {
 }
 
 function dependencyGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {
-  return effectiveGraphEdges(flow).filter(edge => reviewEdgeBranch(edge) !== 'continue')
+  return effectiveGraphEdges(flow).filter(edge => reviewEdgeBranch(edge) !== 'fail')
 }
 
-function reviewBranchStageIndices(flow: OrchestrationFlow, reviewStageId: string, branch: 'pass' | 'continue'): number[] {
+function reviewBranchStageIndices(flow: OrchestrationFlow, reviewStageId: string, branch: 'pass' | 'fail'): number[] {
   const stageIndexById = new Map(flow.stages.map((stage, index) => [stage.id, index]))
   return effectiveGraphEdges(flow)
     .filter(edge => edge.sourceStageId === reviewStageId && reviewEdgeBranch(edge) === branch)
@@ -703,8 +650,8 @@ function reviewBranchStageIndices(flow: OrchestrationFlow, reviewStageId: string
     .filter((index): index is number => typeof index === 'number')
 }
 
-function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number]): 'pass' | 'continue' | undefined {
-  if (edge.sourcePort === 'pass' || edge.sourcePort === 'continue') return edge.sourcePort
+function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number]): 'pass' | 'fail' | undefined {
+  if (edge.sourcePort === 'pass' || edge.sourcePort === 'fail') return edge.sourcePort
   return undefined
 }
 
@@ -744,15 +691,4 @@ function firstReviewerRoleId(stage: OrchestrationStage): string {
 
 function getRunTaskMessage(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun): GroupMessage | undefined {
   return getChatMessages(store, chat).find(message => message.orchestrationRunId === run.id && message.orchestrationKind === 'task')
-}
-
-function isExternalModelRole(role: GroupRole): boolean {
-  return role.modelSource === 'external'
-}
-
-function requireExternalModelForRole(store: OpenTeamStore, role: GroupRole): ExternalModelConfig {
-  if (!role.externalModelId) throw new Error(`找不到外部模型：${role.name}`)
-  const model = store.settings.externalModelsById[role.externalModelId]
-  if (!model) throw new Error(`找不到外部模型：${role.externalModelId}`)
-  return model
 }

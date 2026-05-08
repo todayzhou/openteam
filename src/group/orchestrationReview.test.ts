@@ -23,11 +23,11 @@ describe('parseReviewDecision', () => {
   })
 
   it('parses fenced JSON decisions', () => {
-    const result = parseReviewDecision('```json\n{"decision":"stop","reason":"Unsafe request.","failedCriteria":["safety"],"nextRoundInstruction":""}\n```')
+    const result = parseReviewDecision('```json\n{"decision":"fail","reason":"Missing safety handling.","failedCriteria":["safety"],"nextRoundInstruction":"补充安全处理。"}\n```')
 
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.decision.decision).toBe('stop')
+      expect(result.decision.decision).toBe('fail')
       expect(result.decision.failedCriteria).toEqual(['safety'])
     }
   })
@@ -48,9 +48,9 @@ describe('parseReviewDecision', () => {
     expect(parseReviewDecision('{"decision":"pass","reason":"OK","failedCriteria":[]}').ok).toBe(false)
   })
 
-  it('requires nextRoundInstruction for continue decisions', () => {
-    const invalid = parseReviewDecision('{"decision":"continue","reason":"Missing details","failedCriteria":["coverage"],"nextRoundInstruction":""}')
-    const valid = parseReviewDecision('{"decision":"continue","reason":"Missing details","failedCriteria":["coverage"],"nextRoundInstruction":"Add implementation risks."}')
+  it('requires nextRoundInstruction for fail decisions', () => {
+    const invalid = parseReviewDecision('{"decision":"fail","reason":"Missing details","failedCriteria":["coverage"],"nextRoundInstruction":""}')
+    const valid = parseReviewDecision('{"decision":"fail","reason":"Missing details","failedCriteria":["coverage"],"nextRoundInstruction":"Add implementation risks."}')
 
     expect(invalid.ok).toBe(false)
     expect(valid.ok).toBe(true)

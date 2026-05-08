@@ -30,8 +30,8 @@ export function parseReviewDecision(raw: string): ParseReviewDecisionResult {
   }
 
   const decision = parsed.decision
-  if (decision !== 'pass' && decision !== 'continue' && decision !== 'stop') {
-    return { ok: false, error: 'Review decision must be pass, continue, or stop.' }
+  if (decision !== 'pass' && decision !== 'fail') {
+    return { ok: false, error: 'Review decision must be pass or fail.' }
   }
 
   if (typeof parsed.reason !== 'string' || parsed.reason.trim().length === 0) {
@@ -46,8 +46,8 @@ export function parseReviewDecision(raw: string): ParseReviewDecisionResult {
     return { ok: false, error: 'Review nextRoundInstruction must be a string.' }
   }
 
-  if (decision === 'continue' && parsed.nextRoundInstruction.trim().length === 0) {
-    return { ok: false, error: 'Review nextRoundInstruction is required when decision is continue.' }
+  if (decision === 'fail' && parsed.nextRoundInstruction.trim().length === 0) {
+    return { ok: false, error: 'Review nextRoundInstruction is required when decision is fail.' }
   }
 
   return {

@@ -432,8 +432,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function reviewDecisionLabel(decision: OrchestrationReviewResult['decision']): string {
     if (decision === 'pass') return '通过'
-    if (decision === 'continue') return '继续'
-    return '停止'
+    return '不通过'
   }
 
   function messageSignature(message: GroupMessage, showName = true, showAvatar = true): string {

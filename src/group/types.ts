@@ -80,7 +80,7 @@ export const MAX_ORCHESTRATION_MAX_ROUNDS = 50
 export type OrchestrationStageKind = 'roles' | 'review'
 export type OrchestrationRunStatus = 'pending' | 'running' | 'completed' | 'stopped' | 'error'
 export type OrchestrationStepStatus = 'pending' | 'running' | 'completed' | 'skipped' | 'error'
-export type ReviewDecision = 'pass' | 'continue' | 'stop'
+export type ReviewDecision = 'pass' | 'fail'
 
 export interface OrchestrationReviewConfig {
   reviewerRoleIds: string[]
@@ -111,7 +111,7 @@ export interface OrchestrationGraphEdgeVertex {
 export interface OrchestrationGraphEdge {
   sourceStageId: string
   targetStageId: string
-  sourcePort?: 'out' | 'pass' | 'continue'
+  sourcePort?: 'out' | 'pass' | 'fail'
   targetPort?: 'in'
   vertices?: OrchestrationGraphEdgeVertex[]
 }

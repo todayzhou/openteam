@@ -451,7 +451,11 @@ function normalizeOrchestrationGraphEdges(raw: unknown): NonNullable<Orchestrati
   if (!Array.isArray(raw)) return []
   return raw.filter(isRecord).flatMap(edge => {
     if (typeof edge.sourceStageId !== 'string' || typeof edge.targetStageId !== 'string') return []
-    const sourcePort = edge.sourcePort === 'out' || edge.sourcePort === 'pass' || edge.sourcePort === 'continue' ? edge.sourcePort : undefined
+    const sourcePort = edge.sourcePort === 'continue'
+      ? 'fail'
+      : edge.sourcePort === 'out' || edge.sourcePort === 'pass' || edge.sourcePort === 'fail'
+        ? edge.sourcePort
+        : undefined
     const targetPort = edge.targetPort === 'in' ? edge.targetPort : undefined
     const vertices = normalizeOrchestrationEdgeVertices(edge.vertices)
     return [{

@@ -81,7 +81,7 @@ describe('orchestration canvas', () => {
       { sourceStageId: 'stage-b', targetStageId: 'review-1' },
       { sourceStageId: 'stage-c', targetStageId: 'review-1' },
       { sourceStageId: 'review-1', targetStageId: 'stage-d', sourcePort: 'pass' },
-      { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'continue', vertices: [{ x: 1, y: 1 }] },
+      { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'fail', vertices: [{ x: 1, y: 1 }] },
     ]
 
     const arranged = arrangeOrchestrationGraph(branchStages, graphEdges)
@@ -93,7 +93,7 @@ describe('orchestration canvas', () => {
     expect(byId.get('review-1')?.position?.x).toBeGreaterThan(byId.get('stage-b')?.position?.x ?? 0)
     expect(byId.get('stage-d')?.position?.x).toBeGreaterThan(byId.get('review-1')?.position?.x ?? 0)
     expect(arranged.edges.find(edge => edge.sourcePort === 'pass')?.vertices).toBeUndefined()
-    expect(arranged.edges.find(edge => edge.sourcePort === 'continue')?.vertices?.length).toBeGreaterThanOrEqual(2)
+    expect(arranged.edges.find(edge => edge.sourcePort === 'fail')?.vertices?.length).toBeGreaterThanOrEqual(2)
   })
 
   it('loads X6 through the injected dynamic loader and renders one node per stage', async () => {
@@ -138,7 +138,7 @@ describe('orchestration canvas', () => {
     expect((MockGraph.instances[0].nodes[1] as { ports?: { items?: Array<{ id: string; group: string }> } }).ports?.items).toEqual([
       { id: 'in', group: 'in' },
       { id: 'pass', group: 'pass' },
-      { id: 'continue', group: 'continue' },
+      { id: 'fail', group: 'fail' },
     ])
     expect((MockGraph.instances[0].nodes[1] as { label?: string }).label).toContain('API · Claude')
     expect((MockGraph.instances[0].nodes[1] as { label?: string }).label).not.toContain('审核')
@@ -181,13 +181,13 @@ describe('orchestration canvas', () => {
     ])
     MockGraph.instances[0].handlers.get('edge:connected')?.({
       edge: {
-        getSource: () => ({ cell: 'review-1', port: 'continue' }),
+        getSource: () => ({ cell: 'review-1', port: 'fail' }),
         getTarget: () => ({ cell: 'stage-1', port: 'in' }),
       },
     })
     expect(onGraphChanged).toHaveBeenLastCalledWith([
       { sourceStageId: 'stage-1', targetStageId: 'review-1' },
-      { sourceStageId: 'review-1', targetStageId: 'stage-1', sourcePort: 'continue', targetPort: 'in' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-1', sourcePort: 'fail', targetPort: 'in' },
     ])
   })
 
@@ -224,7 +224,7 @@ describe('orchestration canvas', () => {
     ])
   })
 
-  it('labels review outgoing edges from their explicit pass and continue ports', async () => {
+  it('labels review outgoing edges from their explicit pass and fail ports', async () => {
     MockGraph.instances = []
     const rootEl = document.createElement('div')
     const canvas = createOrchestrationCanvas({
@@ -242,7 +242,7 @@ describe('orchestration canvas', () => {
 
     await canvas.mount(branchStages, undefined, [
       { sourceStageId: 'review-1', targetStageId: 'stage-1', sourcePort: 'pass' },
-      { sourceStageId: 'review-1', targetStageId: 'stage-2', sourcePort: 'continue' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-2', sourcePort: 'fail' },
     ])
 
     expect(MockGraph.instances[0].edges).toEqual([
@@ -252,7 +252,7 @@ describe('orchestration canvas', () => {
         labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '通过', fontSize: 9 }) }) })],
       }),
       expect.objectContaining({
-        source: expect.objectContaining({ cell: 'review-1', port: 'continue' }),
+        source: expect.objectContaining({ cell: 'review-1', port: 'fail' }),
         attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: '#7de6ea', strokeWidth: 1.3, strokeDasharray: undefined }) }),
         labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '不通过', fontSize: 9 }) }) })],
       }),

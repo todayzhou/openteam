@@ -1,148 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { buildOrchestrationReviewPrompt, buildOrchestrationRolePrompt } from './orchestrationPrompts'
-import type { GroupMessage, GroupRole, OrchestrationFlow, OrchestrationReviewResult } from './types'
+import { buildOrchestrationReviewMessageContent, buildOrchestrationRoleMessageContent } from './orchestrationPrompts'
+import type { OrchestrationReviewResult, OrchestrationStage } from './types'
 
-describe('orchestration prompt builders', () => {
-  it('builds role prompts from stage-node flow context', () => {
-    const flow = makeFlow()
-    const prompt = buildOrchestrationRolePrompt({
+describe('orchestration message content builders', () => {
+  it('builds a role-node group message without duplicating persona or group context logic', () => {
+    const content = buildOrchestrationRoleMessageContent({
       userTask: 'Create a launch plan.',
-      flow,
-      currentStage: flow.stages[1],
-      role: makeRole('role-writer', 'Writer', 'Drafts the plan', 'Write clearly.'),
-      currentRound: 2,
-      priorStageMessages: [makeMessage('msg-1', 'role-researcher', 'Researcher', 'Research summary', 'stage-research')],
+      currentStage: makeRoleStage(),
       previousReviewResult: makeReviewResult(),
-      maxContextChars: 6000,
     })
 
-    expect(prompt).toContain('User task:\nCreate a launch plan.')
-    expect(prompt).toContain('Flow steps:')
-    expect(prompt).toContain('1. Research (roles, id: stage-research; roles: role-researcher)')
-    expect(prompt).toContain('2. Draft (roles, id: stage-draft; roles: role-writer, role-editor)')
-    expect(prompt).toContain('Current step: Draft (roles, id: stage-draft)')
-    expect(prompt).not.toContain('Current round:')
-    expect(prompt).toContain('Node task:\nTurn the research into a launch-ready draft.')
-    expect(prompt).not.toContain('Flow stages:')
-    expect(prompt).not.toContain('Current stage:')
-    expect(prompt).not.toContain('Stage task:')
-    expect(prompt).toContain('Your role: Writer')
-    expect(prompt).toContain('Role responsibility:\nDrafts the plan')
-    expect(prompt).toContain('Role persona:\nWrite clearly.')
-    expect(prompt).toContain('Previous review instruction:\nAddress launch risks.')
-    expect(prompt).toContain('[Researcher, step: stage-research, seq: 1]\nResearch summary')
+    expect(content).toContain('当前任务：\nCreate a launch plan.')
+    expect(content).toContain('当前节点任务：\nTurn the research into a launch-ready draft.')
+    expect(content).toContain('上次审核未通过要求：\nAddress launch risks.')
+    expect(content).not.toContain('群聊成员')
+    expect(content).not.toContain('你上次之后')
+    expect(content).not.toContain('Role persona')
   })
 
-  it('gives same-stage parallel roles the same prior-stage context only', () => {
-    const flow = makeFlow()
-    const priorStageMessages = [makeMessage('msg-1', 'role-researcher', 'Researcher', 'Shared prior context', 'stage-research')]
-    const writerPrompt = buildOrchestrationRolePrompt({
+  it('builds a review-node group message that strongly requires JSON only', () => {
+    const content = buildOrchestrationReviewMessageContent({
       userTask: 'Create a launch plan.',
-      flow,
-      currentStage: flow.stages[1],
-      role: makeRole('role-writer', 'Writer'),
-      currentRound: 1,
-      priorStageMessages,
-    })
-    const editorPrompt = buildOrchestrationRolePrompt({
-      userTask: 'Create a launch plan.',
-      flow,
-      currentStage: flow.stages[1],
-      role: makeRole('role-editor', 'Editor'),
-      currentRound: 1,
-      priorStageMessages,
-    })
-
-    expect(writerPrompt).toContain('Shared prior context')
-    expect(editorPrompt).toContain('Shared prior context')
-    expect(writerPrompt).not.toContain('Editor output')
-    expect(editorPrompt).not.toContain('Writer output')
-  })
-
-  it('builds review prompts with review instructions and JSON-only schema', () => {
-    const flow = makeFlow()
-    const prompt = buildOrchestrationReviewPrompt({
-      userTask: 'Create a launch plan.',
-      flow,
-      currentStage: flow.stages[2],
+      currentStage: makeReviewStage(),
       reviewCriteria: 'Plan must include risks and owner.',
-      currentRound: 1,
-      currentRoundOutputs: [makeMessage('msg-2', 'role-writer', 'Writer', 'Draft output', 'stage-draft')],
     })
 
-    expect(prompt).toContain('Review criteria:\nPlan must include risks and owner.')
-    expect(prompt).not.toContain('Outputs to review:')
-    expect(prompt).not.toContain('Draft output')
-    expect(prompt).not.toContain('Current round:')
-    expect(prompt).toContain('Decision enum: pass | continue | stop')
-    expect(prompt).toContain('"nextRoundInstruction": "string; required and non-empty when decision is continue"')
-    expect(prompt).toContain('Output only JSON')
-  })
-
-  it('trims long context while preserving task and latest prior output without round metadata', () => {
-    const flow = makeFlow()
-    const prompt = buildOrchestrationRolePrompt({
-      userTask: 'Create a launch plan.',
-      flow,
-      currentStage: flow.stages[1],
-      role: makeRole('role-writer', 'Writer'),
-      currentRound: 1,
-      priorStageMessages: [
-        makeMessage('msg-old', 'role-researcher', 'Researcher', 'old '.repeat(500), 'stage-research'),
-        makeMessage('msg-new', 'role-researcher', 'Researcher', 'Latest prior output', 'stage-research'),
-      ],
-      maxContextChars: 900,
-    })
-
-    expect(prompt.length).toBeLessThanOrEqual(900)
-    expect(prompt).toContain('User task:\nCreate a launch plan.')
-    expect(prompt).not.toContain('Current round:')
-    expect(prompt).toContain('Latest prior output')
+    expect(content).toContain('审核标准：\nPlan must include risks and owner.')
+    expect(content).toContain('你必须只返回合法 JSON')
+    expect(content).toContain('"decision": "pass | fail"')
+    expect(content).toContain('"nextRoundInstruction": "decision 为 fail 时必填，否则为空字符串"')
+    expect(content).not.toContain('群聊成员')
+    expect(content).not.toContain('你上次之后')
   })
 })
 
-function makeFlow(): OrchestrationFlow {
+function makeRoleStage(): OrchestrationStage {
   return {
-    id: 'flow-1',
-    chatId: 'chat-1',
-    name: 'Launch flow',
-    stages: [
-      { id: 'stage-research', kind: 'roles', name: 'Research', roleIds: ['role-researcher'] },
-      { id: 'stage-draft', kind: 'roles', name: 'Draft', roleIds: ['role-writer', 'role-editor'], description: 'Turn the research into a launch-ready draft.' },
-      { id: 'stage-review', kind: 'review', name: 'Review', roleIds: [], review: { reviewerRoleIds: ['role-reviewer'], instructions: 'Check completeness.' } },
-    ],
-    maxRounds: 3,
-    createdAt: 1,
-    updatedAt: 1,
+    id: 'stage-draft',
+    kind: 'roles',
+    name: 'Draft',
+    roleIds: ['role-writer'],
+    description: 'Turn the research into a launch-ready draft.',
   }
 }
 
-function makeRole(id: string, name: string, description?: string, systemPrompt?: string): GroupRole {
+function makeReviewStage(): OrchestrationStage {
   return {
-    id,
-    chatId: 'chat-1',
-    name,
-    description,
-    systemPrompt,
-    status: 'ready',
-    contextCursor: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  }
-}
-
-function makeMessage(id: string, roleId: string, roleName: string, content: string, orchestrationStageId: string): GroupMessage {
-  return {
-    id,
-    chatId: 'chat-1',
-    seq: 1,
-    type: 'assistant',
-    content,
-    roleId,
-    roleName,
-    orchestrationStageId,
-    createdAt: 1,
-    status: 'received',
+    id: 'stage-review',
+    kind: 'review',
+    name: 'Review',
+    roleIds: [],
+    review: { reviewerRoleIds: ['role-reviewer'], instructions: 'Check completeness.' },
   }
 }
 
@@ -152,11 +60,11 @@ function makeReviewResult(): OrchestrationReviewResult {
     stageRunId: 'stage-run-1',
     reviewerRoleId: 'role-reviewer',
     messageId: 'msg-review',
-    decision: 'continue',
+    decision: 'fail',
     reason: 'Missing launch risks.',
     failedCriteria: ['risks'],
     nextRoundInstruction: 'Address launch risks.',
-    rawJson: '{"decision":"continue"}',
+    rawJson: '{"decision":"fail"}',
     createdAt: 1,
   }
 }

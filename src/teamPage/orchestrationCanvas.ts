@@ -140,7 +140,7 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
         validateConnection({ sourceCell, targetCell, sourcePort, targetPort }: X6GraphConnectionArgs) {
           if (!sourceCell?.id || !targetCell?.id || sourceCell.id === targetCell.id || (targetPort && targetPort !== 'in')) return false
           const sourceStage = currentStages.find(stage => stage.id === sourceCell.id)
-          if (sourceStage?.kind === 'review') return sourcePort === 'pass' || sourcePort === 'continue'
+          if (sourceStage?.kind === 'review') return sourcePort === 'pass' || sourcePort === 'fail'
           return sourcePort === 'out'
         },
       },
@@ -242,12 +242,12 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
           ports: {
             groups: {
               in: portGroup('left'),
-              ...(isReview ? { pass: portGroup('right'), continue: portGroup('bottom') } : { out: portGroup('right') }),
+              ...(isReview ? { pass: portGroup('right'), fail: portGroup('bottom') } : { out: portGroup('right') }),
             },
             items: isReview ? [
               { id: 'in', group: 'in' },
               { id: 'pass', group: 'pass' },
-              { id: 'continue', group: 'continue' },
+              { id: 'fail', group: 'fail' },
             ] : [
               { id: 'in', group: 'in' },
               { id: 'out', group: 'out' },
@@ -292,7 +292,7 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
 
 function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: OrchestrationStage[]): X6GraphEdge {
   const branch = reviewEdgeBranch(edge, stages)
-  const sourcePort = edge.sourcePort ?? (branch ? (branch === 'continue' ? 'continue' : 'pass') : 'out')
+  const sourcePort = edge.sourcePort ?? (branch ? (branch === 'fail' ? 'fail' : 'pass') : 'out')
   return {
     id: edgeKey(edge),
     shape: 'edge',
@@ -328,13 +328,13 @@ function edgeTools(): Record<string, unknown> {
   }
 }
 
-function edgeBranchLabel(branch: 'pass' | 'continue'): Record<string, unknown> {
-  const continueBranch = branch === 'continue'
+function edgeBranchLabel(branch: 'pass' | 'fail'): Record<string, unknown> {
+  const failBranch = branch === 'fail'
   return {
     position: 0.55,
     attrs: {
       label: {
-        text: continueBranch ? '不通过' : '通过',
+        text: failBranch ? '不通过' : '通过',
         fill: '#c9fbef',
         fontSize: 9,
         fontWeight: 720,
@@ -350,13 +350,13 @@ function edgeBranchLabel(branch: 'pass' | 'continue'): Record<string, unknown> {
   }
 }
 
-function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number], stages: OrchestrationStage[]): 'pass' | 'continue' | undefined {
-  if (edge.sourcePort === 'pass' || edge.sourcePort === 'continue') return edge.sourcePort
+function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number], stages: OrchestrationStage[]): 'pass' | 'fail' | undefined {
+  if (edge.sourcePort === 'pass' || edge.sourcePort === 'fail') return edge.sourcePort
   const sourceIndex = stages.findIndex(stage => stage.id === edge.sourceStageId)
   const targetIndex = stages.findIndex(stage => stage.id === edge.targetStageId)
   const source = stages[sourceIndex]
   if (!source || source.kind !== 'review' || sourceIndex < 0 || targetIndex < 0) return undefined
-  return targetIndex <= sourceIndex ? 'continue' : 'pass'
+  return targetIndex <= sourceIndex ? 'fail' : 'pass'
 }
 
 function nodeStyle(selected: boolean): { stroke: string; strokeWidth: number; filter: string } {
@@ -446,7 +446,8 @@ function readPortId(value: unknown): string | undefined {
 }
 
 function normalizeSourcePort(port: string | undefined): OrchestrationGraphSnapshot['edges'][number]['sourcePort'] | undefined {
-  return port === 'out' || port === 'pass' || port === 'continue' ? port : undefined
+  if (port === 'continue') return 'fail'
+  return port === 'out' || port === 'pass' || port === 'fail' ? port : undefined
 }
 
 function normalizeTargetPort(port: string | undefined): OrchestrationGraphSnapshot['edges'][number]['targetPort'] | undefined {
@@ -465,7 +466,7 @@ export function arrangeOrchestrationGraph(stages: OrchestrationStage[], edges: O
   if (stages.length === 0) return { stages: [], edges: [] }
   const stageIds = new Set(stages.map(stage => stage.id))
   const validEdges = uniqueEdges(edges.filter(edge => stageIds.has(edge.sourceStageId) && stageIds.has(edge.targetStageId)))
-  const forwardEdges = validEdges.filter(edge => edge.sourcePort !== 'continue')
+  const forwardEdges = validEdges.filter(edge => edge.sourcePort !== 'fail')
   const indexById = new Map(stages.map((stage, index) => [stage.id, index]))
   const levelById = graphLevels(stages, forwardEdges)
   const lanesByLevel = new Map<number, OrchestrationStage[]>()
@@ -535,7 +536,7 @@ function arrangeEdge(edge: OrchestrationGraphSnapshot['edges'][number], position
     ...(edge.sourcePort ? { sourcePort: edge.sourcePort } : {}),
     ...(edge.targetPort ? { targetPort: edge.targetPort } : {}),
   }
-  if (!source || !target || edge.sourcePort !== 'continue') return arranged
+  if (!source || !target || edge.sourcePort !== 'fail') return arranged
   const sourceWidth = 104
   const sourceHeight = 78
   const targetHeight = 56

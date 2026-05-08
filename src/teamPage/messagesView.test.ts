@@ -1783,7 +1783,7 @@ describe('team page messages view boundary', () => {
                   stageRunId: 'stage-2',
                   reviewerRoleId: role.id,
                   messageId: message.id,
-                  decision: 'continue',
+                  decision: 'fail',
                   reason: '还需要补充测试',
                   failedCriteria: ['测试不足'],
                   nextRoundInstruction: '下一轮补齐测试',
@@ -1826,7 +1826,7 @@ describe('team page messages view boundary', () => {
     }).renderMessages()
 
     expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 2 步 · 复核')
-    expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('决策：继续')
+    expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('决策：不通过')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('原因：还需要补充测试')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('未通过：测试不足')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('下一轮：下一轮补齐测试')

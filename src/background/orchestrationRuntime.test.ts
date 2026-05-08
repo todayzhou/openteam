@@ -59,7 +59,7 @@ describe('orchestration runtime', () => {
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
     const initialStore = await harness.getStore()
     const rolePromptMessage = latestUserMessage(initialStore, 'chat-1')
-    expect(rolePromptMessage.content).toBe('Ship the plan')
+    expect(rolePromptMessage.content).toContain('当前任务：\nShip the plan')
     expect(rolePromptMessage.content).not.toContain('Round')
     expect(rolePromptMessage.content).not.toContain('Orchestration step')
     expect(rolePromptMessage.mentionedRoleIds).toEqual(['role-1', 'role-2'])
@@ -77,6 +77,40 @@ describe('orchestration runtime', () => {
     expect(run.status).toBe('completed')
     expect(finalStore.activeOrchestrationRunIdByChatId['chat-1']).toBeUndefined()
     expect(run.stageRuns.map(stageRun => stageRun.status)).toEqual(['completed', 'completed'])
+  })
+
+  it('uses the same collaborative unread context prompt logic as ordinary group sends', async () => {
+    const store = makeStore(['role-1', 'role-2'])
+    store.chatsById['chat-1'].mode = 'collaborative'
+    store.messagesById['msg-context'] = {
+      id: 'msg-context',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'assistant',
+      content: '已有群聊背景',
+      roleId: 'role-2',
+      roleName: '产品经理',
+      createdAt: 1,
+      status: 'received',
+    }
+    store.chatsById['chat-1'].messageIds.push('msg-context')
+    store.chatsById['chat-1'].nextMessageSeq = 2
+    store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
+      { id: 'stage-1', kind: 'roles', name: 'Build', roleIds: ['role-1'], description: '判断需求是否合理' },
+    ])
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/one' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: '产品经理出需求，工程师判断需求是否合理' }) as { run: { id: string } }
+
+    const prompt = promptCalls(harness.tabsSendMessage)[0][1].content
+    expect(prompt).toContain('你正在一个 AI 群聊中。')
+    expect(prompt).toContain('群聊成员')
+    expect(prompt).toContain('你上次之后，群聊里有这些新内容：')
+    expect(prompt).toContain('产品经理：已有群聊背景')
+    expect(prompt).toContain('用户最新消息：\n当前任务：\n产品经理出需求，工程师判断需求是否合理')
+    const stored = await harness.getStore()
+    expect(stored.orchestrationRunsById[started.run.id].status).toBe('running')
   })
 
   it('starts fan-out stages in parallel after their shared source completes', async () => {
@@ -171,7 +205,7 @@ describe('orchestration runtime', () => {
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
   })
 
-  it('continues from a review back edge instead of restarting at the root node', async () => {
+  it('follows a review fail edge instead of restarting at the root node', async () => {
     const store = makeStore(['role-a', 'role-b', 'reviewer'])
     const stages: OrchestrationFlow['stages'] = [
       { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
@@ -185,7 +219,7 @@ describe('orchestration runtime', () => {
         edges: [
           { sourceStageId: 'stage-a', targetStageId: 'stage-b' },
           { sourceStageId: 'stage-b', targetStageId: 'review-1' },
-          { sourceStageId: 'review-1', targetStageId: 'stage-b', sourcePort: 'continue' },
+          { sourceStageId: 'review-1', targetStageId: 'stage-b', sourcePort: 'fail' },
         ],
       },
     }
@@ -202,7 +236,7 @@ describe('orchestration runtime', () => {
       chatId: 'chat-1',
       roleId: 'reviewer',
       messageId: lastPromptMessageId(harness.tabsSendMessage),
-      content: '{"decision":"continue","reason":"B needs revision.","failedCriteria":["detail"],"nextRoundInstruction":"Revise B only."}',
+      content: '{"decision":"fail","reason":"B needs revision.","failedCriteria":["detail"],"nextRoundInstruction":"Revise B only."}',
     })
 
     const calls = promptCalls(harness.tabsSendMessage)
@@ -230,7 +264,7 @@ describe('orchestration runtime', () => {
           { sourceStageId: 'stage-a', targetStageId: 'stage-b' },
           { sourceStageId: 'stage-b', targetStageId: 'review-1' },
           { sourceStageId: 'review-1', targetStageId: 'stage-final' },
-          { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'continue' },
+          { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'fail' },
         ],
       },
     }
@@ -250,6 +284,8 @@ describe('orchestration runtime', () => {
     expect(promptCalls(harness.tabsSendMessage)[2][0]).toBe(103)
     expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('a done')
     expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('b done')
+    expect(promptCalls(harness.tabsSendMessage)[2][1].content).toContain('你必须只返回合法 JSON')
+    expect(promptCalls(harness.tabsSendMessage)[2][1].content.trim()).toContain('"decision": "pass | fail"')
 
     await harness.invoke({
       type: 'TEAM_ROLE_REPLY',
