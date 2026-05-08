@@ -178,4 +178,17 @@ describe('ChatGPT site adapter', () => {
 
     expect(createChatGptAdapter().readResponseMarkdown?.(response)).toBe('## 方案\n\n**结论**：可以做\n\n- 先做复制\n- 再做兜底\n\n```\nconst ok = true\n```')
   })
+
+  it('treats ChatGPT streaming busy indicators as generating even without a visible stop button', () => {
+    document.body.innerHTML = `
+      <section data-turn="assistant" data-testid="conversation-turn-2">
+        <div data-message-author-role="assistant" data-message-id="reply-1">
+          <div class="markdown"><p>先输出的一段内容</p></div>
+          <div class="result-streaming pulse" aria-busy="true"></div>
+        </div>
+      </section>
+    `
+
+    expect(createChatGptAdapter().isGenerating()).toBe(true)
+  })
 })

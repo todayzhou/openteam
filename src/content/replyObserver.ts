@@ -12,9 +12,10 @@ type ReplySource = 'observer' | 'timeout-compensation' | 'polling-compensation'
 
 const RESPONSE_DEBOUNCE_MS = 2500
 const RESPONSE_FINAL_SETTLE_MS = 1500
-const RESPONSE_GENERATING_STABLE_GRACE_MS = 8000
 const REPLY_POLL_INTERVAL_MS = 2000
 const REPLY_TIMEOUT_MS = 120000
+const SHORT_REPLY_MAX_CHARS = 50
+const SHORT_REPLY_STABLE_SETTLE_MS = 5000
 
 export interface ReplyObserverController {
   capturePromptReplyBaseline(messageId: string | undefined): void
@@ -42,18 +43,19 @@ export function createReplyObserver(options: {
   const replyTimeout = createReplyTimeout(REPLY_TIMEOUT_MS, messageId => {
     const assignedRole = roleSession.getAssignedRole()
     log.warn('reply-timeout', { messageId, roleId: assignedRole?.roleId, roleName: assignedRole?.roleName })
-    if (tryReportLatestReply(messageId, 'timeout-compensation')) return
 
     const replyAttemptId = roleSession.getActiveReplyAttemptId()
+    if (!siteAdapter.isGenerating() && tryReportLatestReply(messageId, 'timeout-compensation')) return
+
     roleSession.clearActivePrompt(messageId)
     options
       .sendRuntimeMessage({
         type: 'TEAM_ROLE_STATUS',
         status: 'error',
-        error: `等待 Gemini 回复超时（${Math.round(REPLY_TIMEOUT_MS / 1000)} 秒）`,
+        error: `等待 ${siteAdapter.id} 回复超时（${Math.round(REPLY_TIMEOUT_MS / 1000)} 秒）`,
       })
       .catch(error => log.warn('reply-timeout:status-failed', { error: error instanceof Error ? error.message : String(error) }))
-    options.reportRoleError(messageId, `等待 Gemini 回复超时（${Math.round(REPLY_TIMEOUT_MS / 1000)} 秒）`, undefined, undefined, replyAttemptId)
+    options.reportRoleError(messageId, `等待 ${siteAdapter.id} 回复超时（${Math.round(REPLY_TIMEOUT_MS / 1000)} 秒）`, undefined, undefined, replyAttemptId)
     clearReplyPolling()
   })
 
@@ -124,6 +126,15 @@ export function createReplyObserver(options: {
     replyPollingInFlight = false
   }
 
+  function normalizedReplyLength(text: string): number {
+    return text.replace(/\s+/g, '').length
+  }
+
+  function isVeryShortReply(text: string): boolean {
+    const length = normalizedReplyLength(text)
+    return length > 0 && length <= SHORT_REPLY_MAX_CHARS
+  }
+
   function startReplyPolling(messageId: string, replyAttemptId: string | undefined): void {
     clearReplyPolling()
     replyTimeout.arm(messageId)
@@ -179,8 +190,18 @@ export function createReplyObserver(options: {
         schedule()
         return
       }
-      if (generating && stableDuration < RESPONSE_GENERATING_STABLE_GRACE_MS) {
+      if (generating) {
         log.debug('reply-poll:defer-generating', { messageId, stableDuration, textLength: candidate.text.length })
+        schedule()
+        return
+      }
+      if (isVeryShortReply(candidate.text) && stableDuration < SHORT_REPLY_STABLE_SETTLE_MS) {
+        log.debug('reply-poll:defer-short', {
+          messageId,
+          stableDuration,
+          textLength: candidate.text.length,
+          normalizedLength: normalizedReplyLength(candidate.text),
+        })
         schedule()
         return
       }
@@ -254,6 +275,45 @@ export function createReplyObserver(options: {
   function observeResponseContainers(onStableText: (text: string, element: Element) => void): void {
     let debounceTimer: number | null = null
     const pendingContainers = new Set<Element>()
+    const shortReplyCandidates = new WeakMap<Element, { text: string; since: number }>()
+
+    function trackShortReplyCandidate(container: Element): void {
+      const text = siteAdapter.readResponseText(container)
+      if (!isVeryShortReply(text)) {
+        shortReplyCandidates.delete(container)
+        return
+      }
+
+      const current = shortReplyCandidates.get(container)
+      if (current?.text === text) return
+      shortReplyCandidates.set(container, { text, since: Date.now() })
+    }
+
+    function shouldDeferShortReply(container: Element, text: string): boolean {
+      if (!isVeryShortReply(text)) {
+        shortReplyCandidates.delete(container)
+        return false
+      }
+
+      const current = shortReplyCandidates.get(container)
+      if (!current || current.text !== text) {
+        shortReplyCandidates.set(container, { text, since: Date.now() })
+        return true
+      }
+
+      const stableDuration = Date.now() - current.since
+      if (stableDuration >= SHORT_REPLY_STABLE_SETTLE_MS) {
+        shortReplyCandidates.delete(container)
+        return false
+      }
+
+      log.debug('observer:defer-short', {
+        stableDuration,
+        textLength: text.length,
+        normalizedLength: normalizedReplyLength(text),
+      })
+      return true
+    }
 
     function flush(): void {
       if (debounceTimer) {
@@ -285,6 +345,11 @@ export function createReplyObserver(options: {
             continue
           }
 
+          if (shouldDeferShortReply(snapshot.container, text)) {
+            schedule(snapshot.container)
+            continue
+          }
+
           log.debug('observer:stable', { textLength: text.length })
           onStableText(text, snapshot.container)
         }
@@ -292,6 +357,7 @@ export function createReplyObserver(options: {
     }
 
     function schedule(container: Element): void {
+      trackShortReplyCandidate(container)
       pendingContainers.add(container)
 
       if (debounceTimer) window.clearTimeout(debounceTimer)

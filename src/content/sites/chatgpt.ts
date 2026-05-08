@@ -21,6 +21,7 @@ const CHATGPT_SELECTORS = {
   copyButton:
     'button[data-testid="copy-turn-action-button"], button[aria-label="复制回复"], button[aria-label="Copy response"], button[aria-label="复制"], button[aria-label="Copy"]',
   turn: 'section[data-turn="assistant"][data-testid^="conversation-turn-"], [data-turn="assistant"][data-testid^="conversation-turn-"]',
+  activityIndicator: '.result-streaming[aria-busy="true"], [aria-busy="true"] .result-streaming, [data-testid*="thinking"], [data-testid*="reasoning"]',
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
@@ -167,7 +168,7 @@ function findResponseContainer(element: Element | null): Element | null {
 }
 
 function isChatGptGenerating(): boolean {
-  return Boolean(findChatGptStopButton())
+  return Boolean(findChatGptStopButton() || findChatGptActivityIndicator())
 }
 
 async function stopChatGptGenerating(): Promise<boolean> {
@@ -179,6 +180,25 @@ async function stopChatGptGenerating(): Promise<boolean> {
 
 function findChatGptStopButton(): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止/) && isClickableButton(button) && isVisibleInteractiveElement(button))
+}
+
+function findChatGptActivityIndicator(): Element | undefined {
+  const explicitIndicator = [...document.querySelectorAll(CHATGPT_SELECTORS.activityIndicator)].find(isVisibleOrDocumentedIndicator)
+  if (explicitIndicator) return explicitIndicator
+
+  return [...document.querySelectorAll(CHATGPT_SELECTORS.turn)].reverse().find(turn => {
+    if (turn.getAttribute('data-turn') !== 'assistant') return false
+    return hasShortThinkingStatus(turn)
+  })
+}
+
+function hasShortThinkingStatus(scope: Element): boolean {
+  return [...scope.querySelectorAll<HTMLElement>('div, span, p')].some(element => {
+    if (!isVisibleOrDocumentedIndicator(element)) return false
+    const text = (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim()
+    if (!text || text.length > 80) return false
+    return /^(正在)?思考中?[。.．…\s]*$|^thinking[.\s…]*$|^reasoning[.\s…]*$/i.test(text)
+  })
 }
 
 function findPrimaryResponseInTurn(turn: Element): Element | null {
@@ -199,4 +219,9 @@ function isVisibleInteractiveElement(element: Element): boolean {
   const style = window.getComputedStyle(element)
   if (style.pointerEvents === 'none') return false
   return isVisibleElement(element)
+}
+
+function isVisibleOrDocumentedIndicator(element: Element): boolean {
+  if (element.closest('[hidden], [aria-hidden="true"]')) return false
+  return isVisibleElement(element) || element.hasAttribute('aria-busy') || Boolean(element.getAttribute('data-testid'))
 }

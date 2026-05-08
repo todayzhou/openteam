@@ -13,7 +13,7 @@ describe('createReplyObserver', () => {
 
     const sentMessages: RoleToBackgroundMessage[] = []
     const roleSession = createFakeRoleSession()
-    const adapter = createFakeAdapter()
+    const adapter = createFakeAdapter({ isGenerating: () => false })
     const reportRoleError = vi.fn()
     const observer = createReplyObserver({
       siteAdapter: adapter,
@@ -49,6 +49,102 @@ describe('createReplyObserver', () => {
 
     vi.useRealTimers()
   })
+
+  it('keeps polling a very short stable reply so a longer continuation can be collected', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">好的。</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const adapter = createFakeAdapter({ isGenerating: () => false })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(4_000)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+
+    document.querySelector('message-content')!.textContent = '好的。这里是完整回复：短回复只是开头，后面还会继续补充关键判断、风险和下一步建议，应该等这一整段内容稳定后再上报。'
+
+    await vi.advanceTimersByTimeAsync(4_000)
+
+    expect(sentMessages).toContainEqual(expect.objectContaining({
+      type: 'TEAM_ROLE_REPLY',
+      content: '好的。这里是完整回复：短回复只是开头，后面还会继续补充关键判断、风险和下一步建议，应该等这一整段内容稳定后再上报。',
+    }))
+
+    vi.useRealTimers()
+  })
+
+  it('does not report stable partial text while the page is still generating', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">先输出的一段内容，后面还会继续补充。</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const adapter = createFakeAdapter({ isGenerating: () => true })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+
+    vi.useRealTimers()
+  })
+
+  it('does not use timeout compensation while the page is still generating', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = '<message-content id="new">先输出的一段内容，仍在思考后续。</message-content>'
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    const reportRoleError = vi.fn()
+    const adapter = createFakeAdapter({ isGenerating: () => true })
+    const observer = createReplyObserver({
+      siteAdapter: adapter,
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        return { ok: true } as never
+      },
+      reportRoleError,
+    })
+
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY' }))
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_STATUS', status: 'error' }))
+    expect(reportRoleError).toHaveBeenCalled()
+
+    vi.useRealTimers()
+  })
 })
 
 function createFakeRoleSession(): RoleSession {
@@ -76,7 +172,7 @@ function createFakeRoleSession(): RoleSession {
   }
 }
 
-function createFakeAdapter(): ChatSiteAdapter {
+function createFakeAdapter(overrides: Partial<ChatSiteAdapter> = {}): ChatSiteAdapter {
   return {
     id: 'gemini',
     getConversationSnapshot: () => ({ conversationId: 'conv-1', conversationUrl: 'https://gemini.google.com/app/conv-1' }),
@@ -89,6 +185,7 @@ function createFakeAdapter(): ChatSiteAdapter {
     stopGenerating: vi.fn(async () => true),
     fillAndSend: vi.fn(),
     collectPromptDiagnostics: () => ({}),
+    ...overrides,
   }
 }
 
