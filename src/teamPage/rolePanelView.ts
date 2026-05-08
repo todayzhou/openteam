@@ -79,7 +79,7 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
     const meta = document.createElement('div')
     meta.className = 'chat-row tiny role-meta'
-    meta.append(roleSiteControl(role), textNode(`cursor ${role.contextCursor}`), textNode(role.modelSource === 'external' ? 'API 模型' : role.geminiConversationUrl ? '已有会话' : '未绑定会话'))
+    meta.append(roleSiteControl(role), roleContextProgress(role), roleConnectionStatus(role))
     main.append(row, description, meta)
 
     const more = document.createElement('button')
@@ -257,11 +257,25 @@ function statusPill(status: string, label: string): HTMLElement {
   return pill
 }
 
+function roleContextProgress(role: GroupRole): HTMLElement {
+  const progress = document.createElement('span')
+  progress.className = 'role-meta-item'
+  progress.textContent = role.contextCursor > 0 ? `已读 ${role.contextCursor} 条` : '尚未读取消息'
+  return progress
+}
+
+function roleConnectionStatus(role: GroupRole): HTMLElement {
+  const status = document.createElement('span')
+  status.className = 'role-meta-item'
+  status.textContent = role.modelSource === 'external' ? '连接 API' : role.geminiConversationUrl ? '网页已连接' : '等待连接'
+  return status
+}
+
 function roleStatusLabel(status: RoleStatus): string {
   const labels: Record<RoleStatus, string> = {
     pending: '待唤醒',
     loading: '加载中',
-    ready: '就绪',
+    ready: '在线',
     thinking: '回复中',
     stopped: '已停止',
     error: '异常',
