@@ -45,34 +45,38 @@ export function buildCollaborativePrompt(input: BuildPromptInput): string {
   ])
 }
 
-export function buildInitializationPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[]): string {
+export function buildInitializationPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[], includePersona = true): string {
   if (chat.mode === 'collaborative') {
     return joinSections([
       '你正在一个 AI 群聊中。',
       buildMemberList(roles),
       `你的身份是「${role.name}」。`,
-      buildRoleBlock(role, true),
+      buildRoleBlock(role, includePersona),
       '请保持你的人员视角。你可以回应、补充或反驳其他成员的观点。当用户引用某位成员的发言时，请明确回应那条观点。',
     ])
   }
 
   return joinSections([
     `你是「${role.name}」。`,
-    buildRoleBlock(role, true),
+    buildRoleBlock(role, includePersona),
     '用户会给你任务。请始终保持你的人员视角，独立回答，不需要假设还有其他 AI 成员。',
   ])
 }
 
-export function buildInitPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[]): string {
-  return buildInitializationPrompt(chat, role, roles)
+export function buildInitPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[], includePersona = true): string {
+  return buildInitializationPrompt(chat, role, roles, includePersona)
 }
 
-export function buildReinitializationPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[]): string {
-  return buildInitializationPrompt(chat, role, roles)
+export function buildReinitializationPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[], includePersona = true): string {
+  return buildInitializationPrompt(chat, role, roles, includePersona)
 }
 
-export function buildReinitPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[]): string {
-  return buildReinitializationPrompt(chat, role, roles)
+export function buildReinitPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[], includePersona = true): string {
+  return buildReinitializationPrompt(chat, role, roles, includePersona)
+}
+
+export function roleUsesChatGptGptsPersona(role: GroupRole): boolean {
+  return role.chatSite === 'chatgpt' && Boolean(role.chatGptGptsUrl?.trim())
 }
 
 export function buildMemberList(roles: GroupRole[]): string {

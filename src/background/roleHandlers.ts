@@ -1,5 +1,5 @@
 import { getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
-import { buildReinitPrompt } from '../group/promptBuilder'
+import { buildReinitPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import {
   createGroupRole,
   createGroupRolesBatch,
@@ -209,6 +209,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
 
       const messageId = deps.newId('init')
       const replyAttemptId = deps.newId('attempt')
+      const includesPersona = !roleUsesChatGptGptsPersona(role)
       role.status = 'thinking'
       role.lastPromptMessageId = messageId
       role.replyAttemptId = replyAttemptId
@@ -227,8 +228,8 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
             roleId,
             messageId,
             replyAttemptId,
-            content: buildReinitPrompt(chat, role, roles),
-            includesPersona: true,
+            content: buildReinitPrompt(chat, role, roles, includesPersona),
+            includesPersona,
           },
         },
       }

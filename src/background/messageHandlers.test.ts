@@ -125,6 +125,52 @@ describe('background message handlers', () => {
     }))
   })
 
+  it('skips the OpenTeam persona when sending a first prompt to a ChatGPT GPTs role', async () => {
+    vi.resetModules()
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const store = createStoreWithReadyRole()
+          store.rolesById['role-1'].chatSite = 'chatgpt'
+          store.rolesById['role-1'].chatGptGptsUrl = 'https://chatgpt.com/g/g-coach'
+          const result = await mutator(store)
+          return { store, result }
+        }),
+      }
+    })
+
+    const { createMessageHandlers } = await import('./messageHandlers')
+    const binding: RuntimeFrameBinding = { chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 }
+    const sendPrompt = vi.fn()
+    const routes = createMessageHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      getChatStatusFromRoles: () => 'ready',
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        bind: vi.fn(),
+        getByAddress: vi.fn(),
+        getByRole: vi.fn(() => binding),
+      },
+      sendRoleMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendPrompt,
+    })
+
+    const sendRoute = routes.find(route => route.type === 'GROUP_MESSAGE_SEND')
+    await sendRoute?.handler({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 帮我评审一下' }, {})
+
+    expect(sendPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.objectContaining({
+        includesPersona: false,
+        content: expect.not.stringContaining('从工程角度分析问题'),
+      }),
+    }))
+  })
+
   it('stores no-mention messages without delivering prompts to group roles', async () => {
     vi.resetModules()
     let draftStore: OpenTeamStore | undefined

@@ -3,7 +3,7 @@ import { extractSupportedConversationId, normalizeSupportedChatConversationUrl }
 import { normalizeMessageHighlightColor } from '../group/highlightColors'
 import { buildExternalModelPrompt, type ExternalMemoryPatch } from '../group/externalModelContext'
 import { parseGroupMentions, roleMentionLabelOptionsFromSettings } from '../group/mentionParser'
-import { buildPrompt } from '../group/promptBuilder'
+import { buildPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import { mapRuntimeRoleStatus } from '../group/runtimeProtocol'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore, RuntimeFrameBinding } from '../group/types'
@@ -164,7 +164,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       for (const role of deliverableTargetRoles) {
         const roleId = role.id
         const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-        const includesPersona = shouldIncludePersonaForPrompt(roleHistoryCount)
+        const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
         const replyAttemptId = deps.newId('attempt')
         if (isExternalModelRole(role)) {
           const model = requireExternalModelForRole(store, role)
@@ -263,7 +263,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const messages = getChatMessages(store, chat)
       const reference = userMessage.references?.[0]
       const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-      const includesPersona = shouldIncludePersonaForPrompt(roleHistoryCount)
+      const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
       const replyAttemptId = deps.newId('attempt')
 
       userMessage.deliveryStatus ??= {}
@@ -889,7 +889,7 @@ async function prepareRoleErrorRetry(
     const roles = getChatRoles(store, chat)
     const messages = getChatMessages(store, chat)
     const roleHistoryCount = countLocalRoleHistory(messages, role, userMessage.id)
-    const includesPersona = shouldIncludePersonaForPrompt(roleHistoryCount)
+    const includesPersona = shouldIncludePersonaForPrompt(role, roleHistoryCount)
     const nextReplyAttemptId = deps.newId('attempt')
 
     userMessage.deliveryStatus ??= {}
@@ -1546,8 +1546,8 @@ function recoverDeliverableRoleStatus(role: GroupRole, timestamp: number, log: M
   role.updatedAt = timestamp
 }
 
-function shouldIncludePersonaForPrompt(roleHistoryCount: number): boolean {
-  return roleHistoryCount === 0
+function shouldIncludePersonaForPrompt(role: GroupRole, roleHistoryCount: number): boolean {
+  return !roleUsesChatGptGptsPersona(role) && roleHistoryCount === 0
 }
 
 function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, currentMessageId: string): number {

@@ -257,7 +257,14 @@ export function createReplyObserver(options: {
         conversationId: snapshot.conversationId,
         conversationUrl: snapshot.conversationUrl,
       })
-      .then(() => options.sendRuntimeMessage({ type: 'TEAM_ROLE_STATUS', status: 'idle' }))
+      .then(() => {
+        const activePrompt = roleSession.getActivePrompt()
+        if (activePrompt) {
+          log.info('reply:skip-idle-active-prompt', { completedMessageId: messageId, activeMessageId: activePrompt.messageId })
+          return undefined
+        }
+        return options.sendRuntimeMessage({ type: 'TEAM_ROLE_STATUS', status: 'idle' })
+      })
       .catch(error => log.warn('reply:report-failed', { error: error instanceof Error ? error.message : String(error) }))
   }
 

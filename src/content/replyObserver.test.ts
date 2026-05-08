@@ -145,6 +145,48 @@ describe('createReplyObserver', () => {
 
     vi.useRealTimers()
   })
+
+  it('does not send idle for an old reply after a new prompt starts in the same frame', async () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = ''
+
+    const sentMessages: RoleToBackgroundMessage[] = []
+    const roleSession = createFakeRoleSession()
+    let finishReplyReport: (() => void) | undefined
+    const observer = createReplyObserver({
+      siteAdapter: createFakeAdapter({ isGenerating: () => false }),
+      roleSession,
+      log: createFakeLog(),
+      sendRuntimeMessage: async message => {
+        sentMessages.push(message)
+        if (message.type === 'TEAM_ROLE_REPLY') {
+          await new Promise<void>(resolve => {
+            finishReplyReport = resolve
+          })
+        }
+        return { ok: true } as never
+      },
+      reportRoleError: vi.fn(),
+    })
+
+    observer.capturePromptReplyBaseline('msg-1')
+    roleSession.startPrompt('msg-1', 'attempt-1')
+    document.body.insertAdjacentHTML('beforeend', '<message-content id="new">第一段工程师回复已经完成，包含需求合理性判断、技术风险、实现步骤、边界条件和下一步建议，准备进入下一个工程师节点继续处理。</message-content>')
+    observer.startReplyPolling('msg-1', 'attempt-1')
+
+    await vi.advanceTimersByTimeAsync(6_000)
+    expect(sentMessages).toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_REPLY', messageId: 'msg-1' }))
+
+    roleSession.startPrompt('msg-2', 'attempt-2')
+    finishReplyReport?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(sentMessages).not.toContainEqual(expect.objectContaining({ type: 'TEAM_ROLE_STATUS', status: 'idle' }))
+
+    vi.useRealTimers()
+  })
 })
 
 function createFakeRoleSession(): RoleSession {

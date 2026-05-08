@@ -72,6 +72,68 @@ describe('background role handlers', () => {
     }))
   })
 
+  it('skips the OpenTeam persona when reinitializing a ChatGPT GPTs role', async () => {
+    vi.resetModules()
+    const startingStore = createDefaultStore()
+    startingStore.chatsById['chat-1'] = {
+      id: 'chat-1',
+      name: '方案讨论',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: [],
+      nextMessageSeq: 1,
+      status: 'ready',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    startingStore.rolesById['role-1'] = {
+      id: 'role-1',
+      chatId: 'chat-1',
+      name: '工程师',
+      systemPrompt: '从工程角度分析',
+      chatSite: 'chatgpt',
+      chatGptGptsUrl: 'https://chatgpt.com/g/g-coach',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(startingStore)
+          return { store: startingStore, result }
+        }),
+      }
+    })
+
+    const { createRoleHandlers } = await import('./roleHandlers')
+    const sendPrompt = vi.fn()
+    const routes = createRoleHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        getByRole: vi.fn(() => ({ chatId: 'chat-1', roleId: 'role-1', tabId: 101, frameId: 7, ready: true, lastSeenAt: 0 })),
+        removeRole: vi.fn(),
+      },
+      sendPrompt,
+    })
+
+    const reinitializeRoute = routes.find(route => route.type === 'GROUP_ROLE_REINITIALIZE')
+    await reinitializeRoute?.handler({ type: 'GROUP_ROLE_REINITIALIZE', chatId: 'chat-1', roleId: 'role-1' }, {})
+
+    expect(sendPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.objectContaining({
+        includesPersona: false,
+        content: expect.not.stringContaining('从工程角度分析'),
+      }),
+    }))
+  })
+
   it('closes the removed person frame without deleting historical messages', async () => {
     vi.resetModules()
     const startingStore = createDefaultStore()
