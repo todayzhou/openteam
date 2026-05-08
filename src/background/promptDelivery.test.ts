@@ -42,4 +42,45 @@ describe('background prompt delivery', () => {
       error: '输入框不可用',
     }))
   })
+
+  it('retries prompt delivery through a shared helper using the latest frame binding', async () => {
+    const { sendPromptDeliveryWithRetry } = await import('./promptDeliveryRetry')
+    const sendPrompt = vi.fn()
+      .mockRejectedValueOnce(new Error('输入框繁忙'))
+      .mockResolvedValueOnce(undefined)
+    const delivery = {
+      roleId: 'role-1',
+      tabId: 101,
+      frameId: 1,
+      message: {
+        type: 'TEAM_SEND_PROMPT' as const,
+        chatId: 'chat-1',
+        roleId: 'role-1',
+        messageId: 'msg-1',
+        content: '请分析',
+      },
+    }
+    const getLatestBinding = vi.fn()
+      .mockReturnValueOnce({ ready: true, tabId: 101, frameId: 1 })
+      .mockReturnValueOnce({ ready: true, tabId: 202, frameId: 2 })
+    const markDeliveryError = vi.fn(async () => undefined)
+
+    await expect(sendPromptDeliveryWithRetry({
+      log: { warn: vi.fn() },
+      sendPrompt,
+      getLatestBinding,
+      isDeliveryStillActive: vi.fn(async () => true),
+      markDeliveryError,
+      waitForRetry: vi.fn(async () => undefined),
+    }, {
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      delivery,
+      retryDelaysMs: [0],
+    })).resolves.toBe(true)
+
+    expect(sendPrompt).toHaveBeenNthCalledWith(1, expect.objectContaining({ tabId: 101, frameId: 1 }))
+    expect(sendPrompt).toHaveBeenNthCalledWith(2, expect.objectContaining({ tabId: 202, frameId: 2 }))
+    expect(markDeliveryError).not.toHaveBeenCalled()
+  })
 })

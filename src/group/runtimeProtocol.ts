@@ -44,7 +44,7 @@ export type RoleToBackgroundMessage =
   | { type: 'TEAM_ROLE_CONVERSATION_UPDATED'; chatId: string; roleId: string; conversationId?: string; conversationUrl?: string }
   | { type: 'TEAM_SEND_ACK'; chatId: string; roleId: string; messageId: string }
   | { type: 'TEAM_ROLE_ERROR'; chatId: string; roleId: string; messageId?: string; reason: string; replyAttemptId?: string }
-  | { type: 'TEAM_ROLE_STATUS'; status: RuntimeRoleStatus; error?: string }
+  | { type: 'TEAM_ROLE_STATUS'; status: RuntimeRoleStatus; chatId?: string; roleId?: string; error?: string }
   | {
       type: 'TEAM_ROLE_REPLY_RESYNC'
       chatId?: string

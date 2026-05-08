@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
-import { createOrchestrationCanvas } from './orchestrationCanvas'
+import { arrangeOrchestrationGraph, createOrchestrationCanvas } from './orchestrationCanvas'
 
 interface MockEdgeEvent {
   getSourceCellId?: () => string | undefined
@@ -67,6 +67,35 @@ const stages: OrchestrationStage[] = [
 ]
 
 describe('orchestration canvas', () => {
+  it('arranges branched and review-loop graphs into readable lanes', () => {
+    const branchStages: OrchestrationStage[] = [
+      { id: 'stage-a', kind: 'roles', name: '需求', roleIds: ['role-1'] },
+      { id: 'stage-b', kind: 'roles', name: '工程', roleIds: ['role-2'] },
+      { id: 'stage-c', kind: 'roles', name: '设计', roleIds: ['role-3'] },
+      { id: 'review-1', kind: 'review', name: '审核', roleIds: ['role-4'], review: { reviewerRoleIds: ['role-4'], instructions: '检查' } },
+      { id: 'stage-d', kind: 'roles', name: '发布', roleIds: ['role-5'] },
+    ]
+    const graphEdges: OrchestrationGraphSnapshot['edges'] = [
+      { sourceStageId: 'stage-a', targetStageId: 'stage-b' },
+      { sourceStageId: 'stage-a', targetStageId: 'stage-c' },
+      { sourceStageId: 'stage-b', targetStageId: 'review-1' },
+      { sourceStageId: 'stage-c', targetStageId: 'review-1' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-d', sourcePort: 'pass' },
+      { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'continue', vertices: [{ x: 1, y: 1 }] },
+    ]
+
+    const arranged = arrangeOrchestrationGraph(branchStages, graphEdges)
+    const byId = new Map(arranged.stages.map(stage => [stage.id, stage]))
+
+    expect(byId.get('stage-a')?.position?.x).toBeLessThan(byId.get('stage-b')?.position?.x ?? 0)
+    expect(byId.get('stage-b')?.position?.x).toBe(byId.get('stage-c')?.position?.x)
+    expect(byId.get('stage-b')?.position?.y).not.toBe(byId.get('stage-c')?.position?.y)
+    expect(byId.get('review-1')?.position?.x).toBeGreaterThan(byId.get('stage-b')?.position?.x ?? 0)
+    expect(byId.get('stage-d')?.position?.x).toBeGreaterThan(byId.get('review-1')?.position?.x ?? 0)
+    expect(arranged.edges.find(edge => edge.sourcePort === 'pass')?.vertices).toBeUndefined()
+    expect(arranged.edges.find(edge => edge.sourcePort === 'continue')?.vertices?.length).toBeGreaterThanOrEqual(2)
+  })
+
   it('loads X6 through the injected dynamic loader and renders one node per stage', async () => {
     MockGraph.instances = []
     const rootEl = document.createElement('div')
@@ -141,11 +170,12 @@ describe('orchestration canvas', () => {
         labels: undefined,
         tools: expect.objectContaining({
           name: 'edge-tools',
-          items: expect.arrayContaining([
-            expect.objectContaining({ name: 'vertices' }),
-            expect.objectContaining({ name: 'source-arrowhead' }),
-            expect.objectContaining({ name: 'target-arrowhead' }),
-          ]),
+          items: [expect.objectContaining({ name: 'vertices' })],
+        }),
+        attrs: expect.objectContaining({
+          line: expect.objectContaining({
+            targetMarker: { name: 'classic', width: 5, height: 4 },
+          }),
         }),
       }),
     ])

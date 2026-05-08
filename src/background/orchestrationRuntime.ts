@@ -17,6 +17,7 @@ import {
 } from '../group/types'
 import type { ExternalModelClient } from './externalModelClient'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
+import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
@@ -41,6 +42,8 @@ export interface OrchestrationRuntimeDependencies {
   runtimeFrames: Pick<RuntimeFrameRegistry, 'getByRole'>
   sendPrompt: PromptSender
   externalModelClient?: ExternalModelClient
+  deliveryRetryDelaysMs?: readonly number[]
+  waitForRetry?(ms: number): Promise<void>
 }
 
 interface StartStageResult {
@@ -319,6 +322,8 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     const promptMessage = createStagePromptMessage(deps, store, chat, run, flow, stage, stageIndex, taskMessage.content, timestamp)
     const targetRoleIds = stage.kind === 'review' ? [firstReviewerRoleId(stage)] : stage.roleIds
     promptMessage.targetRoleIds = targetRoleIds
+    promptMessage.mentionedRoleIds = targetRoleIds
+    promptMessage.mentionsAll = false
     promptMessage.deliveryStatus = Object.fromEntries(targetRoleIds.map(roleId => [roleId, 'pending' as const]))
     promptMessage.status = targetRoleIds.length > 0 ? 'pending' : 'received'
     store.messagesById[promptMessage.id] = promptMessage
@@ -407,13 +412,19 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
   })
 
   await deps.broadcastStoreUpdated(prepared.store)
-  await Promise.all(prepared.result.deliveries.map(async delivery => {
-    try {
-      await deps.sendPrompt(delivery)
-    } catch (error) {
-      await markOrchestrationRoleError(deps, { chatId: delivery.message.chatId, roleId: delivery.roleId, promptMessageId: delivery.message.messageId, error: error instanceof Error ? error.message : String(error) })
-    }
-  }))
+  await Promise.all(prepared.result.deliveries.map(delivery => sendPromptDeliveryWithRetry({
+    log: deps.log,
+    sendPrompt: deps.sendPrompt,
+    getLatestBinding: (chatId, roleId) => deps.runtimeFrames.getByRole(chatId, roleId),
+    isDeliveryStillActive: isOrchestrationPromptDeliveryStillActive,
+    markDeliveryError: (chatId, roleId, messageId, reason) => markOrchestrationRoleError(deps, { chatId, roleId, promptMessageId: messageId, error: reason }).then(() => undefined),
+    waitForRetry: deps.waitForRetry,
+  }, {
+    chatId: delivery.message.chatId,
+    messageId: delivery.message.messageId,
+    delivery,
+    retryDelaysMs: deps.deliveryRetryDelaysMs ?? DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS,
+  })))
   for (const delivery of prepared.result.externalDeliveries) {
     sendExternalOrchestrationPrompt(deps, delivery).catch(error => {
       deps.log.warn('orchestration-external:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, error: error instanceof Error ? error.message : String(error) })
@@ -479,8 +490,6 @@ function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store:
   const content = stage.kind === 'review'
     ? buildOrchestrationReviewPrompt({ userTask, flow, currentStage: stage, currentRound: run.currentRound, maxRounds: run.maxRounds, currentRoundOutputs: getCurrentRoundOutputs(store, chat, run), maxContextChars: store.settings.maxContextChars })
     : [
-      `Orchestration step ${stageIndex + 1}: ${stage.name}`,
-      `Round ${run.currentRound} / ${run.maxRounds}`,
       stageDescription ? `Node task:\n${stageDescription}` : undefined,
       userTask,
     ].filter((line): line is string => Boolean(line)).join('\n\n')
@@ -606,6 +615,21 @@ function hasRunningStageRuns(run: OrchestrationRun): boolean {
   return run.stageRuns.some(stageRun => stageRun.round === run.currentRound && stageRun.status === 'running')
 }
 
+async function isOrchestrationPromptDeliveryStillActive(chatId: string, roleId: string, messageId: string, replyAttemptId: string | undefined): Promise<boolean> {
+  const { result } = await mutateStore(store => {
+    const chat = requireChat(store, chatId)
+    const role = requireRole(store, chat.id, roleId)
+    if (role.status === 'stopped') return false
+    if (role.lastPromptMessageId !== messageId) return false
+    if (replyAttemptId && role.replyAttemptId !== replyAttemptId) return false
+    const runId = store.activeOrchestrationRunIdByChatId[chat.id]
+    const run = runId ? store.orchestrationRunsById[runId] : undefined
+    if (!run || run.status !== 'running') return false
+    return Boolean(findRunningStageRunForRolePrompt(run, roleId, messageId))
+  })
+  return result
+}
+
 function hasLiveRunningRolePrompt(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun): boolean {
   return run.stageRuns.some(stageRun => {
     if (stageRun.round !== run.currentRound || stageRun.status !== 'running') return false
@@ -668,23 +692,20 @@ function incomingEdgesByTarget(flow: OrchestrationFlow): Map<string, string[]> {
 }
 
 function dependencyGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {
-  return effectiveGraphEdges(flow).filter(edge => reviewEdgeBranch(flow, edge) !== 'continue')
+  return effectiveGraphEdges(flow).filter(edge => reviewEdgeBranch(edge) !== 'continue')
 }
 
 function reviewBranchStageIndices(flow: OrchestrationFlow, reviewStageId: string, branch: 'pass' | 'continue'): number[] {
   const stageIndexById = new Map(flow.stages.map((stage, index) => [stage.id, index]))
   return effectiveGraphEdges(flow)
-    .filter(edge => edge.sourceStageId === reviewStageId && reviewEdgeBranch(flow, edge) === branch)
+    .filter(edge => edge.sourceStageId === reviewStageId && reviewEdgeBranch(edge) === branch)
     .map(edge => stageIndexById.get(edge.targetStageId))
     .filter((index): index is number => typeof index === 'number')
 }
 
-function reviewEdgeBranch(flow: OrchestrationFlow, edge: OrchestrationGraphSnapshot['edges'][number]): 'pass' | 'continue' | undefined {
-  const sourceIndex = flow.stages.findIndex(stage => stage.id === edge.sourceStageId)
-  const targetIndex = flow.stages.findIndex(stage => stage.id === edge.targetStageId)
-  const source = flow.stages[sourceIndex]
-  if (!source || source.kind !== 'review' || sourceIndex < 0 || targetIndex < 0) return undefined
-  return targetIndex <= sourceIndex ? 'continue' : 'pass'
+function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number]): 'pass' | 'continue' | undefined {
+  if (edge.sourcePort === 'pass' || edge.sourcePort === 'continue') return edge.sourcePort
+  return undefined
 }
 
 function effectiveGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {

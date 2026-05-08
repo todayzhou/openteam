@@ -53,6 +53,7 @@ interface Harness {
     closeOrchestrationEl: HTMLButtonElement
     orchestrationTaskEl: HTMLTextAreaElement
     orchestrationPeopleListEl: HTMLElement
+    arrangeOrchestrationEl: HTMLButtonElement
     orchestrationCanvasEl: HTMLElement
     orchestrationHintEl: HTMLElement
     orchestrationStageSettingsEl: HTMLElement
@@ -75,6 +76,7 @@ function createHarness(): Harness {
       <button id="close-orchestration"></button>
       <textarea id="orchestration-task"></textarea>
       <div id="orchestration-people-list"></div>
+      <button id="arrange-orchestration"></button>
       <div id="orchestration-stage-canvas"></div>
       <p id="orchestration-empty-hint"></p>
       <div class="orchestration-layout">
@@ -108,6 +110,7 @@ function createHarness(): Harness {
       closeOrchestrationEl: document.querySelector('#close-orchestration') as HTMLButtonElement,
       orchestrationTaskEl: document.querySelector('#orchestration-task') as HTMLTextAreaElement,
       orchestrationPeopleListEl: document.querySelector('#orchestration-people-list') as HTMLElement,
+      arrangeOrchestrationEl: document.querySelector('#arrange-orchestration') as HTMLButtonElement,
       orchestrationCanvasEl: document.querySelector('#orchestration-stage-canvas') as HTMLElement,
       orchestrationHintEl: document.querySelector('#orchestration-empty-hint') as HTMLElement,
       orchestrationStageSettingsEl: document.querySelector('#orchestration-stage-settings') as HTMLElement,
@@ -275,6 +278,27 @@ describe('orchestration modal view', () => {
     const savePayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_FLOW_SAVE')?.[1] as { flow?: OrchestrationFlow }
     expect(savePayload.flow?.stages[0].description).toBe('先澄清用户目标，并输出优先级列表。')
     expect(savePayload.flow?.graph?.stageNodes[0].description).toBe('先澄清用户目标，并输出优先级列表。')
+  })
+
+  it('arranges the canvas from the top-right toolbar and saves node positions', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+    await flushAsync()
+    dropRole(harness, 'role-1')
+    dropRole(harness, 'role-2')
+    harness.refs.arrangeOrchestrationEl.click()
+    harness.refs.orchestrationTaskEl.value = '整理后保存'
+    harness.refs.saveOrchestrationEl.click()
+    await flushAsync()
+
+    const savePayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_FLOW_SAVE')?.[1] as { flow?: OrchestrationFlow }
+    expect(savePayload.flow?.graph?.stageNodes.map(stage => stage.position)).toEqual([
+      { x: 56, y: 96 },
+      { x: 236, y: 96 },
+    ])
   })
 
   it('restores a saved orchestration flow for the current chat after refresh', async () => {

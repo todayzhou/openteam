@@ -20,8 +20,8 @@ describe('orchestration prompt builders', () => {
     expect(prompt).toContain('Flow steps:')
     expect(prompt).toContain('1. Research (roles, id: stage-research; roles: role-researcher)')
     expect(prompt).toContain('2. Draft (roles, id: stage-draft; roles: role-writer, role-editor)')
-    expect(prompt).toContain('Current round: 2 / 3')
     expect(prompt).toContain('Current step: Draft (roles, id: stage-draft)')
+    expect(prompt).not.toContain('Current round:')
     expect(prompt).toContain('Node task:\nTurn the research into a launch-ready draft.')
     expect(prompt).not.toContain('Flow stages:')
     expect(prompt).not.toContain('Current stage:')
@@ -29,7 +29,7 @@ describe('orchestration prompt builders', () => {
     expect(prompt).toContain('Your role: Writer')
     expect(prompt).toContain('Role responsibility:\nDrafts the plan')
     expect(prompt).toContain('Role persona:\nWrite clearly.')
-    expect(prompt).toContain('Previous review instruction for this round:\nAddress launch risks.')
+    expect(prompt).toContain('Previous review instruction:\nAddress launch risks.')
     expect(prompt).toContain('[Researcher, step: stage-research, seq: 1]\nResearch summary')
   })
 
@@ -59,7 +59,7 @@ describe('orchestration prompt builders', () => {
     expect(editorPrompt).not.toContain('Writer output')
   })
 
-  it('builds review prompts with outputs and JSON-only schema', () => {
+  it('builds review prompts with review instructions and JSON-only schema', () => {
     const flow = makeFlow()
     const prompt = buildOrchestrationReviewPrompt({
       userTask: 'Create a launch plan.',
@@ -71,14 +71,15 @@ describe('orchestration prompt builders', () => {
     })
 
     expect(prompt).toContain('Review criteria:\nPlan must include risks and owner.')
-    expect(prompt).toContain('Current round: 1 / 3')
-    expect(prompt).toContain('Current-round outputs:\n[Writer, step: stage-draft, seq: 1]\nDraft output')
+    expect(prompt).not.toContain('Outputs to review:')
+    expect(prompt).not.toContain('Draft output')
+    expect(prompt).not.toContain('Current round:')
     expect(prompt).toContain('Decision enum: pass | continue | stop')
     expect(prompt).toContain('"nextRoundInstruction": "string; required and non-empty when decision is continue"')
     expect(prompt).toContain('Output only JSON')
   })
 
-  it('trims long context while preserving task, round, and latest prior output', () => {
+  it('trims long context while preserving task and latest prior output without round metadata', () => {
     const flow = makeFlow()
     const prompt = buildOrchestrationRolePrompt({
       userTask: 'Create a launch plan.',
@@ -95,7 +96,7 @@ describe('orchestration prompt builders', () => {
 
     expect(prompt.length).toBeLessThanOrEqual(900)
     expect(prompt).toContain('User task:\nCreate a launch plan.')
-    expect(prompt).toContain('Current round: 1 / 3')
+    expect(prompt).not.toContain('Current round:')
     expect(prompt).toContain('Latest prior output')
   })
 })

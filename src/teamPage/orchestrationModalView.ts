@@ -1,6 +1,6 @@
 import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 import { DEFAULT_ORCHESTRATION_MAX_ROUNDS, MAX_ORCHESTRATION_MAX_ROUNDS } from '../group/types'
-import { createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
+import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
 
 export interface OrchestrationModalDependencies {
   openOrchestrationEl: HTMLButtonElement
@@ -8,6 +8,7 @@ export interface OrchestrationModalDependencies {
   closeOrchestrationEl: HTMLButtonElement
   orchestrationTaskEl: HTMLTextAreaElement
   orchestrationPeopleListEl: HTMLElement
+  arrangeOrchestrationEl: HTMLButtonElement
   orchestrationCanvasEl: HTMLElement
   orchestrationHintEl: HTMLElement
   orchestrationStageSettingsEl: HTMLElement
@@ -323,6 +324,13 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     canvas?.selectStage(undefined)
   }
 
+  function arrangeCanvas(): void {
+    const arranged = arrangeOrchestrationGraph(draft.stages, draft.graphEdges)
+    draft.stages = arranged.stages
+    draft.graphEdges = arranged.edges
+    render()
+  }
+
   async function save(): Promise<void> {
     if (saving || running) return
     const chat = deps.getCurrentChat()
@@ -448,6 +456,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   function registerOrchestrationEvents(): void {
     deps.openOrchestrationEl.addEventListener('click', open)
     deps.closeOrchestrationEl.addEventListener('click', close)
+    deps.arrangeOrchestrationEl.addEventListener('click', arrangeCanvas)
     deps.orchestrationMaxRoundsEl.addEventListener('input', render)
     deps.saveOrchestrationEl.addEventListener('click', () => save().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
     deps.runOrchestrationEl.addEventListener('click', () => run().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
@@ -459,6 +468,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
 function cloneStages(stages: OrchestrationStage[]): OrchestrationStage[] {
   return stages.map(stage => ({
     ...stage,
+    position: stage.position ? { x: stage.position.x, y: stage.position.y } : undefined,
     roleIds: [...stage.roleIds],
     review: stage.review ? { ...stage.review, reviewerRoleIds: [...stage.review.reviewerRoleIds] } : undefined,
   }))

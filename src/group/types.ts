@@ -93,8 +93,14 @@ export interface OrchestrationStage {
   kind: OrchestrationStageKind
   name: string
   description?: string
+  position?: OrchestrationGraphNodePosition
   roleIds: string[]
   review?: OrchestrationReviewConfig
+}
+
+export interface OrchestrationGraphNodePosition {
+  x: number
+  y: number
 }
 
 export interface OrchestrationGraphEdgeVertex {

@@ -42,6 +42,7 @@ describe('team page dom refs', () => {
       <div id="orchestration-modal"></div>
       <textarea id="orchestration-task"></textarea>
       <div id="orchestration-people-list"></div>
+      <button id="arrange-orchestration"></button>
       <div id="orchestration-stage-canvas"></div>
       <p id="orchestration-empty-hint"></p>
       <div id="orchestration-stage-settings"></div>

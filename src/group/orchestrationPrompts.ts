@@ -35,13 +35,12 @@ export function buildOrchestrationRolePrompt(input: BuildOrchestrationRolePrompt
   return trimPromptSections([
     `User task:\n${input.userTask}`,
     `Flow steps:\n${flowText}`,
-    `Current round: ${input.currentRound} / ${input.maxRounds ?? input.flow.maxRounds}`,
     `Current step: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
     input.currentStage.description ? `Node task:\n${input.currentStage.description}` : undefined,
     `Your role: ${input.role.name}`,
     input.role.description ? `Role responsibility:\n${input.role.description}` : undefined,
     input.role.systemPrompt ? `Role persona:\n${input.role.systemPrompt}` : undefined,
-    previousReviewInstruction ? `Previous review instruction for this round:\n${previousReviewInstruction}` : undefined,
+    previousReviewInstruction ? `Previous review instruction:\n${previousReviewInstruction}` : undefined,
     previousReview ? `Previous review result:\n${previousReview}` : undefined,
     priorContext ? `Prior completed step messages:\n${priorContext}` : 'Prior completed step messages:\nNone.',
     'Respond only for your assigned role in the current step. Use the completed prior-step context, but do not assume access to live outputs from peers running in the same step.',
@@ -49,17 +48,14 @@ export function buildOrchestrationRolePrompt(input: BuildOrchestrationRolePrompt
 }
 
 export function buildOrchestrationReviewPrompt(input: BuildOrchestrationReviewPromptInput): string {
-  const outputs = formatMessageList(input.currentRoundOutputs)
   return trimPromptSections([
     `User task:\n${input.userTask}`,
-    `Review criteria:\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || 'Decide whether the current round output satisfies the user task.'}`,
-    `Current round: ${input.currentRound} / ${input.maxRounds ?? input.flow.maxRounds}`,
+    `Review criteria:\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || 'Decide whether the output satisfies the user task.'}`,
     `Current step: ${input.currentStage.name} (${input.currentStage.kind}, id: ${input.currentStage.id})`,
     input.currentStage.description ? `Node task:\n${input.currentStage.description}` : undefined,
-    `Current-round outputs:\n${outputs || 'None.'}`,
     'Decision enum: pass | continue | stop',
     `Output only JSON matching this schema:\n${reviewSchema()}`,
-    'Use decision "continue" only when another round is needed. When decision is "continue", nextRoundInstruction must be a non-empty instruction for the next round. Do not include markdown, prose, or code fences.',
+    'Use decision "continue" only when another pass is needed. When decision is "continue", nextRoundInstruction must be a non-empty instruction for the next pass. Do not include markdown, prose, or code fences.',
   ], input.maxContextChars)
 }
 

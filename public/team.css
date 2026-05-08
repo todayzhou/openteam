@@ -3104,6 +3104,25 @@ select:focus {
   min-height: 520px;
 }
 
+.orchestration-arrange {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  min-height: 30px;
+  border-color: rgba(125, 230, 234, 0.32);
+  padding: 0 12px;
+  background: rgba(7, 17, 27, 0.78);
+  color: #eaffff;
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.orchestration-arrange:hover {
+  border-color: rgba(125, 230, 234, 0.62);
+  background: rgba(20, 43, 55, 0.88);
+}
+
 .orchestration-stage-canvas .x6-port-body {
   transition: opacity 0.16s ease, stroke 0.16s ease, transform 0.16s ease;
 }
@@ -3138,8 +3157,7 @@ select:focus {
   stroke-width: 1.8;
 }
 
-.orchestration-stage-canvas .x6-edge .vertices .vertex,
-.orchestration-stage-canvas .x6-edge .arrowheads .arrowhead {
+.orchestration-stage-canvas .x6-edge .vertices .vertex {
   fill: #07111b;
   stroke: #7de6ea;
   stroke-width: 1.7px;

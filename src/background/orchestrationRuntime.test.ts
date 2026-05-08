@@ -57,6 +57,13 @@ describe('orchestration runtime', () => {
 
     expect(started.ok).toBe(true)
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
+    const initialStore = await harness.getStore()
+    const rolePromptMessage = latestUserMessage(initialStore, 'chat-1')
+    expect(rolePromptMessage.content).toBe('Ship the plan')
+    expect(rolePromptMessage.content).not.toContain('Round')
+    expect(rolePromptMessage.content).not.toContain('Orchestration step')
+    expect(rolePromptMessage.mentionedRoleIds).toEqual(['role-1', 'role-2'])
+    expect(promptCalls(harness.tabsSendMessage)[0][1].content).not.toContain('Current round:')
     const firstPrompt = firstPromptMessageId(harness.tabsSendMessage)
     await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: firstPrompt, content: 'role one done' })
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
@@ -207,6 +214,89 @@ describe('orchestration runtime', () => {
     expect(run.stageRuns.map(stageRun => `${stageRun.round}:${stageRun.stageId}`)).toEqual(['1:stage-a', '1:stage-b', '1:review-1', '2:stage-b'])
   })
 
+  it('does not start a review pass target before the review decision even when legacy review edges have no source port', async () => {
+    const store = makeStore(['role-a', 'role-b', 'reviewer', 'role-final'])
+    const stages: OrchestrationFlow['stages'] = [
+      { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
+      { id: 'stage-b', kind: 'roles', name: 'B', roleIds: ['role-b'] },
+      { id: 'stage-final', kind: 'roles', name: 'Final', roleIds: ['role-final'] },
+      { id: 'review-1', kind: 'review', name: 'Review', roleIds: ['reviewer'], review: { reviewerRoleIds: ['reviewer'], instructions: 'Check output' } },
+    ]
+    store.orchestrationFlowsById['flow-1'] = {
+      ...makeFlow('chat-1', stages, 2),
+      graph: {
+        stageNodes: stages,
+        edges: [
+          { sourceStageId: 'stage-a', targetStageId: 'stage-b' },
+          { sourceStageId: 'stage-b', targetStageId: 'review-1' },
+          { sourceStageId: 'review-1', targetStageId: 'stage-final' },
+          { sourceStageId: 'review-1', targetStageId: 'stage-a', sourcePort: 'continue' },
+        ],
+      },
+    }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-a' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/a' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-b' }, { tab: { id: 102 } as chrome.tabs.Tab, frameId: 2, url: 'https://gemini.google.com/app/b' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'reviewer' }, { tab: { id: 103 } as chrome.tabs.Tab, frameId: 3, url: 'https://gemini.google.com/app/review' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-final' }, { tab: { id: 104 } as chrome.tabs.Tab, frameId: 4, url: 'https://gemini.google.com/app/final' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: 'Ship the plan' }) as { run: { id: string } }
+
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(1)
+    expect(promptCalls(harness.tabsSendMessage)[0][0]).toBe(101)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-a', messageId: lastPromptMessageId(harness.tabsSendMessage), content: 'a done' })
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-b', messageId: lastPromptMessageId(harness.tabsSendMessage), content: 'b done' })
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(3)
+    expect(promptCalls(harness.tabsSendMessage)[2][0]).toBe(103)
+    expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('a done')
+    expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('b done')
+
+    await harness.invoke({
+      type: 'TEAM_ROLE_REPLY',
+      chatId: 'chat-1',
+      roleId: 'reviewer',
+      messageId: lastPromptMessageId(harness.tabsSendMessage),
+      content: '{"decision":"pass","reason":"Good.","failedCriteria":[],"nextRoundInstruction":""}',
+    })
+
+    const calls = promptCalls(harness.tabsSendMessage)
+    expect(calls).toHaveLength(4)
+    expect(calls[3][0]).toBe(104)
+    const finalStore = await harness.getStore()
+    const run = finalStore.orchestrationRunsById[started.run.id]
+    expect(run.stageRuns.map(stageRun => stageRun.stageId)).toEqual(['stage-a', 'stage-b', 'review-1', 'stage-final'])
+  })
+
+  it('retries a failed middle node without rerunning completed previous nodes', async () => {
+    const store = makeStore(['role-a', 'role-b', 'role-c'])
+    store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
+      { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
+      { id: 'stage-b', kind: 'roles', name: 'B', roleIds: ['role-b'] },
+      { id: 'stage-c', kind: 'roles', name: 'C', roleIds: ['role-c'] },
+    ])
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-a' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/a' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-b' }, { tab: { id: 102 } as chrome.tabs.Tab, frameId: 2, url: 'https://gemini.google.com/app/b' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-c' }, { tab: { id: 103 } as chrome.tabs.Tab, frameId: 3, url: 'https://gemini.google.com/app/c' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: 'Ship the plan' }) as { run: { id: string } }
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-a', messageId: lastPromptMessageId(harness.tabsSendMessage), content: 'a done' })
+    await harness.invoke({ type: 'TEAM_ROLE_ERROR', chatId: 'chat-1', roleId: 'role-b', messageId: lastPromptMessageId(harness.tabsSendMessage), reason: 'send failed' })
+
+    const erroredStore = await harness.getStore()
+    expect(erroredStore.orchestrationRunsById[started.run.id].stageRuns.map(stageRun => `${stageRun.status}:${stageRun.stageId}`)).toEqual(['completed:stage-a', 'error:stage-b'])
+
+    await harness.invoke({ type: 'GROUP_ORCHESTRATION_RETRY_STAGE', chatId: 'chat-1', stageId: 'stage-b' })
+
+    const calls = promptCalls(harness.tabsSendMessage)
+    expect(calls).toHaveLength(3)
+    expect(calls[0][0]).toBe(101)
+    expect(calls[1][0]).toBe(102)
+    expect(calls[2][0]).toBe(102)
+    const retriedStore = await harness.getStore()
+    expect(retriedStore.orchestrationRunsById[started.run.id].stageRuns.map(stageRun => `${stageRun.status}:${stageRun.stageId}`)).toEqual(['completed:stage-a', 'running:stage-b'])
+  })
+
   it('keeps invalid review JSON in error until retry or stop', async () => {
     const store = makeStore(['worker', 'reviewer'])
     store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
@@ -309,8 +399,10 @@ describe('orchestration runtime', () => {
   })
 })
 
-function promptCalls(mock: ReturnType<typeof vi.fn>): Array<[number, { type?: string; messageId: string }, { frameId: number }]> {
-  return mock.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT') as Array<[number, { type?: string; messageId: string }, { frameId: number }]>
+type PromptCall = [number, { type?: string; messageId: string; content: string }, { frameId: number }]
+
+function promptCalls(mock: ReturnType<typeof vi.fn>): PromptCall[] {
+  return mock.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT') as PromptCall[]
 }
 
 function firstPromptMessageId(mock: ReturnType<typeof vi.fn>): string {
@@ -320,6 +412,14 @@ function firstPromptMessageId(mock: ReturnType<typeof vi.fn>): string {
 function lastPromptMessageId(mock: ReturnType<typeof vi.fn>): string {
   const calls = promptCalls(mock)
   return calls[calls.length - 1][1].messageId
+}
+
+function latestUserMessage(store: OpenTeamStore, chatId: string) {
+  const chat = store.chatsById[chatId]
+  const messages = chat.messageIds.map(messageId => store.messagesById[messageId])
+  const message = [...messages].reverse().find(item => item?.type === 'user')
+  if (!message) throw new Error('Expected a user message')
+  return message
 }
 
 function makeStore(roleIds: string[]): OpenTeamStore {

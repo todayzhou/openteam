@@ -229,11 +229,12 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
         const isReview = stage.kind === 'review'
         const selected = selectedStageId === stage.id
         const style = nodeStyle(selected)
+        const fallbackPosition = defaultStagePosition(index, isReview)
         return {
           id: stage.id,
           shape: isReview ? 'polygon' : 'rect',
-          x: 48 + index * 154,
-          y: isReview ? 106 : 72,
+          x: stage.position?.x ?? fallbackPosition.x,
+          y: stage.position?.y ?? fallbackPosition.y,
           width: isReview ? 104 : 124,
           height: isReview ? 78 : 56,
           label: `${roleLabel}${siteLabel ? `\n${siteLabel}` : ''}`,
@@ -323,8 +324,6 @@ function edgeTools(): Record<string, unknown> {
     name: 'edge-tools',
     items: [
       { name: 'vertices', args: { snapRadius: 12, addable: true, removable: true, removeRedundancies: true, attrs: handleAttrs } },
-      { name: 'source-arrowhead', args: { attrs: handleAttrs } },
-      { name: 'target-arrowhead', args: { attrs: handleAttrs } },
     ],
   }
 }
@@ -460,4 +459,101 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function stageRoleLabel(stage: OrchestrationStage, rolesById: Record<string, GroupRole>): string {
   return stage.roleIds.map(roleId => rolesById[roleId]?.name ?? '未知人员').join(' + ')
+}
+
+export function arrangeOrchestrationGraph(stages: OrchestrationStage[], edges: OrchestrationGraphSnapshot['edges']): { stages: OrchestrationStage[]; edges: OrchestrationGraphSnapshot['edges'] } {
+  if (stages.length === 0) return { stages: [], edges: [] }
+  const stageIds = new Set(stages.map(stage => stage.id))
+  const validEdges = uniqueEdges(edges.filter(edge => stageIds.has(edge.sourceStageId) && stageIds.has(edge.targetStageId)))
+  const forwardEdges = validEdges.filter(edge => edge.sourcePort !== 'continue')
+  const indexById = new Map(stages.map((stage, index) => [stage.id, index]))
+  const levelById = graphLevels(stages, forwardEdges)
+  const lanesByLevel = new Map<number, OrchestrationStage[]>()
+  for (const stage of stages) {
+    const level = levelById.get(stage.id) ?? indexById.get(stage.id) ?? 0
+    lanesByLevel.set(level, [...lanesByLevel.get(level) ?? [], stage])
+  }
+
+  const positioned = stages.map(stage => {
+    const level = levelById.get(stage.id) ?? indexById.get(stage.id) ?? 0
+    const lane = lanesByLevel.get(level) ?? [stage]
+    const laneIndex = lane.findIndex(item => item.id === stage.id)
+    const y = laneY(Math.max(0, laneIndex), lane.length)
+    return {
+      ...stage,
+      roleIds: [...stage.roleIds],
+      review: stage.review ? { ...stage.review, reviewerRoleIds: [...stage.review.reviewerRoleIds] } : undefined,
+      position: { x: 56 + level * 180, y },
+    }
+  })
+  const positionById = new Map(positioned.map(stage => [stage.id, stage.position]))
+  return {
+    stages: positioned,
+    edges: validEdges.map(edge => arrangeEdge(edge, positionById)),
+  }
+}
+
+function graphLevels(stages: OrchestrationStage[], edges: OrchestrationGraphSnapshot['edges']): Map<string, number> {
+  if (edges.length === 0) return new Map(stages.map((stage, index) => [stage.id, index]))
+  const levelById = new Map(stages.map(stage => [stage.id, 0]))
+  const outgoing = new Map<string, OrchestrationGraphSnapshot['edges']>()
+  const indegree = new Map(stages.map(stage => [stage.id, 0]))
+  for (const edge of edges) {
+    outgoing.set(edge.sourceStageId, [...outgoing.get(edge.sourceStageId) ?? [], edge])
+    indegree.set(edge.targetStageId, (indegree.get(edge.targetStageId) ?? 0) + 1)
+  }
+  const queue = stages.filter(stage => (indegree.get(stage.id) ?? 0) === 0).map(stage => stage.id)
+  if (queue.length === 0) queue.push(stages[0]?.id ?? '')
+  const visited = new Set<string>()
+  for (let index = 0; index < queue.length; index += 1) {
+    const stageId = queue[index]
+    if (!stageId) continue
+    visited.add(stageId)
+    const sourceLevel = levelById.get(stageId) ?? 0
+    for (const edge of outgoing.get(stageId) ?? []) {
+      levelById.set(edge.targetStageId, Math.max(levelById.get(edge.targetStageId) ?? 0, sourceLevel + 1))
+      const nextIndegree = (indegree.get(edge.targetStageId) ?? 1) - 1
+      indegree.set(edge.targetStageId, nextIndegree)
+      if (nextIndegree <= 0) queue.push(edge.targetStageId)
+    }
+  }
+  for (const stage of stages) {
+    if (visited.has(stage.id)) continue
+    const incoming = edges.filter(edge => edge.targetStageId === stage.id)
+    const fallbackLevel = incoming.reduce((max, edge) => Math.max(max, (levelById.get(edge.sourceStageId) ?? 0) + 1), 0)
+    levelById.set(stage.id, fallbackLevel)
+  }
+  return levelById
+}
+
+function arrangeEdge(edge: OrchestrationGraphSnapshot['edges'][number], positionById: Map<string, { x: number; y: number } | undefined>): OrchestrationGraphSnapshot['edges'][number] {
+  const source = positionById.get(edge.sourceStageId)
+  const target = positionById.get(edge.targetStageId)
+  const arranged = {
+    sourceStageId: edge.sourceStageId,
+    targetStageId: edge.targetStageId,
+    ...(edge.sourcePort ? { sourcePort: edge.sourcePort } : {}),
+    ...(edge.targetPort ? { targetPort: edge.targetPort } : {}),
+  }
+  if (!source || !target || edge.sourcePort !== 'continue') return arranged
+  const sourceWidth = 104
+  const sourceHeight = 78
+  const targetHeight = 56
+  const bottomY = Math.max(source.y + sourceHeight + 74, target.y + targetHeight + 74)
+  return {
+    ...arranged,
+    vertices: [
+      { x: source.x + sourceWidth / 2, y: bottomY },
+      { x: target.x - 44, y: bottomY },
+    ],
+  }
+}
+
+function laneY(index: number, count: number): number {
+  if (count <= 1) return 96
+  return 96 + index * 112
+}
+
+function defaultStagePosition(index: number, isReview: boolean): { x: number; y: number } {
+  return { x: 48 + index * 154, y: isReview ? 106 : 72 }
 }

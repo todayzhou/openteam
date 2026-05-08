@@ -3,6 +3,7 @@ import { createConversationMonitor, type ConversationMonitor } from './conversat
 import { registerFrameRoleHandshake } from './frameHandshake'
 import { isDirectEmbeddedFrame, isEmbeddedFrame } from './frameEnvironment'
 import { waitBeforePromptInput, PROMPT_INPUT_DELAY_MS } from './promptDelay'
+import { promptStatusMessage } from './promptStatus'
 import { createReplyObserver, type ReplyObserverController } from './replyObserver'
 import { readResyncReplyText } from './reportableReply'
 import { contentLog as log, sendRuntimeMessage, type ContentRuntimeMessage } from './runtimeClient'
@@ -199,7 +200,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
 
   replyObserver?.capturePromptReplyBaseline(message.messageId)
   roleSession.startPrompt(message.messageId, message.replyAttemptId)
-  sendBackgroundMessage({ type: 'TEAM_ROLE_STATUS', status: 'sending' })
+  sendBackgroundMessage(promptStatusMessage('sending', promptChatId, promptRoleId))
     .then(() => {
       log.info('message:send-prompt:delay-before-input', { messageId: message.messageId, delayMs: PROMPT_INPUT_DELAY_MS })
       return waitBeforePromptInput()
@@ -213,7 +214,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
         )
       }
     })
-    .then(() => sendBackgroundMessage({ type: 'TEAM_ROLE_STATUS', status: 'generating' }))
+    .then(() => sendBackgroundMessage(promptStatusMessage('generating', promptChatId, promptRoleId)))
     .then(() => {
       replyObserver?.startReplyPolling(message.messageId, message.replyAttemptId)
       log.info('message:send-prompt:ok', { messageId: message.messageId })
@@ -226,7 +227,7 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
       replyObserver?.clearPromptReplyBaseline()
       replyObserver?.clearReplyPolling()
       reportRoleError(message.messageId, reason, promptChatId, promptRoleId, message.replyAttemptId)
-      sendBackgroundMessage({ type: 'TEAM_ROLE_STATUS', status: 'error', error: reason }).catch(() => undefined)
+      sendBackgroundMessage(promptStatusMessage('error', promptChatId, promptRoleId, reason)).catch(() => undefined)
       sendResponse({ ok: false, messageId: message.messageId, error: reason })
     })
 }

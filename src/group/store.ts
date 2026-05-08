@@ -424,13 +424,19 @@ function normalizeOrchestrationFlowRecord(raw: unknown): Record<string, Orchestr
 
 function normalizeOrchestrationStages(raw: unknown): OrchestrationFlow['stages'] {
   if (!Array.isArray(raw)) return []
-  return raw.filter((stage): stage is OrchestrationFlow['stages'][number] => (
-    isRecord(stage)
-    && typeof stage.id === 'string'
-    && (stage.kind === 'roles' || stage.kind === 'review')
-    && typeof stage.name === 'string'
-    && Array.isArray(stage.roleIds)
-  ))
+  return raw.flatMap(stage => {
+    if (!isRecord(stage) || typeof stage.id !== 'string' || (stage.kind !== 'roles' && stage.kind !== 'review') || typeof stage.name !== 'string' || !Array.isArray(stage.roleIds)) return []
+    const position = normalizeOrchestrationNodePosition(stage.position)
+    return [{
+      ...(stage as unknown as OrchestrationFlow['stages'][number]),
+      ...(position ? { position } : {}),
+    }]
+  })
+}
+
+function normalizeOrchestrationNodePosition(raw: unknown): OrchestrationFlow['stages'][number]['position'] | undefined {
+  if (!isRecord(raw) || typeof raw.x !== 'number' || typeof raw.y !== 'number' || !Number.isFinite(raw.x) || !Number.isFinite(raw.y)) return undefined
+  return { x: raw.x, y: raw.y }
 }
 
 function normalizeOrchestrationGraphSnapshot(raw: unknown): OrchestrationFlow['graph'] {

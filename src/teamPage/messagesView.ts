@@ -384,7 +384,6 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function orchestrationMessageLabelText(message: GroupMessage): string {
     const parts = ['编排']
-    if (message.orchestrationRound) parts.push(`第 ${message.orchestrationRound} 轮`)
     if (message.orchestrationStageIndex !== undefined) parts.push(`第 ${message.orchestrationStageIndex + 1} 步`)
     parts.push(orchestrationKindLabel(message.orchestrationKind))
     return parts.join(' · ')

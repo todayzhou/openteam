@@ -441,7 +441,7 @@ describe('group store', () => {
       ],
       graph: {
         stageNodes: [
-          { id: 'stage-node-1', kind: 'roles', name: 'Draft node', roleIds: ['role-1', 'role-2'] },
+          { id: 'stage-node-1', kind: 'roles', name: 'Draft node', roleIds: ['role-1', 'role-2'], position: { x: 56, y: 96 } },
           { id: 'stage-node-2', kind: 'review', name: 'Review node', roleIds: ['role-reviewer'], review: { reviewerRoleIds: ['role-reviewer'] } },
         ],
         edges: [{ sourceStageId: 'stage-node-1', targetStageId: 'stage-node-2', vertices: [{ x: 120, y: 64 }, { x: 180, y: 96 }] }],
@@ -504,7 +504,7 @@ describe('group store', () => {
           ],
           graph: {
             stageNodes: [
-              { id: 'stage-node-1', kind: 'roles', roleIds: ['role-1', 'role-2'] },
+              { id: 'stage-node-1', kind: 'roles', roleIds: ['role-1', 'role-2'], position: { x: 56, y: 96 } },
               { id: 'stage-node-2', kind: 'review', roleIds: ['role-reviewer'] },
             ],
             edges: [{ sourceStageId: 'stage-node-1', targetStageId: 'stage-node-2', vertices: [{ x: 120, y: 64 }, { x: 180, y: 96 }] }],

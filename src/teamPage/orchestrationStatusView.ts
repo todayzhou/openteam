@@ -50,6 +50,8 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
 
     const details = document.createElement('div')
     details.className = 'orchestration-status-details'
+    const failedStage = run.status === 'error' || current?.status === 'error' ? currentStageName(flow, current) : undefined
+    if (failedStage) details.append(detail('失败节点', failedStage, 'error'))
     const roleText = currentRoleText(current)
     if (roleText) details.append(detail('当前', roleText))
     const waitingText = waitingStageText(run, flow)
@@ -96,9 +98,9 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     }
     if ((run.status === 'error' || current?.status === 'error') && current) {
       if (current.kind === 'review') {
-        actions.append(actionButton('重试复核', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_REVIEW', { chatId: chat.id })))
+        actions.append(actionButton('重发', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_REVIEW', { chatId: chat.id })))
       } else {
-        actions.append(actionButton('重试节点', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: chat.id, stageId: current.stageId })))
+        actions.append(actionButton('重发', 'btn-primary', () => retryAction(chat, current, 'GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: chat.id, stageId: current.stageId })))
       }
       actions.append(actionButton('跳过节点', 'btn-ghost', () => runAction('GROUP_ORCHESTRATION_SKIP_STAGE', { chatId: chat.id, stageId: current.stageId })))
     }
@@ -142,6 +144,11 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
   }
 
   return { renderOrchestrationStatus }
+}
+
+function currentStageName(flow: OrchestrationFlow, current: OrchestrationStageRun | undefined): string | undefined {
+  if (!current) return undefined
+  return flow.stages.find(stage => stage.id === current.stageId)?.name ?? current.stageId
 }
 
 function currentStageRun(run: OrchestrationRun): OrchestrationStageRun | undefined {

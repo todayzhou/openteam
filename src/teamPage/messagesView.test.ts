@@ -1825,7 +1825,7 @@ describe('team page messages view boundary', () => {
       log: { warn: vi.fn() },
     }).renderMessages()
 
-    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 1 轮 · 第 2 步 · 复核')
+    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 2 步 · 复核')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('决策：继续')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('原因：还需要补充测试')
     expect(messagesEl.querySelector('.orchestration-review-summary')?.textContent).toContain('未通过：测试不足')
@@ -1893,10 +1893,10 @@ describe('team page messages view boundary', () => {
     })
 
     view.renderMessages()
-    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 1 轮 · 第 1 步 · 状态')
+    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 1 步 · 状态')
     message.orchestrationStageIndex = 1
     view.renderMessages()
 
-    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 1 轮 · 第 2 步 · 状态')
+    expect(messagesEl.querySelector('.orchestration-message-label')?.textContent).toBe('编排 · 第 2 步 · 状态')
   })
 })

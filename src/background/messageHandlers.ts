@@ -10,13 +10,13 @@ import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageRe
 import { createExternalModelClient, type ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { PromptDelivery, PromptSender } from './promptDelivery'
+import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
 import { messageTabId, rememberHost, senderFrameId, senderTabId, type RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
 
 const STALE_THINKING_MS = 120_000
-const DEFAULT_DELIVERY_RETRY_DELAYS_MS = [2_000, 2_000, 4_000, 8_000, 15_000] as const
 const DEFAULT_EXTERNAL_MODEL_RETRY_DELAYS_MS = [2_000, 2_000, 4_000, 8_000, 15_000] as const
 const DEFAULT_ROLE_ERROR_RETRY_DELAYS_MS = [2_000, 8_000] as const
 
@@ -970,12 +970,6 @@ function roleErrorRetryKey(chatId: string, roleId: string, messageId: string): s
   return `${chatId}:${roleId}:${messageId}`
 }
 
-function withLatestPromptBinding(deps: MessageHandlersDependencies, chatId: string, delivery: PromptDelivery): PromptDelivery {
-  const binding = deps.runtimeFrames.getByRole(chatId, delivery.roleId)
-  if (!binding?.ready) return delivery
-  return { ...delivery, tabId: binding.tabId, frameId: binding.frameId }
-}
-
 async function isPromptDeliveryStillActive(
   chatId: string,
   roleId: string,
@@ -1084,33 +1078,19 @@ async function sendPromptDeliveries(deps: MessageHandlersDependencies, deepSeekP
 }
 
 async function sendPromptDelivery(deps: MessageHandlersDependencies, chatId: string, messageId: string, delivery: PromptDelivery): Promise<boolean> {
-  const retryDelays = deps.deliveryRetryDelaysMs ?? DEFAULT_DELIVERY_RETRY_DELAYS_MS
-  let lastReason = '发送失败'
-
-  for (let attemptIndex = 0; attemptIndex <= retryDelays.length; attemptIndex += 1) {
-    try {
-      await deps.sendPrompt(withLatestPromptBinding(deps, chatId, delivery))
-      return true
-    } catch (error) {
-      lastReason = error instanceof Error ? error.message : String(error)
-      const canRetry = attemptIndex < retryDelays.length && await isPromptDeliveryStillActive(chatId, delivery.roleId, messageId, delivery.message.replyAttemptId)
-      if (!canRetry) break
-
-      const delayMs = retryDelays[attemptIndex] ?? 0
-      deps.log.warn('delivery:retry-scheduled', {
-        chatId,
-        roleId: delivery.roleId,
-        messageId,
-        retryCount: attemptIndex + 1,
-        delayMs,
-        reason: lastReason,
-      })
-      await waitForRetryDelay(deps, delayMs)
-    }
-  }
-
-  await markDeliveryError(deps, chatId, delivery.roleId, messageId, lastReason)
-  return false
+  return sendPromptDeliveryWithRetry({
+    log: deps.log,
+    sendPrompt: deps.sendPrompt,
+    getLatestBinding: (targetChatId, roleId) => deps.runtimeFrames.getByRole(targetChatId, roleId),
+    isDeliveryStillActive: isPromptDeliveryStillActive,
+    markDeliveryError: (targetChatId, roleId, targetMessageId, reason) => markDeliveryError(deps, targetChatId, roleId, targetMessageId, reason),
+    waitForRetry: deps.waitForRetry,
+  }, {
+    chatId,
+    messageId,
+    delivery,
+    retryDelaysMs: deps.deliveryRetryDelaysMs ?? DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS,
+  })
 }
 
 async function sendExternalModelDelivery(deps: MessageHandlersDependencies, client: ExternalModelClient, runs: ExternalModelRunRegistry, delivery: ExternalPromptDelivery): Promise<OpenTeamStore | undefined> {
