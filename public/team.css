@@ -2937,6 +2937,10 @@ select:focus {
   min-height: 520px;
 }
 
+.orchestration-layout.settings-hidden {
+  grid-template-columns: 220px minmax(450px, 1fr);
+}
+
 .orchestration-sidebar,
 .orchestration-settings {
   display: flex;
@@ -2947,6 +2951,10 @@ select:focus {
   border-radius: 16px;
   padding: 14px;
   background: rgba(8, 17, 26, 0.66);
+}
+
+.orchestration-settings[hidden] {
+  display: none;
 }
 
 .orchestration-settings-heading h3 {
@@ -2973,28 +2981,35 @@ select:focus {
 
 .orchestration-person {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
   border: 1px solid rgba(132, 153, 171, 0.18);
-  border-radius: 14px;
-  padding: 9px;
+  border-radius: 12px;
+  padding: 8px;
   background: rgba(11, 24, 36, 0.72);
   cursor: grab;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.orchestration-person:hover {
+  border-color: rgba(87, 216, 221, 0.34);
+  background: rgba(14, 30, 44, 0.86);
 }
 
 .orchestration-person:active {
   cursor: grabbing;
+  transform: scale(0.98);
 }
 
 .orchestration-person-avatar {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   color: #061016;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 860;
 }
 
@@ -3017,7 +3032,7 @@ select:focus {
 .orchestration-person-body {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 .orchestration-person-body strong,
@@ -3025,20 +3040,6 @@ select:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.orchestration-person-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding-top: 4px;
-}
-
-.orchestration-person-actions .btn {
-  min-height: 24px;
-  padding: 3px 7px;
-  border-radius: 999px;
-  font-size: 11px;
 }
 
 .orchestration-workspace {
@@ -3067,9 +3068,20 @@ select:focus {
 .orchestration-stage-canvas .x6-port-body:hover,
 .orchestration-stage-canvas .x6-available-magnet {
   stroke: #eaffff;
-  stroke-width: 3;
+  stroke-width: 2.5;
 }
 
+.orchestration-stage-canvas .x6-node {
+  cursor: move;
+}
+
+.orchestration-stage-canvas .x6-edge path:nth-child(2) {
+  filter: drop-shadow(0 0 4px rgba(125, 230, 234, 0.28));
+}
+
+.orchestration-stage-canvas .x6-edge:hover path:nth-child(2) {
+  stroke-width: 2.4;
+}
 
 .orchestration-empty-hint {
   position: absolute;

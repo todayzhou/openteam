@@ -88,7 +88,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       stages,
       graphEdges: flow.graph?.edges ? cloneGraphEdges(flow.graph.edges) : sequentialGraphEdges(stages),
       maxRounds: clampMaxRounds(flow.maxRounds),
-      selectedStageId: stages[0]?.id,
+      selectedStageId: undefined,
     }
   }
 
@@ -101,9 +101,8 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
         draft.selectedStageId = stageId
         render()
       },
-      onRoleDropped(roleId, targetStageId) {
-        if (targetStageId) addRoleToStage(roleId, targetStageId)
-        else addRoleAsStage(roleId)
+      onRoleDropped(roleId) {
+        addRoleAsStage(roleId)
       },
       onGraphChanged(edges) {
         draft.graphEdges = cloneGraphEdges(edges)
@@ -119,7 +118,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     if (deps.orchestrationModalEl.hidden) return
     draft.maxRounds = clampMaxRounds(Number(deps.orchestrationMaxRoundsEl.value || DEFAULT_ORCHESTRATION_MAX_ROUNDS))
     deps.orchestrationHintEl.hidden = draft.stages.length > 0
-    deps.orchestrationHintEl.textContent = '从左侧添加人员，串联阶段；同一阶段内多人并行执行。'
+    deps.orchestrationHintEl.textContent = '把人员拖到画布生成节点，再从节点端口拖线编排执行关系。'
     renderPeopleList()
     renderStageSettings()
     if (mounted) canvas?.render(draft.stages, draft.selectedStageId, draft.graphEdges)
@@ -151,27 +150,8 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       name.textContent = role.name
       const description = document.createElement('span')
       description.className = 'tiny'
-      description.textContent = role.description || '拖到画布或添加到阶段'
-      const actions = document.createElement('div')
-      actions.className = 'orchestration-person-actions'
-      const addStage = document.createElement('button')
-      addStage.className = 'btn btn-ghost'
-      addStage.type = 'button'
-      addStage.textContent = '新阶段'
-      addStage.addEventListener('click', () => addRoleAsStage(role.id))
-      const addParallel = document.createElement('button')
-      addParallel.className = 'btn btn-ghost'
-      addParallel.type = 'button'
-      addParallel.textContent = '并行加入'
-      addParallel.disabled = !selectedRolesStage()
-      addParallel.addEventListener('click', () => addRoleToSelectedStage(role.id))
-      const review = document.createElement('button')
-      review.className = 'btn btn-ghost'
-      review.type = 'button'
-      review.textContent = '设为审核'
-      review.addEventListener('click', () => setReviewStage(role.id))
-      actions.append(addStage, addParallel, review)
-      body.append(name, description, actions)
+      description.textContent = role.description || '拖到画布创建节点'
+      body.append(name, description)
       card.append(avatar, body)
       deps.orchestrationPeopleListEl.append(card)
     }
@@ -181,13 +161,27 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     const selected = selectedStage()
     deps.orchestrationStageSettingsEl.replaceChildren()
     deps.orchestrationReviewSettingsEl.replaceChildren()
+    const settingsPanel = deps.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')
+    const layout = deps.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-layout')
+    settingsPanel?.toggleAttribute('hidden', !selected)
+    layout?.classList.toggle('settings-hidden', !selected)
     if (!selected) {
-      deps.orchestrationStageSettingsEl.append(settingsNote('选择一个阶段后可编辑名称、人员或审核标准。'))
       return
     }
 
     const title = document.createElement('h3')
-    title.textContent = selected.kind === 'review' ? '审核阶段' : '执行阶段'
+    title.textContent = selected.kind === 'review' ? '审核节点' : '执行节点'
+    const kindField = document.createElement('label')
+    kindField.className = 'field'
+    kindField.textContent = '节点类型'
+    const kindSelect = document.createElement('select')
+    kindSelect.dataset.stageKind = 'true'
+    kindSelect.append(new Option('执行', 'roles'), new Option('审核', 'review'))
+    kindSelect.value = selected.kind
+    kindSelect.addEventListener('change', () => {
+      setStageKind(selected, kindSelect.value === 'review' ? 'review' : 'roles')
+    })
+    kindField.append(kindSelect)
     const nameField = document.createElement('label')
     nameField.className = 'field'
     nameField.textContent = '阶段名称'
@@ -206,7 +200,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     remove.type = 'button'
     remove.textContent = '删除阶段'
     remove.addEventListener('click', () => removeStage(selected.id))
-    deps.orchestrationStageSettingsEl.append(title, nameField, roles, remove)
+    deps.orchestrationStageSettingsEl.append(title, kindField, nameField, roles, remove)
 
     if (selected.kind === 'review') renderReviewSettings(selected)
   }
@@ -272,57 +266,33 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     return chip
   }
 
-  function addRoleToSelectedStage(roleId: string): void {
-    const target = selectedRolesStage()
-    if (!target) return
-    addRoleToStage(roleId, target.id)
-  }
-
-  function addRoleToStage(roleId: string, targetStageId: string): void {
-    const target = draft.stages.find(stage => stage.id === targetStageId && stage.kind === 'roles')
-    if (!target) return
-    if (!target.roleIds.includes(roleId)) target.roleIds.push(roleId)
-    draft.selectedStageId = target.id
-    render()
-  }
-
   function addRoleAsStage(roleId: string): void {
-    const sourceStageId = draft.selectedStageId ?? draft.stages[draft.stages.length - 1]?.id
-    const stage: OrchestrationStage = { id: newId('stage'), kind: 'roles', name: `阶段 ${draft.stages.filter(item => item.kind === 'roles').length + 1}`, roleIds: [roleId] }
+    const stage: OrchestrationStage = { id: newId('stage'), kind: 'roles', name: getRoleName(roleId), roleIds: [roleId] }
     const reviewIndex = draft.stages.findIndex(item => item.kind === 'review')
     if (reviewIndex >= 0) draft.stages.splice(reviewIndex, 0, stage)
     else draft.stages.push(stage)
-    if (sourceStageId && sourceStageId !== stage.id) appendGraphEdge(sourceStageId, stage.id)
-    draft.selectedStageId = stage.id
+    draft.selectedStageId = undefined
     render()
   }
 
-  function setReviewStage(roleId: string): void {
-    const existing = draft.stages.find(stage => stage.kind === 'review')
-    if (existing) {
-      existing.roleIds = [roleId]
-      existing.review = { reviewerRoleIds: [roleId], instructions: existing.review?.instructions ?? '' }
-      draft.selectedStageId = existing.id
+  function setStageKind(stage: OrchestrationStage, kind: OrchestrationStage['kind']): void {
+    if (stage.kind === kind) return
+    stage.kind = kind
+    if (kind === 'review') {
+      stage.name = stage.name.trim() || '审核'
+      stage.roleIds = stage.roleIds.slice(0, 1)
+      stage.review = { reviewerRoleIds: stage.roleIds, instructions: stage.review?.instructions ?? '' }
     } else {
-      const stage: OrchestrationStage = { id: newId('review'), kind: 'review', name: '审核', roleIds: [roleId], review: { reviewerRoleIds: [roleId], instructions: '' } }
-      const sourceStageId = draft.selectedStageId ?? draft.stages[draft.stages.length - 1]?.id
-      draft.stages.push(stage)
-      if (sourceStageId) appendGraphEdge(sourceStageId, stage.id)
-      draft.selectedStageId = stage.id
+      delete stage.review
+      stage.name = stage.name.trim() || getRoleName(stage.roleIds[0] ?? '') || '执行'
     }
     render()
-  }
-
-  function appendGraphEdge(sourceStageId: string, targetStageId: string): void {
-    if (sourceStageId === targetStageId) return
-    if (draft.graphEdges.some(edge => edge.sourceStageId === sourceStageId && edge.targetStageId === targetStageId)) return
-    draft.graphEdges.push({ sourceStageId, targetStageId })
   }
 
   function removeStage(stageId: string): void {
     draft.stages = draft.stages.filter(stage => stage.id !== stageId)
     draft.graphEdges = draft.graphEdges.filter(edge => edge.sourceStageId !== stageId && edge.targetStageId !== stageId)
-    draft.selectedStageId = draft.stages[0]?.id
+    draft.selectedStageId = undefined
     render()
   }
 
@@ -404,11 +374,6 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
 
   function selectedStage(): OrchestrationStage | undefined {
     return draft.stages.find(stage => stage.id === draft.selectedStageId)
-  }
-
-  function selectedRolesStage(): OrchestrationStage | undefined {
-    const selected = selectedStage()
-    return selected?.kind === 'roles' ? selected : undefined
   }
 
   function getRoleName(roleId: string): string {

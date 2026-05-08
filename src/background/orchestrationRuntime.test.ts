@@ -72,6 +72,48 @@ describe('orchestration runtime', () => {
     expect(run.stageRuns.map(stageRun => stageRun.status)).toEqual(['completed', 'completed'])
   })
 
+  it('starts fan-out stages in parallel after their shared source completes', async () => {
+    const store = makeStore(['role-a', 'role-b', 'role-c'])
+    store.orchestrationFlowsById['flow-1'] = {
+      ...makeFlow('chat-1', [
+        { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
+        { id: 'stage-b', kind: 'roles', name: 'B', roleIds: ['role-b'] },
+        { id: 'stage-c', kind: 'roles', name: 'C', roleIds: ['role-c'] },
+      ]),
+      graph: {
+        stageNodes: [
+          { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
+          { id: 'stage-b', kind: 'roles', name: 'B', roleIds: ['role-b'] },
+          { id: 'stage-c', kind: 'roles', name: 'C', roleIds: ['role-c'] },
+        ],
+        edges: [
+          { sourceStageId: 'stage-a', targetStageId: 'stage-b' },
+          { sourceStageId: 'stage-a', targetStageId: 'stage-c' },
+        ],
+      },
+    }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-a' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/a' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-b' }, { tab: { id: 102 } as chrome.tabs.Tab, frameId: 2, url: 'https://gemini.google.com/app/b' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-c' }, { tab: { id: 103 } as chrome.tabs.Tab, frameId: 3, url: 'https://gemini.google.com/app/c' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: 'Ship the plan' }) as { ok: boolean; run: { id: string } }
+
+    expect(started.ok).toBe(true)
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(1)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-a', messageId: firstPromptMessageId(harness.tabsSendMessage), content: 'a done' })
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(3)
+
+    const branchPrompts = promptCalls(harness.tabsSendMessage).slice(1)
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-b', messageId: branchPrompts[0][1].messageId, content: 'b done' })
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-c', messageId: branchPrompts[1][1].messageId, content: 'c done' })
+
+    const finalStore = await harness.getStore()
+    const run = finalStore.orchestrationRunsById[started.run.id]
+    expect(run.status).toBe('completed')
+    expect(run.stageRuns.map(stageRun => stageRun.stageId)).toEqual(['stage-a', 'stage-b', 'stage-c'])
+  })
+
   it('runs role-only flows for every configured round', async () => {
     const store = makeStore(['role-1'])
     store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
@@ -141,6 +183,34 @@ describe('orchestration runtime', () => {
     expect(erroredStore.orchestrationRunsById[started.run.id].status).toBe('error')
     expect(erroredStore.activeOrchestrationRunIdByChatId['chat-1']).toBe(started.run.id)
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
+  })
+
+  it('allows starting a new run after the previous active run errored', async () => {
+    const store = makeStore(['role-1'])
+    store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [{ id: 'stage-1', kind: 'roles', name: 'Build', roleIds: ['role-1'] }])
+    store.orchestrationRunsById['run-old'] = {
+      id: 'run-old',
+      chatId: 'chat-1',
+      flowId: 'flow-1',
+      status: 'error',
+      currentRound: 1,
+      maxRounds: 1,
+      stageRuns: [],
+      error: '人员 iframe 尚未就绪',
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    store.activeOrchestrationRunIdByChatId['chat-1'] = 'run-old'
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/one' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: 'Ship the plan again' }) as { ok: boolean; run: { id: string } }
+
+    expect(started.ok).toBe(true)
+    const finalStore = await harness.getStore()
+    expect(finalStore.orchestrationRunsById['run-old'].status).toBe('error')
+    expect(finalStore.activeOrchestrationRunIdByChatId['chat-1']).toBe(started.run.id)
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(1)
   })
 
   it('stops active runs and ignores late replies', async () => {

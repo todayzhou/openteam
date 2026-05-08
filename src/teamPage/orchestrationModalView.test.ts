@@ -6,11 +6,31 @@ import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow } from '../
 import { createOrchestrationModalView, orderStagesByGraph } from './orchestrationModalView'
 
 class MockGraph {
-  constructor(public options: Record<string, unknown>) {}
-  clearCells(): void {}
-  addNode(node: unknown): unknown { return node }
+  static instances: MockGraph[] = []
+  nodes: Array<{ id?: string; data?: Record<string, unknown> }> = []
+  handlers = new Map<string, Array<(args: { node?: { getData(): Record<string, unknown> } }) => void>>()
+
+  static latest(): MockGraph {
+    const graph = MockGraph.instances[MockGraph.instances.length - 1]
+    if (!graph) throw new Error('MockGraph was not mounted')
+    return graph
+  }
+
+  constructor(public options: Record<string, unknown>) {
+    MockGraph.instances.push(this)
+  }
+  clearCells(): void { this.nodes = [] }
+  addNode(node: unknown): unknown {
+    this.nodes.push(node as { id?: string; data?: Record<string, unknown> })
+    return node
+  }
   addEdge(edge: unknown): unknown { return edge }
-  on(_eventName: string, _handler: (args: { node?: { getData(): Record<string, unknown> } }) => void): void {}
+  on(eventName: string, handler: (args: { node?: { getData(): Record<string, unknown> } }) => void): void {
+    this.handlers.set(eventName, [...this.handlers.get(eventName) ?? [], handler])
+  }
+  selectNode(stageId: string): void {
+    for (const handler of this.handlers.get('node:click') ?? []) handler({ node: { getData: () => ({ stageId }) } })
+  }
   dispose(): void {}
 }
 
@@ -45,8 +65,12 @@ function createHarness(): Harness {
       <div id="orchestration-people-list"></div>
       <div id="orchestration-stage-canvas"></div>
       <p id="orchestration-empty-hint"></p>
-      <div id="orchestration-stage-settings"></div>
-      <div id="orchestration-review-settings"></div>
+      <div class="orchestration-layout">
+        <aside class="orchestration-settings">
+          <div id="orchestration-stage-settings"></div>
+          <div id="orchestration-review-settings"></div>
+        </aside>
+      </div>
       <input id="orchestration-max-rounds" />
       <button id="save-orchestration"></button>
       <button id="run-orchestration"></button>
@@ -101,9 +125,10 @@ function createView(harness: Harness): ReturnType<typeof createOrchestrationModa
 describe('orchestration modal view', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    MockGraph.instances = []
   })
 
-  it('opens with an empty-stage hint and creates parallel stage nodes from people', () => {
+  it('opens with drag-only people cards and creates one single-role node per drop', async () => {
     const harness = createHarness()
     const view = createView(harness)
     view.registerOrchestrationEvents()
@@ -113,12 +138,19 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationModalEl.hidden).toBe(false)
     expect(harness.refs.orchestrationHintEl.hidden).toBe(false)
     expect(harness.refs.orchestrationMaxRoundsEl.value).toBe('1')
-    const buttons = [...harness.refs.orchestrationPeopleListEl.querySelectorAll('button')]
-    buttons.find(button => button.textContent === '新阶段')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    buttons.find(button => button.textContent === '并行加入' && !button.hasAttribute('disabled'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('新阶段')
+    expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('并行加入')
+    expect(harness.refs.orchestrationPeopleListEl.textContent).not.toContain('设为审核')
 
-    expect(harness.refs.orchestrationHintEl.hidden).toBe(true)
-    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('产品')
+    dropRole(harness, 'role-1')
+    dropRole(harness, 'role-2')
+    harness.refs.orchestrationTaskEl.value = '完成方案评审'
+    harness.refs.runOrchestrationEl.click()
+    await flushAsync()
+
+    const runPayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_RUN')?.[1] as { flow?: OrchestrationFlow }
+    expect(runPayload.flow?.stages.map(stage => stage.roleIds)).toEqual([['role-1'], ['role-2']])
+    expect(runPayload.flow?.graph?.edges).toEqual([])
   })
 
   it('opens a blank draft by default when the chat has no saved orchestration flow', () => {
@@ -129,7 +161,28 @@ describe('orchestration modal view', () => {
     harness.refs.openOrchestrationEl.click()
 
     expect(harness.refs.orchestrationHintEl.hidden).toBe(false)
-    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('选择一个阶段后可编辑')
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toBe('')
+    expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(true)
+  })
+
+  it('shows stage settings only after the user selects a canvas node', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+    await flushAsync()
+    dropRole(harness, 'role-1')
+
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toBe('')
+    expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(true)
+
+    const stageId = MockGraph.latest().nodes[0].id
+    expect(stageId).toBeTruthy()
+    MockGraph.latest().selectNode(stageId as string)
+
+    expect(harness.refs.orchestrationStageSettingsEl.textContent).toContain('阶段名称')
+    expect(harness.refs.orchestrationStageSettingsEl.closest<HTMLElement>('.orchestration-settings')?.hidden).toBe(false)
   })
 
   it('restores a saved orchestration flow for the current chat after refresh', async () => {
@@ -163,6 +216,8 @@ describe('orchestration modal view', () => {
     await flushAsync()
 
     expect(harness.refs.orchestrationHintEl.hidden).toBe(true)
+    expect(harness.refs.orchestrationStageSettingsEl.querySelector('input')).toBeNull()
+    MockGraph.latest().selectNode('stage-saved-1')
     expect((harness.refs.orchestrationStageSettingsEl.querySelector('input') as HTMLInputElement).value).toBe('旧阶段 1')
     expect(harness.refs.orchestrationMaxRoundsEl.value).toBe('3')
     expect(harness.refs.orchestrationTaskEl.value).toBe('保存过的任务')
@@ -180,8 +235,7 @@ describe('orchestration modal view', () => {
     const view = createView(harness)
     view.registerOrchestrationEvents()
     harness.refs.openOrchestrationEl.click()
-    const firstNewStage = [...harness.refs.orchestrationPeopleListEl.querySelectorAll('button')].find(button => button.textContent === '新阶段') as HTMLButtonElement
-    firstNewStage.click()
+    dropRole(harness, 'role-1')
     harness.refs.orchestrationTaskEl.value = '保存这次任务'
     harness.refs.orchestrationMaxRoundsEl.value = '51'
 
@@ -201,8 +255,12 @@ describe('orchestration modal view', () => {
     const view = createView(harness)
     view.registerOrchestrationEvents()
     harness.refs.openOrchestrationEl.click()
-    const reviewButton = [...harness.refs.orchestrationPeopleListEl.querySelectorAll('button')].find(button => button.textContent === '设为审核') as HTMLButtonElement
-    reviewButton.click()
+    dropRole(harness, 'role-2')
+    await flushAsync()
+    MockGraph.latest().selectNode(MockGraph.latest().nodes[0].id as string)
+    const typeSelect = harness.refs.orchestrationStageSettingsEl.querySelector('select[data-stage-kind]') as HTMLSelectElement
+    typeSelect.value = 'review'
+    typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
 
     harness.refs.runOrchestrationEl.click()
     await Promise.resolve()
@@ -227,8 +285,8 @@ describe('orchestration modal view', () => {
     const view = createView(harness)
     view.registerOrchestrationEvents()
     harness.refs.openOrchestrationEl.click()
-    findPeopleButton(harness, '产品', '新阶段')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    findPeopleButton(harness, '评审', '并行加入')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    dropRole(harness, 'role-1')
+    dropRole(harness, 'role-2')
     harness.refs.orchestrationTaskEl.value = '完成方案评审'
 
     harness.refs.runOrchestrationEl.click()
@@ -253,16 +311,13 @@ describe('orchestration modal view', () => {
     expect(ordered.map(stage => stage.id)).toEqual(['stage-1', 'stage-2', 'review-1'])
   })
 
-  it('drops a role on blank canvas as a new connected stage instead of merging into selected stage', async () => {
+  it('drops roles as independent nodes and leaves connection decisions to the user', async () => {
     const harness = createHarness()
     const view = createView(harness)
     view.registerOrchestrationEvents()
     harness.refs.openOrchestrationEl.click()
-    findPeopleButton(harness, '产品', '新阶段')?.click()
-
-    const drop = new Event('drop', { bubbles: true, cancelable: true })
-    Object.defineProperty(drop, 'dataTransfer', { value: { getData: () => 'role-2', types: ['application/x-openteam-role-id'] } })
-    harness.refs.orchestrationCanvasEl.dispatchEvent(drop)
+    dropRole(harness, 'role-1')
+    dropRole(harness, 'role-2')
 
     harness.refs.orchestrationTaskEl.value = '完成方案评审'
     harness.refs.runOrchestrationEl.click()
@@ -270,14 +325,14 @@ describe('orchestration modal view', () => {
 
     const runPayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_RUN')?.[1] as { flow?: { stages: Array<{ id: string; roleIds: string[] }>; graph?: { edges: Array<{ sourceStageId: string; targetStageId: string }> } } }
     expect(runPayload.flow?.stages.map(stage => stage.roleIds)).toEqual([['role-1'], ['role-2']])
-    expect(runPayload.flow?.graph?.edges).toEqual([{ sourceStageId: runPayload.flow?.stages[0].id, targetStageId: runPayload.flow?.stages[1].id }])
+    expect(runPayload.flow?.graph?.edges).toEqual([])
   })
 })
 
-function findPeopleButton(harness: Harness, roleName: string, actionText: string): HTMLButtonElement | undefined {
-  const cards = [...harness.refs.orchestrationPeopleListEl.querySelectorAll('.orchestration-person')]
-  const card = cards.find(item => item.querySelector('strong')?.textContent === roleName)
-  return [...card?.querySelectorAll('button') ?? []].find(button => button.textContent === actionText)
+function dropRole(harness: Harness, roleId: string): void {
+  const drop = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(drop, 'dataTransfer', { value: { getData: () => roleId, types: ['application/x-openteam-role-id'] } })
+  harness.refs.orchestrationCanvasEl.dispatchEvent(drop)
 }
 
 function flushAsync(): Promise<void> {

@@ -113,8 +113,8 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
         allowMulti: false,
         highlight: true,
         snap: true,
-        connector: 'smooth',
-        router: 'manhattan',
+        connector: { name: 'smooth' },
+        router: { name: 'normal' },
         validateConnection({ sourceCell, targetCell, sourcePort, targetPort }: X6GraphConnectionArgs) {
           return Boolean(sourceCell?.id && targetCell?.id && sourceCell.id !== targetCell.id && sourcePort === 'out' && (!targetPort || targetPort === 'in'))
         },
@@ -143,7 +143,7 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
 
   function render(stages: OrchestrationStage[], selectedStageId?: string, graphEdges?: OrchestrationGraphSnapshot['edges']): void {
     if (!graph) return
-    currentEdges = uniqueEdges(graphEdges ?? sequentialEdges(stages))
+    currentEdges = uniqueEdges(graphEdges ?? [])
     const data = buildGraphData(stages, selectedStageId, currentEdges, deps.getRoleName)
     applyingGraphData = true
     try {
@@ -168,19 +168,18 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
     return {
       nodes: stages.map((stage, index) => {
         const roleNames = stage.roleIds.map(getRoleName)
-        const roleLabel = roleNames.join('  ·  ') || '未选择人员'
+        const roleLabel = roleNames[0] ?? '未选择人员'
         const isReview = stage.kind === 'review'
         const selected = selectedStageId === stage.id
-        const parallelLabel = stage.roleIds.length > 1 ? `并行 x${stage.roleIds.length}` : '单人'
-        const stepLabel = isReview ? 'REVIEW' : `STEP ${String(index + 1).padStart(2, '0')}`
+        const nodeLabel = isReview ? '审核' : '执行'
         return {
           id: stage.id,
           shape: 'rect',
-          x: 36 + index * 244,
-          y: isReview ? 132 : 62,
-          width: 204,
-          height: 116,
-          label: `${stepLabel}  ·  ${parallelLabel}\n${stage.name}\n${roleLabel}`,
+          x: 48 + index * 184,
+          y: isReview ? 132 : 72,
+          width: 148,
+          height: 70,
+          label: `${roleLabel}\n${nodeLabel}`,
           data: { stageId: stage.id },
           ports: {
             groups: {
@@ -195,19 +194,19 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
           attrs: {
             root: { 'data-stage-id': stage.id },
             body: {
-              fill: isReview ? '#241936' : '#0f1e2c',
-              stroke: selected ? '#57d8dd' : isReview ? '#b18cff' : '#31546d',
-              strokeWidth: selected ? 3 : 1.4,
-              rx: 18,
-              ry: 18,
-              filter: selected ? 'drop-shadow(0 0 16px rgba(87, 216, 221, 0.3))' : 'drop-shadow(0 12px 28px rgba(0, 0, 0, 0.28))',
+              fill: isReview ? '#21172b' : '#101e2a',
+              stroke: selected ? '#7de6ea' : isReview ? '#a684ff' : '#42667c',
+              strokeWidth: selected ? 2.4 : 1.3,
+              rx: 14,
+              ry: 14,
+              filter: selected ? 'drop-shadow(0 0 10px rgba(87, 216, 221, 0.24))' : 'drop-shadow(0 8px 18px rgba(0, 0, 0, 0.24))',
             },
             label: {
               fill: '#edf5f7',
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 720,
-              lineHeight: 22,
-              textWrap: { width: 176, height: 84, ellipsis: true },
+              lineHeight: 18,
+              textWrap: { width: 112, height: 44, ellipsis: true },
             },
           },
         }
@@ -217,7 +216,14 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
         shape: 'edge',
         source: { cell: edge.sourceStageId, port: 'out' },
         target: { cell: edge.targetStageId, port: 'in' },
-        attrs: { line: { stroke: '#57d8dd', strokeWidth: 2.2, strokeDasharray: '0', targetMarker: { name: 'block', width: 8, height: 6 } } },
+        attrs: {
+          line: {
+            stroke: '#7de6ea',
+            strokeWidth: 1.8,
+            strokeLinecap: 'round',
+            targetMarker: { name: 'classic', width: 7, height: 5 },
+          },
+        },
       })),
     }
   }
@@ -232,10 +238,6 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
   }
 
   return { mount, render, destroy }
-}
-
-function sequentialEdges(stages: OrchestrationStage[]): OrchestrationGraphSnapshot['edges'] {
-  return stages.slice(1).map((stage, index) => ({ sourceStageId: stages[index].id, targetStageId: stage.id }))
 }
 
 function uniqueEdges(edges: OrchestrationGraphSnapshot['edges']): OrchestrationGraphSnapshot['edges'] {
@@ -256,10 +258,10 @@ function portGroup(position: 'left' | 'right'): Record<string, unknown> {
     position,
     attrs: {
       circle: {
-        r: 8,
+        r: 6,
         magnet: true,
         stroke: '#57d8dd',
-        strokeWidth: 2.4,
+        strokeWidth: 2,
         fill: '#07111b',
         opacity: 0.98,
         cursor: position === 'right' ? 'crosshair' : 'default',

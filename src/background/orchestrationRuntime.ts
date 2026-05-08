@@ -9,6 +9,7 @@ import {
   type GroupRole,
   type OpenTeamStore,
   type OrchestrationFlow,
+  type OrchestrationGraphSnapshot,
   type OrchestrationReviewResult,
   type OrchestrationRun,
   type OrchestrationStage,
@@ -48,6 +49,8 @@ interface StartStageResult {
   externalDeliveries: ExternalPromptDelivery[]
 }
 
+type NextStageDecision = { next: true; runId: string; stageIndices: number[] } | { next: false }
+
 export async function startOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; flowId: string; task: string; maxRounds?: number }): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
@@ -56,7 +59,8 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
     validateExecutableFlow(store, chat, flow)
     const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
     const activeRun = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
-    if (activeRun && activeRun.status !== 'completed' && activeRun.status !== 'stopped') throw new Error('该群聊已有运行中的编排')
+    if (activeRun && (activeRun.status === 'pending' || activeRun.status === 'running')) throw new Error('该群聊已有运行中的编排')
+    if (activeRunId && !activeRun) delete store.activeOrchestrationRunIdByChatId[chat.id]
 
     const maxRounds = normalizeMaxRounds(input.maxRounds ?? flow.maxRounds)
     const taskMessage: GroupMessage = {
@@ -95,11 +99,11 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
     store.activeOrchestrationRunIdByChatId[chat.id] = run.id
     chat.status = 'running'
     chat.updatedAt = timestamp
-    return { run }
+    return { run, stageIndices: rootStageIndices(flow) }
   })
 
   await deps.broadcastStoreUpdated(store)
-  await startStage(deps, result.run.id, 0)
+  await startStages(deps, result.run.id, result.stageIndices)
   const latest = await mutateStore(store => store.orchestrationRunsById[result.run.id])
   return { store: latest.store, run: latest.result }
 }
@@ -145,16 +149,17 @@ export async function stopOrchestrationRun(deps: OrchestrationRuntimeDependencie
 
 export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; roleId: string; promptMessageId?: string; replyMessage?: GroupMessage }): Promise<OpenTeamStore | undefined> {
   if (!input.promptMessageId) return undefined
+  const promptMessageId = input.promptMessageId
   const timestamp = deps.now()
   const advance = await mutateStore(store => {
     const chat = requireChat(store, input.chatId)
     const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
     const run = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
     if (!run || run.status !== 'running') return { next: false as const }
-    const stageRun = currentStageRun(run)
+    const stageRun = findRunningStageRunForRolePrompt(run, input.roleId, promptMessageId)
     if (!stageRun || stageRun.status !== 'running') return { next: false as const }
     const roleRun = stageRun.roleRuns[input.roleId]
-    if (!roleRun || roleRun.messageId !== input.promptMessageId || roleRun.status !== 'running') return { next: false as const }
+    if (!roleRun || roleRun.messageId !== promptMessageId || roleRun.status !== 'running') return { next: false as const }
     if (input.replyMessage) {
       const persistedReply = store.messagesById[input.replyMessage.id]
       if (persistedReply) {
@@ -205,21 +210,22 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
   })
 
   await deps.broadcastStoreUpdated(advance.store)
-  if (advance.result.next) await startStage(deps, advance.result.runId, advance.result.stageIndex)
+  if (advance.result.next) await startStages(deps, advance.result.runId, advance.result.stageIndices)
   return advance.store
 }
 
 export async function markOrchestrationRoleError(deps: OrchestrationRuntimeDependencies, input: { chatId: string; roleId: string; promptMessageId?: string; error: string }): Promise<OpenTeamStore | undefined> {
   if (!input.promptMessageId) return undefined
+  const promptMessageId = input.promptMessageId
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
     const chat = requireChat(store, input.chatId)
     const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
     const run = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
     if (!run || run.status !== 'running') return false
-    const stageRun = currentStageRun(run)
+    const stageRun = findRunningStageRunForRolePrompt(run, input.roleId, promptMessageId)
     const roleRun = stageRun?.roleRuns[input.roleId]
-    if (!stageRun || !roleRun || roleRun.messageId !== input.promptMessageId || roleRun.status !== 'running') return false
+    if (!stageRun || !roleRun || roleRun.messageId !== promptMessageId || roleRun.status !== 'running') return false
     roleRun.status = 'error'
     roleRun.error = input.error
     roleRun.completedAt = timestamp
@@ -276,12 +282,18 @@ export async function skipOrchestrationStage(deps: OrchestrationRuntimeDependenc
     return nextStageDecision(store, chat, run, timestamp)
   })
   await deps.broadcastStoreUpdated(advance.store)
-  if (advance.result.next) await startStage(deps, advance.result.runId, advance.result.stageIndex)
+  if (advance.result.next) await startStages(deps, advance.result.runId, advance.result.stageIndices)
   return { store: advance.store }
 }
 
 export async function retryOrchestrationReview(deps: OrchestrationRuntimeDependencies, chatId: string): Promise<{ store: OpenTeamStore }> {
   return retryOrchestrationStage(deps, chatId)
+}
+
+async function startStages(deps: OrchestrationRuntimeDependencies, runId: string, stageIndices: number[]): Promise<void> {
+  for (const stageIndex of uniqueNumbers(stageIndices)) {
+    await startStage(deps, runId, stageIndex)
+  }
 }
 
 async function startStage(deps: OrchestrationRuntimeDependencies, runId: string, stageIndex: number): Promise<StartStageResult> {
@@ -418,7 +430,7 @@ async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDepende
       const chat = requireChat(store, delivery.chatId)
       const role = requireRole(store, chat.id, delivery.roleId)
       const run = store.orchestrationRunsById[store.activeOrchestrationRunIdByChatId[chat.id]]
-      const stageRun = run ? currentStageRun(run) : undefined
+      const stageRun = run ? findRunningStageRunForRolePrompt(run, role.id, delivery.messageId) : undefined
       if (role.lastPromptMessageId !== delivery.messageId || role.replyAttemptId !== delivery.replyAttemptId) return undefined
       const reply: GroupMessage = {
         id: deps.newId('msg'),
@@ -496,21 +508,21 @@ function lastReviewResult(run: OrchestrationRun): OrchestrationReviewResult | un
   return undefined
 }
 
-function nextStageDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, timestamp: number, options: { allowNextRound?: boolean } = {}): { next: true; runId: string; stageIndex: number } | { next: false } {
+function nextStageDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, timestamp: number, options: { allowNextRound?: boolean } = {}): NextStageDecision {
   const flow = requireFlow(store, chat.id, run.flowId)
-  const stageRun = currentStageRun(run)
-  const nextStageIndex = (stageRun?.stageIndex ?? -1) + 1
-  if (nextStageIndex < flow.stages.length) return { next: true, runId: run.id, stageIndex: nextStageIndex }
+  const readyStageIndices = findReadyStageIndices(flow, run)
+  if (readyStageIndices.length > 0) return { next: true, runId: run.id, stageIndices: readyStageIndices }
+  if (hasRunningStageRuns(run)) return { next: false }
   if (options.allowNextRound !== false && run.currentRound < run.maxRounds) {
     run.currentRound += 1
     run.updatedAt = timestamp
-    return { next: true, runId: run.id, stageIndex: 0 }
+    return { next: true, runId: run.id, stageIndices: rootStageIndices(flow) }
   }
   completeRun(store, chat, run, timestamp)
   return { next: false }
 }
 
-function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, decision: 'pass' | 'continue' | 'stop', timestamp: number): { next: true; runId: string; stageIndex: number } | { next: false } {
+function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, decision: 'pass' | 'continue' | 'stop', timestamp: number): NextStageDecision {
   if (decision === 'stop') {
     run.status = 'stopped'
     run.completedAt = timestamp
@@ -522,7 +534,8 @@ function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: Orchest
   if (decision === 'continue' && run.currentRound < run.maxRounds) {
     run.currentRound += 1
     run.updatedAt = timestamp
-    return { next: true, runId: run.id, stageIndex: 0 }
+    const flow = requireFlow(store, chat.id, run.flowId)
+    return { next: true, runId: run.id, stageIndices: rootStageIndices(flow) }
   }
   if (decision === 'continue' && run.currentRound >= run.maxRounds) {
     run.error = '已达到最大轮次，编排自动完成'
@@ -547,6 +560,7 @@ function requireFlow(store: OpenTeamStore, chatId: string, flowId: string): Orch
 
 function validateExecutableFlow(store: OpenTeamStore, chat: GroupChat, flow: OrchestrationFlow): void {
   if (!Array.isArray(flow.stages) || flow.stages.length === 0) throw new Error('编排流程没有可执行阶段')
+  if (rootStageIndices(flow).length === 0) throw new Error('编排流程存在循环，无法找到起始节点')
   for (const stage of flow.stages) {
     if (stage.kind === 'roles' && stage.roleIds.length === 0) throw new Error(`角色阶段缺少人员：${stage.name}`)
     if (stage.kind === 'review' && stage.review?.reviewerRoleIds?.length !== 1) throw new Error(`复核阶段必须绑定一个复核人员：${stage.name}`)
@@ -564,9 +578,60 @@ function currentStageRun(run: OrchestrationRun): OrchestrationStageRun | undefin
   return run.stageRuns[run.stageRuns.length - 1]
 }
 
+function findRunningStageRunForRolePrompt(run: OrchestrationRun, roleId: string, promptMessageId: string): OrchestrationStageRun | undefined {
+  return run.stageRuns.find(stageRun => {
+    const roleRun = stageRun.roleRuns[roleId]
+    return stageRun.status === 'running' && roleRun?.messageId === promptMessageId && roleRun.status === 'running'
+  })
+}
+
 function allRoleRunsFinished(stageRun: OrchestrationStageRun): boolean {
   const roleRuns = Object.values(stageRun.roleRuns)
   return roleRuns.length > 0 && roleRuns.every(roleRun => roleRun.status === 'completed' || roleRun.status === 'skipped')
+}
+
+function hasRunningStageRuns(run: OrchestrationRun): boolean {
+  return run.stageRuns.some(stageRun => stageRun.round === run.currentRound && stageRun.status === 'running')
+}
+
+function findReadyStageIndices(flow: OrchestrationFlow, run: OrchestrationRun): number[] {
+  const stageIndexById = new Map(flow.stages.map((stage, index) => [stage.id, index]))
+  const incoming = incomingEdgesByTarget(flow)
+  const started = new Set(run.stageRuns.filter(stageRun => stageRun.round === run.currentRound).map(stageRun => stageRun.stageId))
+  const completed = new Set(run.stageRuns.filter(stageRun => stageRun.round === run.currentRound && (stageRun.status === 'completed' || stageRun.status === 'skipped')).map(stageRun => stageRun.stageId))
+  const ready: number[] = []
+  for (const stage of flow.stages) {
+    if (started.has(stage.id)) continue
+    const dependencies = incoming.get(stage.id) ?? []
+    if (dependencies.every(stageId => completed.has(stageId))) {
+      const index = stageIndexById.get(stage.id)
+      if (typeof index === 'number') ready.push(index)
+    }
+  }
+  return ready
+}
+
+function rootStageIndices(flow: OrchestrationFlow): number[] {
+  const targetIds = new Set(effectiveGraphEdges(flow).map(edge => edge.targetStageId))
+  return flow.stages.map((stage, index) => targetIds.has(stage.id) ? undefined : index).filter((index): index is number => typeof index === 'number')
+}
+
+function incomingEdgesByTarget(flow: OrchestrationFlow): Map<string, string[]> {
+  const incoming = new Map<string, string[]>()
+  for (const edge of effectiveGraphEdges(flow)) {
+    incoming.set(edge.targetStageId, [...incoming.get(edge.targetStageId) ?? [], edge.sourceStageId])
+  }
+  return incoming
+}
+
+function effectiveGraphEdges(flow: OrchestrationFlow): OrchestrationGraphSnapshot['edges'] {
+  const stageIds = new Set(flow.stages.map(stage => stage.id))
+  const edges = flow.graph ? flow.graph.edges : flow.stages.slice(1).map((stage, index) => ({ sourceStageId: flow.stages[index].id, targetStageId: stage.id }))
+  return edges.filter(edge => stageIds.has(edge.sourceStageId) && stageIds.has(edge.targetStageId) && edge.sourceStageId !== edge.targetStageId)
+}
+
+function uniqueNumbers(values: number[]): number[] {
+  return [...new Set(values)]
 }
 
 function requireActiveRun(store: OpenTeamStore, chat: GroupChat): OrchestrationRun {

@@ -83,7 +83,7 @@ describe('orchestration canvas', () => {
     expect(MockGraph.instances[0].options.container).toBe(rootEl)
     expect(MockGraph.instances[0].fromJSONCalls).toBe(1)
     expect(MockGraph.instances[0].nodes).toHaveLength(2)
-    expect(MockGraph.instances[0].edges).toHaveLength(1)
+    expect(MockGraph.instances[0].edges).toHaveLength(0)
     MockGraph.instances[0].handlers.get('node:click')?.({ node: { getData: () => ({ stageId: 'review-1' }) } })
     expect(onStageSelected).toHaveBeenCalledWith('review-1')
   })
@@ -136,7 +136,7 @@ describe('orchestration canvas', () => {
 
     expect(MockGraph.instances[0].fromJSONCalls).toBe(3)
     expect(MockGraph.instances[0].nodes).toHaveLength(2)
-    expect(MockGraph.instances[0].edges).toHaveLength(1)
+    expect(MockGraph.instances[0].edges).toHaveLength(0)
   })
 
   it('does not report graph change events caused by programmatic rerenders', async () => {
