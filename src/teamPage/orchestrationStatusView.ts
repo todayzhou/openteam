@@ -11,6 +11,7 @@ import {
   type OrchestrationStage,
   type OrchestrationStageRun,
 } from '../group/types'
+import { runCommandWithReconnect } from './sendWithReconnect'
 
 export interface OrchestrationStatusViewDependencies {
   getStore(): OpenTeamStore
@@ -31,6 +32,10 @@ interface FloatingPrefs {
   y?: number
   width?: number
   height?: number
+}
+
+interface DragOptions {
+  persistSize?: boolean
 }
 
 interface VisibleRun {
@@ -60,6 +65,7 @@ const MIN_CARD_WIDTH = 300
 const MIN_CARD_HEIGHT = 220
 const MAX_CARD_WIDTH = 720
 const MAX_CARD_HEIGHT = 620
+const VIEWPORT_PADDING = 8
 
 export function createOrchestrationStatusView(deps: OrchestrationStatusViewDependencies): OrchestrationStatusView {
   function renderOrchestrationStatus(): HTMLElement | undefined {
@@ -75,12 +81,14 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     return renderExpanded(chat, visible.run, flow, prefs)
   }
 
-  function renderCollapsed(chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow, prefs: FloatingPrefs): HTMLElement {
+  function renderCollapsed(chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow, _prefs: FloatingPrefs): HTMLElement {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = `orchestration-status orchestration-status-floating orchestration-status-collapsed orchestration-status-${run.status}`
-    button.textContent = `${STATUS_LABELS[run.status]} · ${currentNodeText(run, flow)} · ${run.stageRuns.length} / ${maxExecutions(run)}`
-    applyFloatingPosition(button, prefs, { width: 260, height: 44 })
+    const label = `${STATUS_LABELS[run.status]} · ${currentNodeText(run, flow)} · ${run.stageRuns.length} / ${maxExecutions(run)}`
+    button.textContent = '编'
+    button.title = label
+    button.setAttribute('aria-label', `${label}，点击展开`)
     button.addEventListener('click', () => {
       const nextPrefs = { ...readPrefs(chat.id), collapsed: false }
       writePrefs(chat.id, nextPrefs)
@@ -111,6 +119,8 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
 
     const headerActions = document.createElement('div')
     headerActions.className = 'orchestration-status-window-actions'
+    const statusActions = renderActions(chat, run, flow, current)
+    if (statusActions) headerActions.append(statusActions)
     const collapse = actionButton('－', 'orchestration-status-collapse', () => {
       const nextPrefs = { ...readPrefs(chat.id), collapsed: true }
       writePrefs(chat.id, nextPrefs)
@@ -133,8 +143,6 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     const waiting = renderWaitingPanel(run, flow)
     if (waiting) body.append(waiting)
     body.append(renderMiniFlow(run, flow, deps.getStore(), rolesById()))
-    const actions = renderActions(chat, run, flow, current)
-    if (actions) body.append(actions)
     const resizeHandle = document.createElement('button')
     resizeHandle.type = 'button'
     resizeHandle.className = 'orchestration-status-resize'
@@ -246,12 +254,12 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
 
   function rerunAction(chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow): void {
     const task = runTaskText(run) || flow.description || flow.name
-    runAction('GROUP_ORCHESTRATION_RUN', { chatId: chat.id, flowId: flow.id, task })
+    runCommandWithReconnect(deps, { chat, roles: getFlowRoles(flow), type: 'GROUP_ORCHESTRATION_RUN', payload: { chatId: chat.id, flowId: flow.id, task }, preconnectAll: true })
+      .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
   }
 
   function retryAction(chat: GroupChat, current: OrchestrationStageRun, type: string, payload: Record<string, unknown>): void {
-    deps.reconnectRolesForSend(chat, getStageRoles(current))
-      .then(() => deps.runCommand(type, payload))
+    runCommandWithReconnect(deps, { chat, roles: getStageRoles(current), type, payload, preconnectAll: true })
       .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
   }
 
@@ -262,6 +270,12 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
 
   function rolesById(): Map<string, GroupRole> {
     return new Map(deps.getCurrentRoles().map(role => [role.id, role]))
+  }
+
+  function getFlowRoles(flow: OrchestrationFlow): GroupRole[] {
+    const map = rolesById()
+    const roleIds = new Set(flow.stages.flatMap(stage => stage.roleIds))
+    return [...roleIds].map(roleId => map.get(roleId)).filter((role): role is GroupRole => Boolean(role))
   }
 
   function runTaskText(run: OrchestrationRun): string | undefined {
@@ -432,7 +446,7 @@ function edgePoints(source: DiagramNode, target: DiagramNode, edge: Orchestratio
     ? { x: source.x + source.width / 2, y: source.y + source.height }
     : { x: source.x + source.width, y: source.y + source.height / 2 }
   const end = { x: target.x, y: target.y + target.height / 2 }
-  if (edge.vertices?.length) return [start, ...edge.vertices, end]
+  if (edge.vertices?.length) return orthogonalPoints(start, edge.vertices, end)
   if (fail) {
     const laneY = Math.max(source.y + source.height, target.y + target.height) + 58
     return [start, { x: start.x, y: laneY }, { x: end.x, y: laneY }, end]
@@ -440,6 +454,19 @@ function edgePoints(source: DiagramNode, target: DiagramNode, edge: Orchestratio
   if (Math.abs(start.y - end.y) < 8) return [start, end]
   const midX = start.x + Math.max(34, (end.x - start.x) / 2)
   return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end]
+}
+
+function orthogonalPoints(start: { x: number; y: number }, vertices: Array<{ x: number; y: number }>, end: { x: number; y: number }): Array<{ x: number; y: number }> {
+  const points = [start]
+  let cursor = start
+  for (const vertex of vertices) {
+    if (cursor.x !== vertex.x && cursor.y !== vertex.y) points.push({ x: vertex.x, y: cursor.y })
+    points.push(vertex)
+    cursor = vertex
+  }
+  if (cursor.x !== end.x && cursor.y !== end.y) points.push({ x: end.x, y: cursor.y })
+  points.push(end)
+  return points
 }
 
 function currentStageRun(run: OrchestrationRun): OrchestrationStageRun | undefined {
@@ -540,25 +567,42 @@ function applyFloatingPosition(element: HTMLElement, prefs: FloatingPrefs, defau
   element.style.width = `${width}px`
   if (!element.classList.contains('orchestration-status-collapsed')) element.style.height = `${height}px`
   if (typeof prefs.x === 'number' && typeof prefs.y === 'number') {
-    element.style.left = `${Math.max(8, prefs.x)}px`
-    element.style.top = `${Math.max(8, prefs.y)}px`
+    const position = clampViewportPosition(prefs.x, prefs.y, width, height)
+    element.style.left = `${position.x}px`
+    element.style.top = `${position.y}px`
+    element.style.right = 'auto'
+    element.style.bottom = 'auto'
   }
 }
 
-function makeDraggable(card: HTMLElement, handle: HTMLElement, chatId: string): void {
+function makeDraggable(card: HTMLElement, handle: HTMLElement, chatId: string, options: DragOptions = {}): () => boolean {
+  const persistSize = options.persistSize ?? true
+  let suppressNextClick = false
   handle.addEventListener('mousedown', event => {
     if (event.button !== 0) return
-    event.preventDefault()
+    const target = event.target instanceof HTMLElement ? event.target : undefined
+    if (target?.closest('button') && target !== handle) return
     const rect = card.getBoundingClientRect()
     const startX = event.clientX
     const startY = event.clientY
     const startLeft = rect.left
     const startTop = rect.top
+    let moved = false
     const onMove = (moveEvent: MouseEvent) => {
+      if (Math.abs(moveEvent.clientX - startX) <= 3 && Math.abs(moveEvent.clientY - startY) <= 3) return
+      if (!moved) {
+        moved = true
+        card.style.left = `${startLeft}px`
+        card.style.top = `${startTop}px`
+        card.style.right = 'auto'
+        card.style.bottom = 'auto'
+      }
+      moveEvent.preventDefault()
       const width = card.offsetWidth || rect.width
       const height = card.offsetHeight || rect.height
-      const nextX = clampNumber(startLeft + moveEvent.clientX - startX, 8, window.innerWidth - width - 8)
-      const nextY = clampNumber(startTop + moveEvent.clientY - startY, 8, window.innerHeight - height - 8)
+      const nextPosition = clampViewportPosition(startLeft + moveEvent.clientX - startX, startTop + moveEvent.clientY - startY, width, height)
+      const nextX = nextPosition.x
+      const nextY = nextPosition.y
       card.style.left = `${nextX}px`
       card.style.top = `${nextY}px`
       card.style.right = 'auto'
@@ -567,12 +611,27 @@ function makeDraggable(card: HTMLElement, handle: HTMLElement, chatId: string): 
     const onUp = () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      if (!moved) return
       const rect = card.getBoundingClientRect()
-      writePrefs(chatId, { ...readPrefs(chatId), x: rect.left, y: rect.top, width: rect.width, height: rect.height })
+      suppressNextClick = moved
+      const sizeWidth = card.offsetWidth || rect.width
+      const sizeHeight = card.offsetHeight || rect.height
+      const position = clampViewportPosition(rect.left, rect.top, sizeWidth, sizeHeight)
+      const nextPrefs: FloatingPrefs = { ...readPrefs(chatId), x: position.x, y: position.y }
+      if (persistSize) {
+        nextPrefs.width = sizeWidth
+        nextPrefs.height = sizeHeight
+      }
+      writePrefs(chatId, nextPrefs)
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   })
+  return () => {
+    const shouldSuppress = suppressNextClick
+    suppressNextClick = false
+    return shouldSuppress
+  }
 }
 
 function makeResizable(card: HTMLElement, handle: HTMLElement, chatId: string): void {
@@ -620,6 +679,13 @@ function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   const safeMax = Math.max(min, max)
   return Math.min(safeMax, Math.max(min, value))
+}
+
+function clampViewportPosition(x: number, y: number, width: number, height: number): { x: number; y: number } {
+  return {
+    x: clampNumber(x, VIEWPORT_PADDING, window.innerWidth - width - VIEWPORT_PADDING),
+    y: clampNumber(y, VIEWPORT_PADDING, window.innerHeight - height - VIEWPORT_PADDING),
+  }
 }
 
 function svgEl<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {

@@ -160,6 +160,24 @@ describe('orchestration status view', () => {
     expect(node?.querySelector('[data-node-id="stage-3"]')?.classList.contains('current')).toBe(true)
   })
 
+  it('renders saved mini graph vertices as orthogonal SVG line segments', () => {
+    const fixture = baseFixture('running')
+    fixture.flow.graph!.edges = [
+      { sourceStageId: 'stage-3', targetStageId: 'stage-1', sourcePort: 'fail', vertices: [{ x: 300, y: 130 }] },
+    ]
+    const node = createOrchestrationStatusView({
+      getStore: () => fixture.store,
+      getCurrentChat: () => fixture.chat,
+      getCurrentRoles: () => fixture.roles,
+      reconnectRolesForSend: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    }).renderOrchestrationStatus()
+
+    const path = node?.querySelector<SVGPathElement>('.orchestration-mini-edge.branch-fail')?.getAttribute('d')
+    expect(path).toBe('M 458 150 L 300 150 L 300 130 L 40 130 L 40 102')
+  })
+
   it('renders terminal states with distinct classes', () => {
     const completed = baseFixture('completed')
     completed.run.stageRuns[0].status = 'completed'
@@ -257,6 +275,7 @@ describe('orchestration status view', () => {
     expect(failedNode?.textContent).toContain('重发')
     expect(failedNode?.textContent).toContain('跳过节点')
     expect(failedNode?.textContent).not.toContain('阶段')
+    expect(failedNode?.querySelector('.orchestration-status-actions')?.closest('.orchestration-status-header')).toBeTruthy()
     expect(failedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RETRY_STAGE', { chatId: failed.chat.id, stageId: 'stage-1' })
     expect(failedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_SKIP_STAGE', { chatId: failed.chat.id, stageId: 'stage-1' })
 
@@ -288,13 +307,14 @@ describe('orchestration status view', () => {
     }).renderOrchestrationStatus()
     findButton(stoppedNode, '继续')?.click()
     findButton(stoppedNode, '重新运行')?.click()
+    await flushAsync()
     expect(stoppedNode?.textContent).toContain('继续')
     expect(stoppedNode?.textContent).toContain('重新运行')
     expect(stoppedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RESUME', { chatId: stopped.chat.id, runId: stopped.run.id })
     expect(stoppedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RUN', { chatId: stopped.chat.id, flowId: stopped.flow.id, task: 'Use draft' })
   })
 
-  it('collapses into a compact floating pill and persists the local preference', () => {
+  it('collapses into a compact floating launcher and persists the local preference', () => {
     const fixture = baseFixture('running')
     const view = createOrchestrationStatusView({
       getStore: () => fixture.store,
@@ -310,9 +330,79 @@ describe('orchestration status view', () => {
     const collapsed = view.renderOrchestrationStatus()
 
     expect(collapsed?.classList.contains('orchestration-status-collapsed')).toBe(true)
-    expect(collapsed?.textContent).toContain('编排运行中')
-    expect(collapsed?.textContent).toContain('1 / 50')
+    expect(collapsed?.textContent).toBe('编')
+    expect(collapsed?.getAttribute('aria-label')).toContain('编排运行中')
+    expect(collapsed?.getAttribute('aria-label')).toContain('1 / 50')
     expect(window.localStorage.getItem('openteam.orchestrationFloatingStatus.chat-1')).toContain('"collapsed":true')
+  })
+
+  it('expands again when the collapsed launcher is clicked without dragging', () => {
+    const fixture = baseFixture('running')
+    const view = createOrchestrationStatusView({
+      getStore: () => fixture.store,
+      getCurrentChat: () => fixture.chat,
+      getCurrentRoles: () => fixture.roles,
+      reconnectRolesForSend: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    })
+
+    const expanded = view.renderOrchestrationStatus()
+    document.body.append(expanded!)
+    expanded?.querySelector<HTMLButtonElement>('.orchestration-status-collapse')?.click()
+    const collapsed = document.querySelector<HTMLButtonElement>('.orchestration-status-collapsed')
+    collapsed?.click()
+
+    expect(document.querySelector('.orchestration-status-collapsed')).toBeNull()
+    expect(document.querySelector('.orchestration-status:not(.orchestration-status-collapsed)')?.textContent).toContain('编排运行中')
+  })
+
+  it('keeps the collapsed launcher fixed even when stale launcher positions exist', () => {
+    const fixture = baseFixture('running')
+    window.localStorage.setItem('openteam.orchestrationFloatingStatus.chat-1', JSON.stringify({
+      collapsed: true,
+      collapsedX: 500,
+      collapsedY: 500,
+      width: 390,
+      height: 376,
+    }))
+    const view = createOrchestrationStatusView({
+      getStore: () => fixture.store,
+      getCurrentChat: () => fixture.chat,
+      getCurrentRoles: () => fixture.roles,
+      reconnectRolesForSend: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    })
+
+    const collapsed = view.renderOrchestrationStatus() as HTMLElement
+
+    expect(collapsed.style.left).toBe('')
+    expect(collapsed.style.top).toBe('')
+  })
+
+  it('clamps saved expanded floating positions back into the viewport', () => {
+    const fixture = baseFixture('running')
+    window.localStorage.setItem('openteam.orchestrationFloatingStatus.chat-1', JSON.stringify({
+      collapsed: false,
+      x: 99999,
+      y: 99999,
+      width: 390,
+      height: 376,
+    }))
+    const view = createOrchestrationStatusView({
+      getStore: () => fixture.store,
+      getCurrentChat: () => fixture.chat,
+      getCurrentRoles: () => fixture.roles,
+      reconnectRolesForSend: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    })
+
+    const expanded = view.renderOrchestrationStatus() as HTMLElement
+
+    expect(expanded.style.left).toBe(`${window.innerWidth - 390 - 8}px`)
+    expect(expanded.style.top).toBe(`${window.innerHeight - 376 - 8}px`)
   })
 })
 

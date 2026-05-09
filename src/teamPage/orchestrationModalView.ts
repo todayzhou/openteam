@@ -1,6 +1,7 @@
 import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS, MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS } from '../group/types'
 import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
+import { runCommandWithReconnect } from './sendWithReconnect'
 
 export interface OrchestrationModalDependencies {
   openOrchestrationEl: HTMLButtonElement
@@ -383,8 +384,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     updateActionButtons()
     try {
       const flow = buildFlow(chat)
-      await deps.reconnectRolesForSend(chat, getDraftRoles())
-      await deps.runCommand('GROUP_ORCHESTRATION_RUN', { chatId: chat.id, task, flow })
+      await runCommandWithReconnect(deps, { chat, roles: getDraftRoles(), type: 'GROUP_ORCHESTRATION_RUN', payload: { chatId: chat.id, task, flow }, preconnectAll: true })
       draft.flowId = flow.id
       deps.showSuccess('编排任务已开始')
       close()

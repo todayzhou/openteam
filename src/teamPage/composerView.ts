@@ -1,7 +1,8 @@
 import { parseGroupMentions, roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamStore } from '../group/types'
 import type { TeamPageState } from './appState'
-import { getVisibleThinkingRoles, isUnavailableRolesError, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
+import { getVisibleThinkingRoles, shouldAutoReconnectRole, shouldConfirmMentionWithEnter, shouldSendMessageWithEnter } from './chatExperience'
+import { runCommandWithReconnect } from './sendWithReconnect'
 
 export interface ComposerViewDependencies {
   state: TeamPageState
@@ -221,29 +222,12 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     }
 
     const reference = deps.state.selectedReference
-    const reconnectableRoles = targetResult.roles.filter(role => role.status !== 'ready' && shouldAutoReconnectRole(role))
     clearComposerAfterSend(raw, reference)
     try {
-      if (reconnectableRoles.length > 0) {
-        await deps.reconnectRolesForSend(chat, reconnectableRoles).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
-      }
-      await sendMessageAfterReconnect(chat, raw, reference, targetResult.roles)
+      await runCommandWithReconnect(deps, { chat, roles: targetResult.roles, type: 'GROUP_MESSAGE_SEND', payload: { chatId: chat.id, raw, reference } })
     } catch (error) {
       restoreComposerDraft(raw, reference)
       throw error
-    }
-  }
-
-  async function sendMessageAfterReconnect(chat: GroupChat, raw: string, reference: MessageReference | undefined, targetRoles: GroupRole[], retryOnUnavailable = true): Promise<void> {
-    try {
-      await deps.runCommand('GROUP_MESSAGE_SEND', { chatId: chat.id, raw, reference })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      if (!retryOnUnavailable || !isUnavailableRolesError(message)) throw error
-      const reconnectableRoles = targetRoles.filter(role => role.status === 'ready' || shouldAutoReconnectRole(role))
-      if (reconnectableRoles.length === 0) throw error
-      await deps.reconnectRolesForSend(chat, reconnectableRoles)
-      await sendMessageAfterReconnect(chat, raw, reference, targetRoles, false)
     }
   }
 

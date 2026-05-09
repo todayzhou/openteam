@@ -1,5 +1,13 @@
 import type { GroupRole, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 
+const ROLE_NODE_WIDTH = 124
+const ROLE_NODE_HEIGHT = 56
+const REVIEW_NODE_WIDTH = 104
+const REVIEW_NODE_HEIGHT = 78
+const DEFAULT_NODE_CENTER_Y = 100
+const ARRANGED_NODE_CENTER_Y = 124
+const LANE_GAP = 112
+
 interface X6GraphNode {
   id?: string
   shape?: string
@@ -24,6 +32,8 @@ interface X6GraphEdge {
   source: string | { cell: string; port?: string }
   target: string | { cell: string; port?: string }
   vertices?: Array<{ x: number; y: number }>
+  connector?: Record<string, unknown>
+  router?: Record<string, unknown>
   attrs?: Record<string, unknown>
   labels?: Array<Record<string, unknown>>
   tools?: Record<string, unknown>
@@ -135,8 +145,8 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
         allowMulti: false,
         highlight: true,
         snap: true,
-        connector: { name: 'smooth' },
-        router: { name: 'normal' },
+        connector: orthogonalConnector(),
+        router: orthogonalRouter(),
         validateConnection({ sourceCell, targetCell, sourcePort, targetPort }: X6GraphConnectionArgs) {
           if (!sourceCell?.id || !targetCell?.id || sourceCell.id === targetCell.id || (targetPort && targetPort !== 'in')) return false
           const sourceStage = currentStages.find(stage => stage.id === sourceCell.id)
@@ -235,8 +245,8 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
           shape: isReview ? 'polygon' : 'rect',
           x: stage.position?.x ?? fallbackPosition.x,
           y: stage.position?.y ?? fallbackPosition.y,
-          width: isReview ? 104 : 124,
-          height: isReview ? 78 : 56,
+          width: nodeWidth(isReview),
+          height: nodeHeight(isReview),
           label: `${roleLabel}${siteLabel ? `\n${siteLabel}` : ''}`,
           data: { stageId: stage.id },
           ports: {
@@ -299,6 +309,8 @@ function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: Or
     source: { cell: edge.sourceStageId, port: sourcePort },
     target: { cell: edge.targetStageId, port: edge.targetPort ?? 'in' },
     vertices: cloneEdgeVertices(edge.vertices),
+    connector: orthogonalConnector(),
+    router: orthogonalRouter(),
     labels: branch ? [edgeBranchLabel(branch)] : undefined,
     tools: edgeTools(),
     attrs: {
@@ -311,6 +323,14 @@ function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: Or
       },
     },
   }
+}
+
+function orthogonalConnector(): Record<string, unknown> {
+  return { name: 'normal' }
+}
+
+function orthogonalRouter(): Record<string, unknown> {
+  return { name: 'manhattan' }
 }
 
 function edgeTools(): Record<string, unknown> {
@@ -479,12 +499,13 @@ export function arrangeOrchestrationGraph(stages: OrchestrationStage[], edges: O
     const level = levelById.get(stage.id) ?? indexById.get(stage.id) ?? 0
     const lane = lanesByLevel.get(level) ?? [stage]
     const laneIndex = lane.findIndex(item => item.id === stage.id)
-    const y = laneY(Math.max(0, laneIndex), lane.length)
+    const centerY = laneCenterY(Math.max(0, laneIndex), lane.length)
+    const isReview = stage.kind === 'review'
     return {
       ...stage,
       roleIds: [...stage.roleIds],
       review: stage.review ? { ...stage.review, reviewerRoleIds: [...stage.review.reviewerRoleIds] } : undefined,
-      position: { x: 56 + level * 180, y },
+      position: { x: 56 + level * 180, y: centerY - nodeHeight(isReview) / 2 },
     }
   })
   const positionById = new Map(positioned.map(stage => [stage.id, stage.position]))
@@ -537,9 +558,9 @@ function arrangeEdge(edge: OrchestrationGraphSnapshot['edges'][number], position
     ...(edge.targetPort ? { targetPort: edge.targetPort } : {}),
   }
   if (!source || !target || edge.sourcePort !== 'fail') return arranged
-  const sourceWidth = 104
-  const sourceHeight = 78
-  const targetHeight = 56
+  const sourceWidth = REVIEW_NODE_WIDTH
+  const sourceHeight = REVIEW_NODE_HEIGHT
+  const targetHeight = ROLE_NODE_HEIGHT
   const bottomY = Math.max(source.y + sourceHeight + 74, target.y + targetHeight + 74)
   return {
     ...arranged,
@@ -550,11 +571,19 @@ function arrangeEdge(edge: OrchestrationGraphSnapshot['edges'][number], position
   }
 }
 
-function laneY(index: number, count: number): number {
-  if (count <= 1) return 96
-  return 96 + index * 112
+function laneCenterY(index: number, count: number): number {
+  if (count <= 1) return ARRANGED_NODE_CENTER_Y
+  return ARRANGED_NODE_CENTER_Y + index * LANE_GAP
 }
 
 function defaultStagePosition(index: number, isReview: boolean): { x: number; y: number } {
-  return { x: 48 + index * 154, y: isReview ? 106 : 72 }
+  return { x: 48 + index * 154, y: DEFAULT_NODE_CENTER_Y - nodeHeight(isReview) / 2 }
+}
+
+function nodeWidth(isReview: boolean): number {
+  return isReview ? REVIEW_NODE_WIDTH : ROLE_NODE_WIDTH
+}
+
+function nodeHeight(isReview: boolean): number {
+  return isReview ? REVIEW_NODE_HEIGHT : ROLE_NODE_HEIGHT
 }

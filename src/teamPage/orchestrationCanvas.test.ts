@@ -92,8 +92,13 @@ describe('orchestration canvas', () => {
     expect(byId.get('stage-b')?.position?.y).not.toBe(byId.get('stage-c')?.position?.y)
     expect(byId.get('review-1')?.position?.x).toBeGreaterThan(byId.get('stage-b')?.position?.x ?? 0)
     expect(byId.get('stage-d')?.position?.x).toBeGreaterThan(byId.get('review-1')?.position?.x ?? 0)
+    expect(nodeCenterY(byId.get('stage-b')!, false)).toBe(nodeCenterY(byId.get('review-1')!, true))
+    expect(nodeCenterY(byId.get('review-1')!, true)).toBe(nodeCenterY(byId.get('stage-d')!, false))
     expect(arranged.edges.find(edge => edge.sourcePort === 'pass')?.vertices).toBeUndefined()
-    expect(arranged.edges.find(edge => edge.sourcePort === 'fail')?.vertices?.length).toBeGreaterThanOrEqual(2)
+    expect(arranged.edges.find(edge => edge.sourcePort === 'fail')?.vertices).toEqual([
+      { x: 468, y: 237 },
+      { x: 12, y: 237 },
+    ])
   })
 
   it('loads X6 through the injected dynamic loader and renders one node per stage', async () => {
@@ -118,6 +123,10 @@ describe('orchestration canvas', () => {
       edgeMovable: true,
       arrowheadMovable: true,
       vertexMovable: true,
+    }))
+    expect(MockGraph.instances[0].options.connecting).toEqual(expect.objectContaining({
+      connector: { name: 'normal' },
+      router: { name: 'manhattan' },
     }))
     expect(MockGraph.instances[0].fromJSONCalls).toBe(1)
     expect(MockGraph.instances[0].nodes).toHaveLength(2)
@@ -177,6 +186,8 @@ describe('orchestration canvas', () => {
             targetMarker: { name: 'classic', width: 5, height: 4 },
           }),
         }),
+        connector: { name: 'normal' },
+        router: { name: 'manhattan' },
       }),
     ])
     MockGraph.instances[0].handlers.get('edge:connected')?.({
@@ -221,6 +232,33 @@ describe('orchestration canvas', () => {
         targetPort: 'in',
         vertices: [{ x: 148, y: 96 }, { x: 196, y: 132 }],
       },
+    ])
+  })
+
+  it('renders saved bent edges with the same orthogonal X6 style', async () => {
+    MockGraph.instances = []
+    const rootEl = document.createElement('div')
+    const canvas = createOrchestrationCanvas({
+      rootEl,
+      getRoleName: roleId => roleId,
+      onStageSelected: vi.fn(),
+      onRoleDropped: vi.fn(),
+      loadX6: async () => ({ Graph: MockGraph }),
+    })
+
+    await canvas.mount(stages, undefined, [{
+      sourceStageId: 'review-1',
+      targetStageId: 'stage-1',
+      sourcePort: 'fail',
+      vertices: [{ x: 170, y: 220 }, { x: 40, y: 220 }],
+    }])
+
+    expect(MockGraph.instances[0].edges).toEqual([
+      expect.objectContaining({
+        connector: { name: 'normal' },
+        router: { name: 'manhattan' },
+        vertices: [{ x: 170, y: 220 }, { x: 40, y: 220 }],
+      }),
     ])
   })
 
@@ -322,3 +360,8 @@ describe('orchestration canvas', () => {
     expect(MockGraph.instances[0].disposed).toBe(true)
   })
 })
+
+function nodeCenterY(stage: OrchestrationStage, isReview: boolean): number | undefined {
+  if (!stage.position) return undefined
+  return stage.position.y + (isReview ? 78 : 56) / 2
+}
