@@ -5,6 +5,7 @@ import {
   MAX_ORCHESTRATION_MAX_ROUNDS,
   type ChatSite,
   type GroupChat,
+  type OrchestrationAutoPlanHistoryEntry,
   type GroupRole,
   type OrchestrationFlow,
   type OrchestrationGraphSnapshot,
@@ -17,7 +18,7 @@ import {
   parseAutoOrchestrationPlan,
   type AutoOrchestrationPlan,
 } from '../group/orchestrationAutoPlan'
-import { createGroupRole } from '../group/roleTemplates'
+import { createGroupRole, updateGroupRole } from '../group/roleTemplates'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { type RuntimeMessage } from './runtimeClient'
 import { getChatRoles, mutateStore, requireChat } from './storeAccess'
@@ -58,7 +59,10 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
   const handleAutoGenerate = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const task = requireString(message.task, '自动编排任务不能为空')
+    const instruction = readOptionalString(message.instruction) ?? task
     const flowId = readOptionalString(message.flowId)
+    const currentFlow = isRecord(message.flow) ? requireFlowPayload(message.flow) : undefined
+    const history = readAutoPlanHistory(message.history ?? currentFlow?.autoPlanHistory)
     const snapshot = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const roles = getChatRoles(store, chat)
@@ -70,7 +74,7 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
 
     const externalModelClient = deps.externalModelClient
     if (!externalModelClient) throw new Error('自动编排模型客户端不可用')
-    const prompt = buildAutoOrchestrationPrompt({ task, existingRoles: snapshot.result.roles, store: snapshot.result.store })
+    const prompt = buildAutoOrchestrationPrompt({ task, instruction, existingRoles: snapshot.result.roles, currentFlow, history, store: snapshot.result.store })
     const first = await externalModelClient.complete({ model: snapshot.result.model, prompt })
     const existingRoleIds = new Set(snapshot.result.roles.map(role => role.id))
     let plan: AutoOrchestrationPlan
@@ -79,7 +83,10 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
     } catch (error) {
       const repairPrompt = buildAutoOrchestrationRepairPrompt({
         task,
+        instruction,
         existingRoles: snapshot.result.roles,
+        currentFlow,
+        history,
         store: snapshot.result.store,
         invalidOutput: first.content,
         error: error instanceof Error ? error.message : String(error),
@@ -89,11 +96,12 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
     }
 
     const timestamp = deps.now()
+    const nextHistory = appendAutoPlanHistory(history, instruction, plan, timestamp, deps.newId)
     const generated = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const existingRoles = getChatRoles(store, chat)
       const { roleIdsByKey, createdRoleIds, reusedRoleIds } = materializeAutoPlanRoles(store, chat, existingRoles, plan, deps.newId, timestamp)
-      const flow = buildFlowFromAutoPlan(chat, flowId ?? deps.newId('flow'), plan, roleIdsByKey, timestamp)
+      const flow = buildFlowFromAutoPlan(chat, flowId ?? deps.newId('flow'), task, plan, roleIdsByKey, nextHistory, timestamp)
       return { flow, createdRoleIds, reusedRoleIds }
     })
     await deps.broadcastStoreUpdated(generated.store)
@@ -158,6 +166,15 @@ function materializeAutoPlanRoles(
   for (const rolePlan of plan.roles) {
     const reusable = rolePlan.reuseRoleId ? store.rolesById[rolePlan.reuseRoleId] : findReusableGeneratedRole(existingRoles, rolePlan.name, rolePlan.preferredSite, store.settings.defaultChatSite)
     if (reusable && reusable.chatId === chat.id) {
+      if (reusable.createdBy === 'orchestration-auto') {
+        updateGroupRole(store, reusable.id, {
+          name: rolePlan.name,
+          description: rolePlan.description,
+          systemPrompt: rolePlan.systemPrompt,
+          modelSource: 'site',
+          chatSite: rolePlan.preferredSite,
+        }, timestamp)
+      }
       roleIdsByKey.set(rolePlan.key, reusable.id)
       reusedRoleIds.push(reusable.id)
       continue
@@ -170,6 +187,7 @@ function materializeAutoPlanRoles(
       modelSource: 'site',
       chatSite: 'deepseek',
     }, newId('role'), timestamp)
+    role.createdBy = 'orchestration-auto'
     roleIdsByKey.set(rolePlan.key, role.id)
     createdRoleIds.push(role.id)
   }
@@ -187,8 +205,10 @@ function findReusableGeneratedRole(existingRoles: GroupRole[], name: string, pre
 function buildFlowFromAutoPlan(
   chat: GroupChat,
   flowId: string,
+  task: string,
   plan: AutoOrchestrationPlan,
   roleIdsByKey: Map<string, string>,
+  autoPlanHistory: OrchestrationAutoPlanHistoryEntry[],
   timestamp: number,
 ): OrchestrationFlow {
   const stageIdByNodeId = new Map(plan.nodes.map(node => [node.id, `stage-${node.id}`]))
@@ -228,9 +248,10 @@ function buildFlowFromAutoPlan(
     id: flowId,
     chatId: chat.id,
     name: plan.flowName || `${chat.name} 自动编排`,
-    description: undefined,
+    description: task || undefined,
     stages,
     graph: { stageNodes: stages, edges },
+    autoPlanHistory,
     maxNodeExecutions: plan.maxNodeExecutions,
     maxRounds: plan.maxNodeExecutions,
     createdAt: timestamp,
@@ -274,6 +295,40 @@ function normalizeMaxRounds(value: number | undefined): number {
 function normalizeMaxNodeExecutions(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS
   return Math.min(MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS, Math.max(1, Math.floor(value)))
+}
+
+function readAutoPlanHistory(value: unknown): OrchestrationAutoPlanHistoryEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): OrchestrationAutoPlanHistoryEntry[] => {
+    if (!isRecord(item)) return []
+    const id = readOptionalString(item.id)
+    const content = readOptionalString(item.content)
+    if (!id || !content) return []
+    return [{
+      id,
+      role: item.role === 'assistant' ? 'assistant' : 'user',
+      content,
+      createdAt: typeof item.createdAt === 'number' && Number.isFinite(item.createdAt) ? item.createdAt : 0,
+    }]
+  }).slice(-24)
+}
+
+function appendAutoPlanHistory(
+  history: OrchestrationAutoPlanHistoryEntry[],
+  instruction: string,
+  plan: AutoOrchestrationPlan,
+  timestamp: number,
+  newId: (prefix: string) => string,
+): OrchestrationAutoPlanHistoryEntry[] {
+  const next = [...history]
+  const userContent = instruction.trim()
+  if (userContent) next.push({ id: newId('auto-history'), role: 'user', content: userContent, createdAt: timestamp })
+  next.push({ id: newId('auto-history'), role: 'assistant', content: summarizeAutoPlanResult(plan), createdAt: timestamp })
+  return next.slice(-24)
+}
+
+function summarizeAutoPlanResult(plan: AutoOrchestrationPlan): string {
+  return `已生成「${plan.flowName || '自动编排流程'}」：${plan.nodes.length} 个节点，${plan.roles.length} 个人员，最大节点执行数 ${plan.maxNodeExecutions}。`
 }
 
 function readOptionalString(value: unknown): string | undefined {

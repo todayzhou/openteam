@@ -1,4 +1,4 @@
-import type { ChatSite, GroupRole, OpenTeamStore } from './types'
+import type { ChatSite, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow } from './types'
 
 export type AutoOrchestrationNodeKind = 'execute' | 'review'
 export type AutoOrchestrationBranch = 'pass' | 'fail'
@@ -43,7 +43,10 @@ export interface AutoOrchestrationPlan {
 
 export interface AutoOrchestrationPromptInput {
   task: string
+  instruction?: string
   existingRoles: GroupRole[]
+  currentFlow?: OrchestrationFlow
+  history?: OrchestrationAutoPlanHistoryEntry[]
   store: OpenTeamStore
 }
 
@@ -56,7 +59,9 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '你是 OpenTeam 的 AI 群聊流程编排规划器。',
     '你只能返回 JSON，不能返回 Markdown，不能解释，不能使用代码块。',
     '',
-    '目标：根据用户任务，生成一个可执行、可编辑的 AI 群聊编排流程。',
+    '目标：根据运行任务和本次编排指令，生成或修改一个可执行、可编辑的 AI 群聊编排流程。',
+    '运行任务是流程运行时要完成的业务目标；本次编排指令只描述如何生成或修改流程，两者不要混淆。',
+    '如果 currentFlow 存在，请基于 currentFlow 增量修改，尽量保留未被指令要求改变的人员、节点和连线。',
     '',
     '硬性约束：',
     '1. 如果 existingRoles 非空，优先复用 existingRoles，复用时 roles[].reuseRoleId 必须填 existingRoles 里的 id。',
@@ -73,6 +78,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '12. 不要生成孤立节点，不要生成无法到达节点。',
     `13. 节点数不能超过 ${MAX_AUTO_NODES} 个。`,
     '14. maxNodeExecutions 根据流程复杂度设置，默认 30。',
+    '15. 自动编排生成的人员可以根据本次指令更新 description 和 systemPrompt；复用普通现有人员时不要改写其人设。',
     '',
     '返回 JSON schema：',
     JSON.stringify({
@@ -115,17 +121,29 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
       ],
     }, null, 2),
     '',
-    '用户任务：',
+    '运行任务：',
     input.task,
+    '',
+    '本次编排指令：',
+    input.instruction?.trim() || input.task,
     '',
     'existingRoles：',
     JSON.stringify(input.existingRoles.map(role => summarizeExistingRole(role, input.store)), null, 2),
+    '',
+    '当前编排草稿：',
+    input.currentFlow ? JSON.stringify(summarizeCurrentFlow(input.currentFlow), null, 2) : '无',
+    '',
+    '自动编排历史：',
+    JSON.stringify(summarizeHistory(input.history ?? input.currentFlow?.autoPlanHistory ?? []), null, 2),
   ].join('\n')
 }
 
 export function buildAutoOrchestrationRepairPrompt(input: {
   task: string
+  instruction?: string
   existingRoles: GroupRole[]
+  currentFlow?: OrchestrationFlow
+  history?: OrchestrationAutoPlanHistoryEntry[]
   store: OpenTeamStore
   invalidOutput: string
   error: string
@@ -166,12 +184,40 @@ function summarizeExistingRole(role: GroupRole, store: OpenTeamStore): Record<st
   return {
     id: role.id,
     name: role.name,
+    createdBy: role.createdBy,
     site: role.modelSource === 'external'
       ? store.settings.externalModelsById[role.externalModelId ?? '']?.name ?? 'API'
       : role.chatSite ?? store.settings.defaultChatSite,
     description: role.description ?? '',
-    systemPromptSummary: (role.systemPrompt ?? '').slice(0, 600),
+    systemPrompt: (role.systemPrompt ?? '').slice(0, 2000),
   }
+}
+
+function summarizeCurrentFlow(flow: OrchestrationFlow): Record<string, unknown> {
+  return {
+    id: flow.id,
+    name: flow.name,
+    task: flow.description ?? '',
+    maxNodeExecutions: flow.maxNodeExecutions,
+    nodes: (flow.graph?.stageNodes?.length ? flow.graph.stageNodes : flow.stages).map(stage => ({
+      id: stage.id,
+      kind: stage.kind,
+      name: stage.name,
+      description: stage.description ?? '',
+      roleIds: stage.roleIds,
+      review: stage.review,
+    })),
+    edges: flow.graph?.edges ?? [],
+  }
+}
+
+function summarizeHistory(history: OrchestrationAutoPlanHistoryEntry[]): OrchestrationAutoPlanHistoryEntry[] {
+  return history.slice(-12).map(entry => ({
+    id: entry.id,
+    role: entry.role,
+    content: entry.content.slice(0, 4000),
+    createdAt: entry.createdAt,
+  }))
 }
 
 function normalizeRoles(value: unknown, existingRoleIds: Set<string>): AutoOrchestrationRolePlan[] {

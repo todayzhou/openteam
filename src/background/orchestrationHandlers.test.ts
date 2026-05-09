@@ -121,6 +121,7 @@ describe('orchestration background handlers', () => {
     expect(generated.createdRoleIds).toHaveLength(2)
     expect(generated.reusedRoleIds).toEqual(['role-existing'])
     expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['deepseek', 'deepseek'])
+    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].createdBy)).toEqual(['orchestration-auto', 'orchestration-auto'])
     expect(generated.flow.id).toBe('flow-existing')
     expect(generated.flow.stages.map(stage => stage.id)).toEqual(['stage-plan', 'stage-write', 'stage-review'])
     expect(generated.flow.stages[0]).toMatchObject({ kind: 'roles', roleIds: ['role-existing'], description: '拆解目标' })
@@ -159,8 +160,60 @@ describe('orchestration background handlers', () => {
     expect(generated.reusedRoleIds).toEqual([])
     expect(generated.createdRoleIds).toHaveLength(2)
     expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['deepseek', 'deepseek'])
+    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].createdBy)).toEqual(['orchestration-auto', 'orchestration-auto'])
     expect(generated.store.chatsById['chat-1'].roleIds).toEqual(generated.createdRoleIds)
     expect(generated.flow.stages.map(stage => stage.roleIds[0])).toEqual(generated.createdRoleIds)
+  })
+
+  it('auto-modifies from current flow and history while updating generated role prompts', async () => {
+    const store = makeStore(['role-auto'])
+    store.settings.externalModelOrder = ['planner']
+    store.settings.externalModelsById.planner = { id: 'planner', name: 'Planner', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'key', modelName: 'planner-model', createdAt: 1, updatedAt: 1 }
+    store.rolesById['role-auto'].name = '写手'
+    store.rolesById['role-auto'].createdBy = 'orchestration-auto'
+    store.rolesById['role-auto'].chatSite = 'deepseek'
+    store.rolesById['role-auto'].systemPrompt = '旧写作人设'
+    const currentFlow = makeFlow('chat-1', ['role-auto'])
+    currentFlow.autoPlanHistory = [
+      { id: 'auto-history-1', role: 'user', content: '先写草稿', createdAt: 1 },
+      { id: 'auto-history-2', role: 'assistant', content: '已生成写作节点', createdAt: 2 },
+    ]
+    const modelOutput = JSON.stringify({
+      flowName: '修改后的文章流程',
+      maxNodeExecutions: 20,
+      roles: [
+        { key: 'writer', reuseRoleId: 'role-auto', name: '写手', description: '负责初稿和修改', systemPrompt: '新的写作人设', preferredSite: 'deepseek' },
+      ],
+      nodes: [
+        { id: 'write', kind: 'execute', roleKeys: ['writer'], title: '写作', instruction: '按反馈修改' },
+      ],
+      edges: [],
+    })
+    const harness = await setupBackground(store, modelOutput)
+
+    const generated = await harness.invoke({
+      type: 'GROUP_ORCHESTRATION_AUTO_GENERATE',
+      chatId: 'chat-1',
+      task: '写文章',
+      instruction: '把写手人设改得更像财经编辑',
+      flowId: 'flow-1',
+      flow: currentFlow,
+      history: currentFlow.autoPlanHistory,
+    }) as { ok: boolean; flow: OrchestrationFlow; store: OpenTeamStore; createdRoleIds: string[]; reusedRoleIds: string[] }
+
+    expect(generated.ok).toBe(true)
+    const externalCalls = harness.externalComplete.mock.calls as unknown as Array<[{ prompt: string }]>
+    const prompt = externalCalls[0]?.[0].prompt ?? ''
+    expect(prompt).toContain('把写手人设改得更像财经编辑')
+    expect(prompt).toContain('当前编排草稿')
+    expect(prompt).toContain('已生成写作节点')
+    expect(generated.createdRoleIds).toEqual([])
+    expect(generated.reusedRoleIds).toEqual(['role-auto'])
+    expect(generated.store.rolesById['role-auto']).toMatchObject({ description: '负责初稿和修改', systemPrompt: '新的写作人设' })
+    expect(generated.flow.autoPlanHistory?.map(entry => entry.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    const generatedHistory = generated.flow.autoPlanHistory ?? []
+    expect(generatedHistory[generatedHistory.length - 2]?.content).toBe('把写手人设改得更像财经编辑')
+    expect(generatedHistory[generatedHistory.length - 1]?.content).toContain('修改后的文章流程')
   })
 })
 

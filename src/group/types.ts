@@ -127,6 +127,13 @@ export interface OrchestrationGraphSnapshot {
   edges: OrchestrationGraphEdge[]
 }
 
+export interface OrchestrationAutoPlanHistoryEntry {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: number
+}
+
 export interface OrchestrationFlow {
   id: string
   chatId: string
@@ -134,6 +141,7 @@ export interface OrchestrationFlow {
   description?: string
   stages: OrchestrationStage[]
   graph?: OrchestrationGraphSnapshot
+  autoPlanHistory?: OrchestrationAutoPlanHistoryEntry[]
   maxNodeExecutions?: number
   maxRounds: number
   createdAt: number
@@ -219,6 +227,7 @@ export interface RoleTemplate {
 export interface GroupRole {
   id: string
   chatId: string
+  createdBy?: 'orchestration-auto'
   templateId?: string
   modelSource?: RoleModelSource
   chatSite?: ChatSite

@@ -442,7 +442,7 @@ describe('orchestration modal view', () => {
     const harness = createHarness()
     const generatedStore = structuredClone(harness.store)
     generatedStore.chatsById['chat-1'].roleIds.push('role-new')
-    generatedStore.rolesById['role-new'] = { id: 'role-new', chatId: 'chat-1', name: '写手', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 }
+    generatedStore.rolesById['role-new'] = { id: 'role-new', chatId: 'chat-1', name: '写手', createdBy: 'orchestration-auto', chatSite: 'deepseek', systemPrompt: '旧写作人设', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 }
     const generatedFlow: OrchestrationFlow = {
       id: 'flow-auto',
       chatId: 'chat-1',
@@ -467,6 +467,10 @@ describe('orchestration modal view', () => {
       },
       maxNodeExecutions: 30,
       maxRounds: 30,
+      autoPlanHistory: [
+        { id: 'auto-history-1', role: 'user', content: '写一篇文章', createdAt: 2 },
+        { id: 'auto-history-2', role: 'assistant', content: '已生成自动流程', createdAt: 2 },
+      ],
       createdAt: 2,
       updatedAt: 2,
     }
@@ -477,16 +481,82 @@ describe('orchestration modal view', () => {
     harness.refs.orchestrationTaskEl.value = '写一篇文章'
 
     harness.refs.autoOrchestrationEl.click()
+    expect(harness.sendRuntimeMessage).not.toHaveBeenCalled()
+    const panel = harness.refs.orchestrationModalEl.querySelector<HTMLElement>('.orchestration-auto-panel')
+    expect(panel?.hidden).toBe(false)
+    const instruction = panel?.querySelector<HTMLTextAreaElement>('.orchestration-auto-instruction')
+    expect(instruction).not.toBeNull()
+    instruction!.value = '先规划，再写作，最后审核'
+    instruction!.dispatchEvent(new Event('input', { bubbles: true }))
+    panel?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
     await flushAsync()
 
-    expect(harness.sendRuntimeMessage).toHaveBeenCalledWith('GROUP_ORCHESTRATION_AUTO_GENERATE', { chatId: 'chat-1', task: '写一篇文章', flowId: undefined })
+    expect(harness.sendRuntimeMessage).toHaveBeenCalledWith('GROUP_ORCHESTRATION_AUTO_GENERATE', expect.objectContaining({ chatId: 'chat-1', task: '写一篇文章', instruction: '先规划，再写作，最后审核', flowId: undefined }))
     expect(harness.refs.orchestrationPeopleListEl.textContent).toContain('写手')
+    expect(panel?.textContent).toContain('已生成自动流程')
     expect(harness.successes[harness.successes.length - 1]).toContain('新增 1 个 DeepSeek 人员')
+    MockGraph.latest().selectNode('stage-plan')
+    expect(harness.refs.orchestrationStageSettingsEl.querySelector('.orchestration-auto-role-site-row')).toBeNull()
+    MockGraph.latest().selectNode('stage-write')
+    const siteSelect = harness.refs.orchestrationStageSettingsEl.querySelector<HTMLSelectElement>('.orchestration-auto-role-site-row select')
+    expect(siteSelect?.value).toBe('deepseek')
+    siteSelect!.value = 'chatgpt'
+    siteSelect!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushAsync()
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_UPDATE', { roleId: 'role-new', patch: { modelSource: 'site', chatSite: 'chatgpt' } })
+    const promptInput = harness.refs.orchestrationStageSettingsEl.querySelector<HTMLTextAreaElement>('.orchestration-auto-role-prompt')
+    expect(promptInput?.value).toBe('旧写作人设')
+    promptInput!.value = '新的写作人设'
+    promptInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushAsync()
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_UPDATE', { roleId: 'role-new', patch: { systemPrompt: '新的写作人设' } })
     harness.refs.saveOrchestrationEl.click()
     await flushAsync()
     const savePayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_FLOW_SAVE')?.[1] as { flow?: OrchestrationFlow }
     expect(savePayload.flow?.stages.map(stage => stage.id)).toEqual(['stage-plan', 'stage-write', 'stage-review'])
     expect(savePayload.flow?.graph?.edges).toContainEqual({ sourceStageId: 'stage-review', targetStageId: 'stage-write', sourcePort: 'fail', vertices: expect.any(Array) })
+    expect(savePayload.flow?.autoPlanHistory?.map(entry => entry.role)).toEqual(['user', 'assistant'])
+  })
+
+  it('sends the current draft and auto history when modifying an existing orchestration from the panel', async () => {
+    const harness = createHarness()
+    const savedFlow: OrchestrationFlow = {
+      id: 'flow-saved',
+      chatId: 'chat-1',
+      name: '已有流程',
+      description: '写文章',
+      stages: [{ id: 'stage-saved-1', kind: 'roles', name: '写作', roleIds: ['role-1'], description: '写初稿' }],
+      graph: { stageNodes: [{ id: 'stage-saved-1', kind: 'roles', name: '写作', roleIds: ['role-1'], description: '写初稿' }], edges: [] },
+      autoPlanHistory: [
+        { id: 'auto-history-1', role: 'user', content: '先写作', createdAt: 1 },
+        { id: 'auto-history-2', role: 'assistant', content: '已生成写作节点', createdAt: 2 },
+      ],
+      maxNodeExecutions: 20,
+      maxRounds: 20,
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    harness.store.orchestrationFlowsById[savedFlow.id] = savedFlow
+    harness.store.orchestrationFlowOrderByChatId['chat-1'] = [savedFlow.id]
+    harness.sendRuntimeMessage.mockResolvedValue({ ok: true, store: harness.store, flow: savedFlow, createdRoleIds: [], reusedRoleIds: ['role-1'] })
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    harness.refs.autoOrchestrationEl.click()
+    const panel = harness.refs.orchestrationModalEl.querySelector<HTMLElement>('.orchestration-auto-panel')
+    expect(panel?.textContent).toContain('已生成写作节点')
+    const instruction = panel?.querySelector<HTMLTextAreaElement>('.orchestration-auto-instruction')
+    instruction!.value = '增加审核失败回写作'
+    instruction!.dispatchEvent(new Event('input', { bubbles: true }))
+    panel?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
+    await flushAsync()
+
+    const payload = harness.sendRuntimeMessage.mock.calls[0][1] as { instruction?: string; flow?: OrchestrationFlow; history?: unknown[] }
+    expect(payload.instruction).toBe('增加审核失败回写作')
+    expect(payload.flow?.id).toBe('flow-saved')
+    expect(payload.flow?.graph?.stageNodes[0].description).toBe('写初稿')
+    expect(payload.history).toEqual(savedFlow.autoPlanHistory)
   })
 
   it('ignores repeated run clicks while the first run is still starting', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultStore } from './store'
-import type { GroupRole } from './types'
+import type { GroupRole, OrchestrationFlow } from './types'
 import { buildAutoOrchestrationPrompt, normalizeAutoOrchestrationPlan, parseAutoOrchestrationPlan } from './orchestrationAutoPlan'
 
 describe('orchestration auto plan', () => {
@@ -81,5 +81,45 @@ describe('orchestration auto plan', () => {
     expect(prompt).toContain('preferredSite 必须使用 "deepseek"')
     expect(prompt).toContain('不要创建 kind=parallel')
     expect(prompt).toContain('"id": "role-1"')
+  })
+
+  it('builds a modification prompt with task, instruction, current flow and planner history separated', () => {
+    const store = createDefaultStore()
+    const role: GroupRole = { id: 'role-1', chatId: 'chat-1', name: '写手', createdBy: 'orchestration-auto', chatSite: 'deepseek', systemPrompt: '写作人设', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const currentFlow: OrchestrationFlow = {
+      id: 'flow-1',
+      chatId: 'chat-1',
+      name: '文章流程',
+      description: '写文章',
+      stages: [{ id: 'stage-1', kind: 'roles', name: '写作', roleIds: ['role-1'], description: '写初稿' }],
+      graph: { stageNodes: [{ id: 'stage-1', kind: 'roles', name: '写作', roleIds: ['role-1'], description: '写初稿' }], edges: [] },
+      autoPlanHistory: [
+        { id: 'auto-history-1', role: 'user', content: '先写后审', createdAt: 1 },
+        { id: 'auto-history-2', role: 'assistant', content: '已生成 1 个节点', createdAt: 2 },
+      ],
+      maxRounds: 30,
+      maxNodeExecutions: 30,
+      createdAt: 1,
+      updatedAt: 2,
+    }
+
+    const prompt = buildAutoOrchestrationPrompt({
+      task: '写文章',
+      instruction: '增加审核失败回写作',
+      existingRoles: [role],
+      currentFlow,
+      history: currentFlow.autoPlanHistory,
+      store,
+    })
+
+    expect(prompt).toContain('运行任务')
+    expect(prompt).toContain('写文章')
+    expect(prompt).toContain('本次编排指令')
+    expect(prompt).toContain('增加审核失败回写作')
+    expect(prompt).toContain('当前编排草稿')
+    expect(prompt).toContain('"stage-1"')
+    expect(prompt).toContain('自动编排历史')
+    expect(prompt).toContain('先写后审')
+    expect(prompt).toContain('写作人设')
   })
 })

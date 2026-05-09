@@ -271,7 +271,15 @@ export function updateGroupRole(
       delete role.description
     }
   }
-  if (patch.systemPrompt !== undefined) throw new Error('群聊内人员人设不可编辑')
+  if (patch.systemPrompt !== undefined) {
+    if (role.createdBy !== 'orchestration-auto') throw new Error('群聊内人员人设不可编辑')
+    const systemPrompt = assertValidSystemPrompt(patch.systemPrompt)
+    if (systemPrompt) {
+      role.systemPrompt = systemPrompt
+    } else {
+      delete role.systemPrompt
+    }
+  }
   if (patch.modelSource !== undefined || patch.externalModelId !== undefined || patch.chatSite !== undefined) {
     role.modelSource = nextModelSource
     if (nextChatSite) {
