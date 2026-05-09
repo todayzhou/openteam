@@ -333,6 +333,16 @@
           <button id="close-person-template" class="icon-btn modal-close" type="button" aria-label="关闭人员编辑">×</button>
         </div>
         <form id="people-library-form" class="modal-form">
+          <div class="ai-persona-panel">
+            <div class="field">
+              <label for="template-ai-description">描述想要的人设</label>
+              <textarea id="template-ai-description" placeholder="例如：一个擅长小红书增长的内容顾问"></textarea>
+            </div>
+            <div class="template-actions template-ai-actions">
+              <p id="template-persona-generation-status" class="tiny" aria-live="polite"></p>
+              <button id="generate-template-persona" class="btn btn-ghost" type="button">AI 生成</button>
+            </div>
+          </div>
           <div class="field">
             <label for="template-name">人员名称</label>
             <input id="template-name" type="text" maxlength="50" autocomplete="off" />

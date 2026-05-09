@@ -26,6 +26,9 @@ export interface TeamPageDomRefs {
   templateNameEl: HTMLInputElement
   templateDescriptionEl: HTMLTextAreaElement
   templatePromptEl: HTMLTextAreaElement
+  templateAiDescriptionEl: HTMLTextAreaElement
+  generateTemplatePersonaEl: HTMLButtonElement
+  templatePersonaGenerationStatusEl: HTMLElement
   templateFormTitleEl: HTMLElement
   settingsButtonEl: HTMLButtonElement
   settingsMenuEl: HTMLElement
@@ -171,6 +174,9 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateNameEl: requireElement<HTMLInputElement>('#template-name'),
     templateDescriptionEl: requireElement<HTMLTextAreaElement>('#template-description'),
     templatePromptEl: requireElement<HTMLTextAreaElement>('#template-prompt'),
+    templateAiDescriptionEl: requireElement<HTMLTextAreaElement>('#template-ai-description'),
+    generateTemplatePersonaEl: requireElement<HTMLButtonElement>('#generate-template-persona'),
+    templatePersonaGenerationStatusEl: requireElement<HTMLElement>('#template-persona-generation-status'),
     templateFormTitleEl: requireElement<HTMLElement>('#template-form-title'),
     settingsButtonEl: requireElement<HTMLButtonElement>('#settings-button'),
     settingsMenuEl: requireElement<HTMLElement>('#settings-menu'),

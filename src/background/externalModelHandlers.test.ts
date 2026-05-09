@@ -28,6 +28,7 @@ describe('background external model handlers', () => {
       'EXTERNAL_MODEL_CREATE',
       'EXTERNAL_MODEL_UPDATE',
       'EXTERNAL_MODEL_DELETE',
+      'EXTERNAL_MODEL_TEST',
     ])
     expect(routes.map(route => route.type)).toEqual(EXTERNAL_MODEL_ROUTE_TYPES)
 
@@ -81,5 +82,49 @@ describe('background external model handlers', () => {
     }
     const remove = routes.find(route => route.type === 'EXTERNAL_MODEL_DELETE')!
     await expect(remove.handler({ type: 'EXTERNAL_MODEL_DELETE', modelId: 'external-model-1' }, {})).rejects.toThrow('外部模型正在被人员使用')
+  })
+
+  it('tests a saved external model with a lightweight completion prompt', async () => {
+    vi.resetModules()
+    const currentStore = createDefaultStore()
+    currentStore.settings.externalModelOrder = ['external-model-1']
+    currentStore.settings.externalModelsById['external-model-1'] = {
+      id: 'external-model-1',
+      name: '本地模型',
+      format: 'openai',
+      baseUrl: 'https://api.example.test/v1',
+      apiKey: 'sk-test',
+      modelName: 'local-chat-model',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    vi.doMock('../group/store', async importOriginal => {
+      const actual = await importOriginal<typeof import('../group/store')>()
+      return {
+        ...actual,
+        loadStore: vi.fn(async () => currentStore),
+      }
+    })
+
+    const complete = vi.fn(async () => ({ content: 'OK' }))
+    const { EXTERNAL_MODEL_ROUTE_TYPES, createExternalModelHandlers } = await import('./externalModelHandlers')
+    const routes = createExternalModelHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+    })
+
+    expect(EXTERNAL_MODEL_ROUTE_TYPES).toContain('EXTERNAL_MODEL_TEST')
+
+    const test = routes.find(route => route.type === 'EXTERNAL_MODEL_TEST')!
+    await expect(test.handler({ type: 'EXTERNAL_MODEL_TEST', modelId: 'external-model-1' }, {})).resolves.toMatchObject({
+      ok: true,
+      content: 'OK',
+    })
+    expect(complete).toHaveBeenCalledWith({
+      model: currentStore.settings.externalModelsById['external-model-1'],
+      prompt: expect.stringContaining('OpenTeam'),
+    })
   })
 })

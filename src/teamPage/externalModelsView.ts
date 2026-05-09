@@ -17,6 +17,7 @@ export interface ExternalModelsViewDependencies {
   externalModelModelNameEl: HTMLInputElement
   resetExternalModelFormEl: HTMLButtonElement
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
+  testExternalModel(modelId: string): Promise<void>
   showError(message: string): void
 }
 
@@ -80,12 +81,17 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     edit.className = 'btn btn-ghost'
     edit.textContent = '编辑'
     edit.addEventListener('click', () => fillForm(model))
+    const test = document.createElement('button')
+    test.type = 'button'
+    test.className = 'btn btn-ghost'
+    test.textContent = '测试'
+    test.addEventListener('click', () => testModel(model, test))
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'btn btn-danger'
     remove.textContent = '删除'
     remove.addEventListener('click', () => deleteModel(model))
-    actions.append(edit, remove)
+    actions.append(test, edit, remove)
     card.append(body, actions)
     return card
   }
@@ -112,6 +118,24 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
         renderExternalModels()
       })
       .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+  }
+
+  async function testModel(model: ExternalModelConfig, button: HTMLButtonElement): Promise<void> {
+    const originalText = button.textContent ?? '测试'
+    button.disabled = true
+    button.textContent = '测试中'
+    try {
+      await deps.testExternalModel(model.id)
+      button.textContent = '测试通过'
+    } catch (error) {
+      button.textContent = originalText
+      deps.showError(error instanceof Error ? error.message : String(error))
+    } finally {
+      window.setTimeout(() => {
+        button.disabled = false
+        button.textContent = originalText
+      }, 1200)
+    }
   }
 
   function fillForm(model: ExternalModelConfig): void {

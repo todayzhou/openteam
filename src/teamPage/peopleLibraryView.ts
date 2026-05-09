@@ -1,4 +1,5 @@
 import { ROLE_NAME_MAX_CHARACTERS } from '../group/roleTemplates'
+import type { GeneratedPersonDraft } from '../group/personaGeneration'
 import type { ChatSite, ExternalModelConfig, GroupChat, OpenTeamStore, RoleModelSource, RoleTemplate } from '../group/types'
 import type { TeamPageState } from './appState'
 
@@ -41,6 +42,9 @@ export interface PeopleLibraryViewDependencies {
   templateNameEl: HTMLInputElement
   templateDescriptionEl: HTMLTextAreaElement
   templatePromptEl: HTMLTextAreaElement
+  templateAiDescriptionEl: HTMLTextAreaElement
+  generateTemplatePersonaEl: HTMLButtonElement
+  templatePersonaGenerationStatusEl: HTMLElement
   templateFormTitleEl: HTMLElement
   templateSiteGeminiEl: HTMLInputElement
   templateSiteChatGptEl: HTMLInputElement
@@ -66,6 +70,7 @@ export interface PeopleLibraryViewDependencies {
   getCurrentChat(): GroupChat | undefined
   getTemplates(): RoleTemplate[]
   emptyCard(title: string, body: string): HTMLElement
+  generatePersona(description: string): Promise<GeneratedPersonDraft>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
   log: {
@@ -115,6 +120,10 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     const store = deps.getStore()
     const selectedTemplate = deps.state.selectedTemplateId ? store.roleTemplatesById[deps.state.selectedTemplateId] : undefined
     deps.templateFormTitleEl.textContent = selectedTemplate ? `编辑人员：${selectedTemplate.name}` : '新建人员'
+    deps.templateAiDescriptionEl.value = ''
+    deps.templatePersonaGenerationStatusEl.textContent = ''
+    deps.generateTemplatePersonaEl.disabled = false
+    deps.generateTemplatePersonaEl.textContent = 'AI 生成'
     renderExternalModelSelect()
     if (selectedTemplate) {
       const defaultChatSite = visibleChatSite(selectedTemplate.defaultChatSite ?? store.settings.defaultChatSite)
@@ -218,6 +227,9 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     deps.newTemplateEl.addEventListener('click', () => openTemplateEditor())
     deps.closePersonTemplateEl.addEventListener('click', closeTemplateEditor)
     deps.closeBuiltinTemplateDetailEl.addEventListener('click', closeBuiltinTemplateDetail)
+    deps.generateTemplatePersonaEl.addEventListener('click', () => {
+      generateTemplatePersona().catch(error => deps.showError(personaGenerationErrorMessage(error)))
+    })
     for (const input of templateSiteInputs()) {
       input.addEventListener('change', syncTemplateModelFields)
     }
@@ -657,6 +669,31 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     return undefined
   }
 
+  async function generateTemplatePersona(): Promise<void> {
+    const description = deps.templateAiDescriptionEl.value.trim()
+    if (!description) {
+      deps.showError('请先描述想要生成的人设')
+      return
+    }
+
+    deps.generateTemplatePersonaEl.disabled = true
+    deps.generateTemplatePersonaEl.textContent = '生成中'
+    deps.templatePersonaGenerationStatusEl.textContent = '生成中...'
+    try {
+      const persona = await deps.generatePersona(description)
+      deps.templateNameEl.value = persona.name
+      deps.templateDescriptionEl.value = persona.description
+      deps.templatePromptEl.value = persona.systemPrompt
+      deps.templatePersonaGenerationStatusEl.textContent = '已生成，可继续修改后保存'
+    } catch (error) {
+      deps.templatePersonaGenerationStatusEl.textContent = ''
+      throw error
+    } finally {
+      deps.generateTemplatePersonaEl.disabled = false
+      deps.generateTemplatePersonaEl.textContent = 'AI 生成'
+    }
+  }
+
   function selectedAddPersonItems(): Record<string, unknown>[] {
     const items = addPersonItems()
     const itemKeys = new Set(items.map(item => item.key))
@@ -817,4 +854,10 @@ function externalModelIdFromKey(key: string): string | undefined {
 function chatSiteFromModelKey(key: string): ChatSite {
   const value = key.startsWith('site:') ? key.slice('site:'.length) : key
   return visibleChatSite(value as ChatSite)
+}
+
+function personaGenerationErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message === 'Unknown OpenTeam message') return 'AI 生成人设需要重新加载 OpenTeam 扩展后再使用'
+  return message
 }

@@ -37,6 +37,7 @@ describe('background role handlers', () => {
     })
 
     expect(ROLE_ROUTE_TYPES).toEqual([
+      'ROLE_TEMPLATE_PERSONA_GENERATE',
       'ROLE_TEMPLATE_CREATE',
       'ROLE_TEMPLATE_UPDATE',
       'ROLE_TEMPLATE_DELETE',
@@ -208,6 +209,84 @@ describe('background role handlers', () => {
     expect(broadcastStoreUpdated).toHaveBeenCalledWith(expect.objectContaining({
       messagesById: expect.objectContaining({ 'msg-1': expect.any(Object) }),
     }))
+  })
+
+  it('generates a role template persona using the first configured external model', async () => {
+    vi.resetModules()
+    const startingStore = createDefaultStore()
+    startingStore.settings.externalModelOrder = ['model-first', 'model-second']
+    startingStore.settings.externalModelsById = {
+      'model-first': {
+        id: 'model-first',
+        name: '主力 API',
+        format: 'openai',
+        baseUrl: 'https://api.first.example/v1',
+        apiKey: 'sk-first',
+        modelName: 'first-chat-model',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      'model-second': {
+        id: 'model-second',
+        name: '备用 API',
+        format: 'openai',
+        baseUrl: 'https://api.second.example/v1',
+        apiKey: 'sk-second',
+        modelName: 'second-chat-model',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const result = await mutator(startingStore)
+          return { store: startingStore, result }
+        }),
+      }
+    })
+
+    const externalComplete = vi.fn(async () => ({
+      content: JSON.stringify({
+        name: '增长顾问',
+        description: '负责从获客、转化和复盘角度给建议。',
+        systemPrompt: '你是增长顾问。先判断目标和约束，再给出可执行建议。',
+      }),
+    }))
+    const { createRoleHandlers } = await import('./roleHandlers')
+    const routes = createRoleHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      externalModelClient: { complete: externalComplete },
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        getByRole: vi.fn(),
+        removeRole: vi.fn(),
+      },
+      sendPrompt: vi.fn(),
+    })
+
+    const generateRoute = routes.find(route => route.type === 'ROLE_TEMPLATE_PERSONA_GENERATE')!
+    const response = await generateRoute.handler({
+      type: 'ROLE_TEMPLATE_PERSONA_GENERATE',
+      description: '一个擅长小红书增长的内容顾问',
+    }, {})
+
+    expect(externalComplete).toHaveBeenCalledWith({
+      model: startingStore.settings.externalModelsById['model-first'],
+      prompt: expect.stringContaining('一个擅长小红书增长的内容顾问'),
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      persona: {
+        name: '增长顾问',
+        description: '负责从获客、转化和复盘角度给建议。',
+        systemPrompt: '你是增长顾问。先判断目标和约束，再给出可执行建议。',
+      },
+    })
   })
 
   it('creates a role template and group role that target an external model', async () => {

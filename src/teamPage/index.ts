@@ -1,5 +1,6 @@
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
 import { ensureInviteGate } from '../access/inviteGate'
+import type { GeneratedPersonDraft } from '../group/personaGeneration'
 import { createDefaultStore } from '../group/store'
 import { getAllRoleTemplates } from '../group/roleTemplates'
 import { createTeamPageState, pickSelectedChatId } from './appState'
@@ -32,7 +33,7 @@ const teamDomRefs = createTeamPageDomRefs()
 const { appShellEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
-const { templateNameEl, templateDescriptionEl, templatePromptEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl } = teamDomRefs
+const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl } = teamDomRefs
 const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl, allNotesActiveTitleEl, allNotesActiveMetaEl, allNotesEditorEl } = teamDomRefs
 const { allNoteBoldEl, allNoteItalicEl, allNoteStrikeEl, allNoteBulletListEl, allNoteOrderedListEl, allNoteUndoEl, allNoteRedoEl } = teamDomRefs
 const { openPeopleLibraryEl, openExternalModelsEl, openOrchestrationEl, closeOrchestrationEl, orchestrationModalEl, orchestrationAutoModalEl, orchestrationTaskEl, autoOrchestrationEl, closeAutoOrchestrationEl, orchestrationAutoContentEl, orchestrationPeopleListEl, arrangeOrchestrationEl, orchestrationCanvasEl, orchestrationHintEl, orchestrationStageSettingsEl, orchestrationReviewSettingsEl, orchestrationMaxRoundsEl, saveOrchestrationEl, runOrchestrationEl, closeExternalModelsEl, externalModelsModalEl, externalModelsListEl, externalModelFormEl, externalModelIdEl, externalModelNameEl, externalModelFormatEl, externalModelBaseUrlEl, externalModelApiKeyEl, externalModelModelNameEl, resetExternalModelFormEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
@@ -68,6 +69,18 @@ const runtimeClient = createTeamPageRuntimeClient({
 })
 const sendRuntimeMessage = runtimeClient.sendRuntimeMessage
 const runCommand = runtimeClient.runCommand
+async function generatePersona(description: string): Promise<GeneratedPersonDraft> {
+  const response = await sendRuntimeMessage('ROLE_TEMPLATE_PERSONA_GENERATE', { description }) as Awaited<ReturnType<typeof sendRuntimeMessage>> & { persona?: GeneratedPersonDraft }
+  if (response.ok === false) throw new Error(response.error || 'AI 生成人设失败')
+  if (!response.persona) throw new Error('AI 生成人设返回格式无效')
+  return response.persona
+}
+
+async function testExternalModel(modelId: string): Promise<void> {
+  const response = await sendRuntimeMessage('EXTERNAL_MODEL_TEST', { modelId })
+  if (response.ok === false) throw new Error(response.error || '外部模型测试失败')
+}
+
 let renderComposerState = (): void => {}
 let insertMention = (_role: GroupRole): void => {}
 let insertTextIntoActiveNote = (_text: string): void => {}
@@ -254,6 +267,9 @@ const peopleLibraryView = createPeopleLibraryView({
   templateNameEl,
   templateDescriptionEl,
   templatePromptEl,
+  templateAiDescriptionEl,
+  generateTemplatePersonaEl,
+  templatePersonaGenerationStatusEl,
   templateFormTitleEl,
   templateSiteGeminiEl,
   templateSiteChatGptEl,
@@ -279,6 +295,7 @@ const peopleLibraryView = createPeopleLibraryView({
   getCurrentChat,
   getTemplates,
   emptyCard,
+  generatePersona,
   runCommand,
   showError,
   log,
@@ -300,6 +317,7 @@ const externalModelsView = createExternalModelsView({
   externalModelModelNameEl,
   resetExternalModelFormEl,
   runCommand,
+  testExternalModel,
   showError,
 })
 const renderExternalModels = externalModelsView.renderExternalModels

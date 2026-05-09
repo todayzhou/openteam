@@ -32,6 +32,9 @@ describe('team page dom refs', () => {
       <input id="template-name" />
       <textarea id="template-description"></textarea>
       <textarea id="template-prompt"></textarea>
+      <textarea id="template-ai-description"></textarea>
+      <button id="generate-template-persona"></button>
+      <div id="template-persona-generation-status"></div>
       <div id="template-form-title"></div>
       <button id="settings-button"></button>
       <div id="settings-menu"></div>
@@ -149,6 +152,7 @@ describe('team page dom refs', () => {
     expect(refs.openOrchestrationEl.id).toBe('open-orchestration')
     expect(refs.autoOrchestrationEl.id).toBe('auto-orchestration')
     expect(refs.orchestrationMaxRoundsEl.id).toBe('orchestration-max-rounds')
+    expect(refs.generateTemplatePersonaEl.id).toBe('generate-template-persona')
     expect(refs.windowResizeHandleEl.id).toBe('window-resize-handle')
     expect(refs.messageInputEl.tagName).toBe('TEXTAREA')
     expect(refs.rolePanelEl.className).toBe('role-panel')

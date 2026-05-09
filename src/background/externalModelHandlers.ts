@@ -1,4 +1,6 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
+import { loadStore } from '../group/store'
+import type { ExternalModelClient } from './externalModelClient'
 import type { BackgroundMessageRoute } from './messageRouter'
 import type { RuntimeMessage } from './runtimeClient'
 import { mutateStore } from './storeAccess'
@@ -7,10 +9,12 @@ export const EXTERNAL_MODEL_ROUTE_TYPES = [
   'EXTERNAL_MODEL_CREATE',
   'EXTERNAL_MODEL_UPDATE',
   'EXTERNAL_MODEL_DELETE',
+  'EXTERNAL_MODEL_TEST',
 ] as const
 
 export interface ExternalModelHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
+  externalModelClient?: ExternalModelClient
   newId(prefix: string): string
   now(): number
 }
@@ -55,10 +59,24 @@ export function createExternalModelHandlers(deps: ExternalModelHandlersDependenc
     return { ok: true, store }
   }
 
+  const handleTest = async (message: RuntimeMessage) => {
+    if (!deps.externalModelClient) throw new Error('外部模型测试客户端不可用')
+    const modelId = requireString(message.modelId, '缺少外部模型 ID')
+    const store = await loadStore()
+    const model = store.settings.externalModelsById[modelId]
+    if (!model) throw new Error(`找不到外部模型：${modelId}`)
+    const completion = await deps.externalModelClient.complete({
+      model,
+      prompt: '你是 OpenTeam 的外部模型连通性测试。请只回复 OK。',
+    })
+    return { ok: true, content: completion.content }
+  }
+
   return [
     { type: 'EXTERNAL_MODEL_CREATE', handler: handleCreate },
     { type: 'EXTERNAL_MODEL_UPDATE', handler: handleUpdate },
     { type: 'EXTERNAL_MODEL_DELETE', handler: handleDelete },
+    { type: 'EXTERNAL_MODEL_TEST', handler: handleTest },
   ]
 }
 

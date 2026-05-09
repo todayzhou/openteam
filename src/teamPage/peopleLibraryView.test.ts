@@ -58,6 +58,9 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const templateNameEl = document.createElement('input')
   const templateDescriptionEl = document.createElement('textarea')
   const templatePromptEl = document.createElement('textarea')
+  const templateAiDescriptionEl = document.createElement('textarea')
+  const generateTemplatePersonaEl = document.createElement('button')
+  const templatePersonaGenerationStatusEl = document.createElement('div')
   const peopleLibraryFormEl = document.createElement('form')
   const builtinTemplateDetailModalEl = Object.assign(document.createElement('div'), { hidden: true })
   const builtinTemplateDetailTitleEl = document.createElement('div')
@@ -65,6 +68,11 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const builtinTemplateDetailPromptEl = document.createElement('pre')
   const closeBuiltinTemplateDetailEl = document.createElement('button')
   const runCommand = vi.fn(async () => undefined)
+  const generatePersona = vi.fn(async () => ({
+    name: 'AI 人员',
+    description: 'AI 生成的描述',
+    systemPrompt: 'AI 生成的人设',
+  }))
   const showError = vi.fn()
   const view = createPeopleLibraryView({
     state,
@@ -97,6 +105,9 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     templateNameEl,
     templateDescriptionEl,
     templatePromptEl,
+    templateAiDescriptionEl,
+    generateTemplatePersonaEl,
+    templatePersonaGenerationStatusEl,
     templateFormTitleEl: document.createElement('div'),
     templateSiteGeminiEl: document.createElement('input'),
     templateSiteChatGptEl,
@@ -126,6 +137,7 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
       element.textContent = `${title}${body}`
       return element
     },
+    generatePersona,
     runCommand,
     showError,
     log: { info: vi.fn() },
@@ -153,6 +165,10 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     templateNameEl,
     templateDescriptionEl,
     templatePromptEl,
+    templateAiDescriptionEl,
+    generateTemplatePersonaEl,
+    templatePersonaGenerationStatusEl,
+    generatePersona,
     templateSiteChatGptEl,
     templateChatGptGptsFieldEl,
     templateChatGptGptsUrlEl,
@@ -335,6 +351,57 @@ describe('team page people library view boundary', () => {
       defaultExternalModelId: undefined,
       chatGptGptsUrl: undefined,
     })
+  })
+
+  it('fills the new person form from an AI-generated persona draft', async () => {
+    const store = createDefaultStore()
+    const {
+      view,
+      generatePersona,
+      templateAiDescriptionEl,
+      generateTemplatePersonaEl,
+      templatePersonaGenerationStatusEl,
+      templateNameEl,
+      templateDescriptionEl,
+      templatePromptEl,
+    } = setupPeopleLibraryView({ store, templates: [] })
+    generatePersona.mockResolvedValueOnce({
+      name: '增长顾问',
+      description: '负责从获客、转化和复盘角度给建议。',
+      systemPrompt: '你是增长顾问。先判断目标和约束，再给出可执行建议。',
+    })
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    templateAiDescriptionEl.value = '一个擅长小红书增长的内容顾问'
+    generateTemplatePersonaEl.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(generatePersona).toHaveBeenCalledWith('一个擅长小红书增长的内容顾问')
+    expect(templateNameEl.value).toBe('增长顾问')
+    expect(templateDescriptionEl.value).toBe('负责从获客、转化和复盘角度给建议。')
+    expect(templatePromptEl.value).toBe('你是增长顾问。先判断目标和约束，再给出可执行建议。')
+    expect(templatePersonaGenerationStatusEl.textContent).toContain('已生成')
+  })
+
+  it('shows a reload hint when the running background does not know the persona generation route', async () => {
+    const store = createDefaultStore()
+    const {
+      view,
+      generatePersona,
+      showError,
+      templateAiDescriptionEl,
+      generateTemplatePersonaEl,
+    } = setupPeopleLibraryView({ store, templates: [] })
+    generatePersona.mockRejectedValueOnce(new Error('Unknown OpenTeam message'))
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    templateAiDescriptionEl.value = '一个擅长复盘的教练'
+    generateTemplatePersonaEl.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(showError).toHaveBeenCalledWith('AI 生成人设需要重新加载 OpenTeam 扩展后再使用')
   })
 
   it('allows library people names up to 50 characters', async () => {

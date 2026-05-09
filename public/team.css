@@ -788,6 +788,25 @@ h3 {
   display: none;
 }
 
+.ai-persona-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(47, 216, 204, 0.18);
+  border-radius: 8px;
+  background: rgba(47, 216, 204, 0.06);
+}
+
+.template-ai-actions {
+  margin-top: 0;
+}
+
+#template-persona-generation-status {
+  min-height: 16px;
+  margin: 0;
+  color: #a8f4f1;
+}
+
 label {
   color: var(--muted);
   font-size: 11px;

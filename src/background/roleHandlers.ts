@@ -1,4 +1,5 @@
 import { getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
+import { buildRoleTemplatePersonaPrompt, parseGeneratedPersonDraft } from '../group/personaGeneration'
 import { buildReinitPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import {
   createGroupRole,
@@ -12,12 +13,14 @@ import {
 } from '../group/roleTemplates'
 import type { ChatSite, OpenTeamStore } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
+import type { ExternalModelClient } from './externalModelClient'
 import type { PromptSender } from './promptDelivery'
 import type { RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
 import { getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
 export const ROLE_ROUTE_TYPES = [
+  'ROLE_TEMPLATE_PERSONA_GENERATE',
   'ROLE_TEMPLATE_CREATE',
   'ROLE_TEMPLATE_UPDATE',
   'ROLE_TEMPLATE_DELETE',
@@ -31,6 +34,7 @@ export const ROLE_ROUTE_TYPES = [
 
 export interface RoleHandlersDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
+  externalModelClient?: ExternalModelClient
   log: {
     info(event: string, details?: Record<string, unknown>): void
     warn(event: string, details?: Record<string, unknown>): void
@@ -42,6 +46,27 @@ export interface RoleHandlersDependencies {
 }
 
 export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMessageRoute[] {
+  const handleRoleTemplatePersonaGenerate = async (message: RuntimeMessage) => {
+    const description = requireString(message.description, '请先描述想要生成的人设')
+    const { result } = await mutateStore(store => {
+      const modelId = readOptionalString(message.modelId) ?? store.settings.externalModelOrder[0]
+      const model = modelId ? store.settings.externalModelsById[modelId] : undefined
+      if (!model) throw new Error('请先配置外部模型后再使用 AI 生成人设')
+      return { model }
+    })
+    if (!deps.externalModelClient) throw new Error('AI 生成人设客户端不可用')
+
+    const prompt = buildRoleTemplatePersonaPrompt({ description })
+    const completion = await deps.externalModelClient.complete({ model: result.model, prompt })
+    const persona = parseGeneratedPersonDraft(completion.content)
+    deps.log.info('role-template-persona:generate', {
+      modelId: result.model.id,
+      descriptionLength: description.length,
+      personaLength: persona.systemPrompt.length,
+    })
+    return { ok: true, persona }
+  }
+
   const handleRoleTemplateCreate = async (message: RuntimeMessage) => {
     const { store, result } = await mutateStore(store => createRoleTemplate(store, {
       name: requireString(message.name, '人员名称不能为空'),
@@ -249,6 +274,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
   }
 
   return [
+    { type: 'ROLE_TEMPLATE_PERSONA_GENERATE', handler: handleRoleTemplatePersonaGenerate },
     { type: 'ROLE_TEMPLATE_CREATE', handler: handleRoleTemplateCreate },
     { type: 'ROLE_TEMPLATE_UPDATE', handler: handleRoleTemplateUpdate },
     { type: 'ROLE_TEMPLATE_DELETE', handler: handleRoleTemplateDelete },
