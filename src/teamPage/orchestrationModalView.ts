@@ -1,3 +1,4 @@
+import { BUILTIN_ORCHESTRATION_TEMPLATES, getBuiltinOrchestrationTemplate, type BuiltinOrchestrationTemplate, type OrchestrationTemplateCategory, type OrchestrationTemplateRole } from '../group/orchestrationTemplates'
 import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow, OrchestrationGraphSnapshot, OrchestrationStage } from '../group/types'
 import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS, MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS } from '../group/types'
 import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
@@ -10,6 +11,10 @@ export interface OrchestrationModalDependencies {
   closeOrchestrationEl: HTMLButtonElement
   orchestrationTaskEl: HTMLTextAreaElement
   autoOrchestrationEl: HTMLButtonElement
+  openOrchestrationTemplateEl: HTMLButtonElement
+  orchestrationTemplateModalEl: HTMLElement
+  closeOrchestrationTemplateEl: HTMLButtonElement
+  orchestrationTemplateContentEl: HTMLElement
   closeAutoOrchestrationEl: HTMLButtonElement
   orchestrationAutoContentEl: HTMLElement
   orchestrationPeopleListEl: HTMLElement
@@ -26,7 +31,7 @@ export interface OrchestrationModalDependencies {
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
-  sendRuntimeMessage<T>(type: string, payload?: Record<string, unknown>): Promise<{ ok?: boolean; error?: string; store?: OpenTeamStore; flow?: OrchestrationFlow; createdRoleIds?: string[]; reusedRoleIds?: string[]; data?: T }>
+  sendRuntimeMessage<T>(type: string, payload?: Record<string, unknown>): Promise<{ ok?: boolean; error?: string; store?: OpenTeamStore; flow?: OrchestrationFlow; roles?: GroupRole[]; createdRoleIds?: string[]; reusedRoleIds?: string[]; data?: T }>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
   showError(message: string): void
   showSuccess(message: string): void
@@ -56,8 +61,10 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   let saving = false
   let running = false
   let autoGenerating = false
+  let applyingTemplate = false
   let autoPanelOpen = false
   let autoInstruction = ''
+  const templateManagedRoleIds = new Set<string>()
 
   function emptyDraft(): FlowDraft {
     return { task: '', stages: [], graphEdges: [], autoPlanHistory: [], maxNodeExecutions: DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS }
@@ -71,6 +78,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     }
     loadDraft(chat)
     deps.orchestrationModalEl.hidden = false
+    deps.openOrchestrationTemplateEl.textContent = '模板'
     deps.orchestrationTaskEl.value = draft.task
     deps.orchestrationMaxRoundsEl.value = String(draft.maxNodeExecutions)
     deps.orchestrationMaxRoundsEl.max = String(MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS)
@@ -84,6 +92,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     autoPanelOpen = false
     autoInstruction = ''
     removeAutoPanel()
+    closeTemplatePicker()
     canvas?.destroy()
     canvas = undefined
     mounted = false
@@ -179,6 +188,77 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       card.append(avatar, body)
       deps.orchestrationPeopleListEl.append(card)
     }
+  }
+
+  function openTemplatePicker(): void {
+    if (deps.orchestrationModalEl.hidden) return
+    deps.orchestrationTemplateModalEl.hidden = false
+    renderTemplatePicker()
+    deps.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('.orchestration-template-card')?.focus()
+  }
+
+  function closeTemplatePicker(): void {
+    deps.orchestrationTemplateModalEl.hidden = true
+    deps.orchestrationTemplateContentEl.replaceChildren()
+  }
+
+  function renderTemplatePicker(): void {
+    deps.orchestrationTemplateContentEl.replaceChildren()
+    const panel = document.createElement('section')
+    panel.className = 'orchestration-template-panel'
+    const heading = document.createElement('div')
+    heading.className = 'orchestration-template-heading'
+    const title = document.createElement('h3')
+    title.textContent = '从模板开始'
+    const subtitle = document.createElement('span')
+    subtitle.className = 'tiny'
+    subtitle.textContent = '选择后生成草稿，可继续调整。'
+    heading.append(title, subtitle)
+    panel.append(heading)
+
+    for (const category of ['structure', 'scenario'] as const) {
+      const group = document.createElement('div')
+      group.className = 'orchestration-template-group'
+      const groupTitle = document.createElement('span')
+      groupTitle.className = 'orchestration-template-group-title'
+      groupTitle.textContent = templateCategoryLabel(category)
+      const list = document.createElement('div')
+      list.className = 'orchestration-template-list'
+      for (const template of BUILTIN_ORCHESTRATION_TEMPLATES.filter(item => item.category === category)) {
+        list.append(templateCard(template))
+      }
+      group.append(groupTitle, list)
+      panel.append(group)
+    }
+
+    deps.orchestrationTemplateContentEl.append(panel)
+  }
+
+  function templateCard(template: BuiltinOrchestrationTemplate): HTMLElement {
+    const button = document.createElement('button')
+    button.className = 'orchestration-template-card'
+    button.type = 'button'
+    button.dataset.templateId = template.id
+    button.disabled = saving || running || autoGenerating || applyingTemplate
+    button.addEventListener('click', () => applyTemplate(template.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
+
+    const top = document.createElement('span')
+    top.className = 'orchestration-template-card-top'
+    const name = document.createElement('strong')
+    name.textContent = template.name
+    const tags = document.createElement('span')
+    tags.className = 'orchestration-template-tags'
+    tags.textContent = template.capabilities.map(templateCapabilityLabel).join(' · ')
+    top.append(name, tags)
+
+    const summary = document.createElement('span')
+    summary.className = 'orchestration-template-summary'
+    summary.textContent = template.summary
+    const structure = document.createElement('span')
+    structure.className = 'orchestration-template-structure'
+    structure.textContent = template.structure
+    button.append(top, summary, structure)
+    return button
   }
 
   function roleSitePill(role: GroupRole): HTMLElement {
@@ -327,7 +407,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   function autoGeneratedRoleSettingsField(stage: OrchestrationStage): HTMLElement | undefined {
     const editableRoles = selectedRoleIds(stage)
       .map(roleId => deps.getStore().rolesById[roleId])
-      .filter((role): role is GroupRole => Boolean(role) && role.createdBy === 'orchestration-auto' && role.modelSource !== 'external')
+      .filter((role): role is GroupRole => Boolean(role) && isGeneratedEditableRole(role) && role.modelSource !== 'external')
     if (editableRoles.length === 0) return undefined
 
     const field = document.createElement('div')
@@ -375,7 +455,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
 
   async function updateAutoGeneratedRoleSite(roleId: string, chatSite: ChatSite): Promise<void> {
     const role = deps.getStore().rolesById[roleId]
-    if (!role || role.createdBy !== 'orchestration-auto') throw new Error('只有自动编排生成的人员可以在这里修改站点')
+    if (!role || !isGeneratedEditableRole(role)) throw new Error('只有编排生成的人员可以在这里修改站点')
     if (role.modelSource === 'external') throw new Error('外部模型人员不能切换网页站点')
     await deps.runCommand('GROUP_ROLE_UPDATE', { roleId, patch: { modelSource: 'site', chatSite } })
     deps.showSuccess('人员站点已更新')
@@ -384,7 +464,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
 
   async function updateAutoGeneratedRolePrompt(roleId: string, systemPrompt: string): Promise<void> {
     const role = deps.getStore().rolesById[roleId]
-    if (!role || role.createdBy !== 'orchestration-auto') throw new Error('只有自动编排生成的人员可以在这里修改人设')
+    if (!role || !isGeneratedEditableRole(role)) throw new Error('只有编排生成的人员可以在这里修改人设')
     await deps.runCommand('GROUP_ROLE_UPDATE', { roleId, patch: { systemPrompt } })
     deps.showSuccess('人员人设已更新')
     render()
@@ -466,23 +546,6 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     }
     panel.replaceChildren()
 
-    const header = document.createElement('div')
-    header.className = 'orchestration-auto-panel-header'
-    const title = document.createElement('div')
-    const heading = document.createElement('h3')
-    heading.textContent = draft.stages.length > 0 ? '修改自动编排' : '自动生成编排'
-    const subtitle = document.createElement('p')
-    subtitle.className = 'tiny'
-    subtitle.textContent = '任务用于运行，下面的描述只用于生成或修改流程。'
-    title.append(heading, subtitle)
-    const closeButton = document.createElement('button')
-    closeButton.className = 'icon-btn'
-    closeButton.type = 'button'
-    closeButton.ariaLabel = '关闭自动编排面板'
-    closeButton.textContent = '×'
-    closeButton.addEventListener('click', closeAutoPanel)
-    header.append(title, closeButton)
-
     const taskPreview = document.createElement('div')
     taskPreview.className = 'orchestration-auto-task-preview'
     const taskLabel = document.createElement('span')
@@ -535,12 +598,172 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     submit.addEventListener('click', () => autoGenerate().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
     actions.append(submit)
 
-    panel.append(header, taskPreview, history, field, actions)
+    panel.append(taskPreview, history, field, actions)
   }
 
   function removeAutoPanel(): void {
     deps.orchestrationAutoContentEl.replaceChildren()
     deps.orchestrationAutoModalEl.hidden = true
+  }
+
+  async function applyTemplate(templateId: string): Promise<void> {
+    if (saving || running || autoGenerating || applyingTemplate) return
+    const chat = deps.getCurrentChat()
+    const template = getBuiltinOrchestrationTemplate(templateId)
+    if (!chat || !template) return
+    if (draft.stages.length > 0 && !window.confirm(`用「${template.name}」替换当前画布草稿吗？`)) return
+
+    applyingTemplate = true
+    updateActionButtons()
+    try {
+      await removeTemplateCreatedRoles(chat)
+      const roleIdsByKey = await resolveTemplateRoleIds(chat, template)
+      const stageIdByTemplateId = new Map(template.stages.map(stage => [stage.id, newId('stage')]))
+      const stages = template.stages.map(stage => {
+        const roleIds = stage.roleKeys.map(roleKey => requireTemplateRoleId(roleIdsByKey, roleKey, template.name))
+        const review = stage.review
+          ? {
+              reviewerRoleIds: stage.review.reviewerRoleKeys.map(roleKey => requireTemplateRoleId(roleIdsByKey, roleKey, template.name)),
+              instructions: stage.review.instructions,
+              maxAttempts: stage.review.maxAttempts,
+              onMaxAttempts: stage.review.onMaxAttempts,
+            }
+          : undefined
+        return {
+          id: stageIdByTemplateId.get(stage.id) ?? newId('stage'),
+          kind: stage.kind,
+          name: stage.name,
+          description: stage.description,
+          roleIds,
+          ...(review ? { review } : {}),
+        } satisfies OrchestrationStage
+      })
+      const edges = template.edges.flatMap(edge => {
+        const sourceStageId = stageIdByTemplateId.get(edge.from)
+        const targetStageId = stageIdByTemplateId.get(edge.to)
+        if (!sourceStageId || !targetStageId) return []
+        return [{
+          sourceStageId,
+          targetStageId,
+          ...(edge.sourcePort ? { sourcePort: edge.sourcePort } : {}),
+        }]
+      })
+      const arranged = arrangeOrchestrationGraph(stages, edges)
+      draft = {
+        flowId: draft.flowId,
+        task: deps.orchestrationTaskEl.value.trim(),
+        stages: arranged.stages,
+        graphEdges: arranged.edges,
+        autoPlanHistory: [],
+        maxNodeExecutions: clampMaxNodeExecutions(template.maxNodeExecutions),
+        selectedStageId: undefined,
+      }
+      deps.orchestrationMaxRoundsEl.value = String(draft.maxNodeExecutions)
+      deps.showSuccess(`已套用「${template.name}」模板`)
+      closeTemplatePicker()
+      render()
+    } finally {
+      applyingTemplate = false
+      updateActionButtons()
+    }
+  }
+
+  async function removeTemplateCreatedRoles(chat: GroupChat): Promise<void> {
+    const templateRoleIds = collectTemplateRoleIdsToDelete(chat)
+    for (const roleId of templateRoleIds) {
+      await deps.runCommand('GROUP_ROLE_DELETE', { roleId })
+      templateManagedRoleIds.delete(roleId)
+    }
+  }
+
+  function collectTemplateRoleIdsToDelete(chat: GroupChat): string[] {
+    const store = deps.getStore()
+    const roleIds = new Set<string>()
+    for (const roleId of templateManagedRoleIds) {
+      const role = store.rolesById[roleId]
+      if (!role) {
+        templateManagedRoleIds.delete(roleId)
+        continue
+      }
+      if (role.chatId === chat.id) roleIds.add(roleId)
+    }
+    for (const roleId of chat.roleIds) {
+      if (shouldRemoveRoleBeforeApplyingTemplate(roleId)) roleIds.add(roleId)
+    }
+    return [...roleIds]
+  }
+
+  function shouldRemoveRoleBeforeApplyingTemplate(roleId: string): boolean {
+    const role = deps.getStore().rolesById[roleId]
+    if (!role) return false
+    if (role.createdBy === 'orchestration-template') return true
+    if (role.createdBy !== 'orchestration-auto') return false
+    if (draftGeneratedRoleIds().has(role.id)) return true
+    return isBuiltinOrchestrationTemplateRoleName(role.name)
+  }
+
+  function draftGeneratedRoleIds(): Set<string> {
+    const roleIds = new Set<string>()
+    for (const stage of draft.stages) {
+      for (const roleId of stage.roleIds) roleIds.add(roleId)
+      for (const roleId of stage.review?.reviewerRoleIds ?? []) roleIds.add(roleId)
+    }
+    return roleIds
+  }
+
+  async function resolveTemplateRoleIds(chat: GroupChat, template: BuiltinOrchestrationTemplate): Promise<Map<string, string>> {
+    const roleIdsByKey = new Map<string, string>()
+    const usedRoleIds = new Set<string>()
+    const missingRoles: OrchestrationTemplateRole[] = []
+    for (const templateRole of template.roles) {
+      const reusable = findReusableTemplateRole(templateRole, deps.getCurrentRoles(), usedRoleIds)
+      if (reusable) {
+        roleIdsByKey.set(templateRole.key, reusable.id)
+        usedRoleIds.add(reusable.id)
+      } else {
+        missingRoles.push(templateRole)
+      }
+    }
+    if (missingRoles.length === 0) return roleIdsByKey
+
+    const createdRoles = await createTemplateRoles(chat, missingRoles)
+    missingRoles.forEach((templateRole, index) => {
+      const createdRole = createdRoles[index]
+      if (!createdRole) throw new Error(`模板「${template.name}」缺少人员：${templateRole.name}`)
+      roleIdsByKey.set(templateRole.key, createdRole.id)
+    })
+    return roleIdsByKey
+  }
+
+  async function createTemplateRoles(chat: GroupChat, roles: OrchestrationTemplateRole[]): Promise<GroupRole[]> {
+    const response = await deps.sendRuntimeMessage('GROUP_ROLES_CREATE_BATCH', {
+      chatId: chat.id,
+      items: roles.map(role => ({
+        source: 'temporary',
+        createdBy: 'orchestration-template',
+        name: role.name,
+        description: role.description,
+        systemPrompt: role.systemPrompt,
+        modelSource: 'site',
+        chatSite: 'deepseek',
+      })),
+    })
+    if (response.ok === false) throw new Error(response.error || '创建模板人员失败')
+    if (response.store) deps.applyStore(response.store)
+    const createdRoles = response.roles ?? findCreatedTemplateRoles(roles)
+    if (createdRoles.length !== roles.length) throw new Error('创建模板人员失败')
+    for (const role of createdRoles) templateManagedRoleIds.add(role.id)
+    return createdRoles
+  }
+
+  function findCreatedTemplateRoles(roles: OrchestrationTemplateRole[]): GroupRole[] {
+    const usedRoleIds = new Set<string>()
+    return roles.flatMap(role => {
+      const reusable = findReusableTemplateRole(role, deps.getCurrentRoles(), usedRoleIds)
+      if (!reusable) return []
+      usedRoleIds.add(reusable.id)
+      return [reusable]
+    })
   }
 
   async function save(): Promise<void> {
@@ -627,10 +850,12 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   }
 
   function updateActionButtons(): void {
-    deps.autoOrchestrationEl.disabled = autoGenerating || saving || running
+    deps.autoOrchestrationEl.disabled = autoGenerating || saving || running || applyingTemplate
     deps.autoOrchestrationEl.textContent = autoGenerating ? '生成中...' : '自动编排'
-    deps.saveOrchestrationEl.disabled = saving || running || autoGenerating
-    deps.runOrchestrationEl.disabled = saving || running || autoGenerating
+    deps.openOrchestrationTemplateEl.disabled = autoGenerating || saving || running || applyingTemplate
+    deps.saveOrchestrationEl.disabled = saving || running || autoGenerating || applyingTemplate
+    deps.runOrchestrationEl.disabled = saving || running || autoGenerating || applyingTemplate
+    if (!deps.orchestrationTemplateModalEl.hidden) renderTemplatePicker()
   }
 
   function applyGeneratedFlow(flow: OrchestrationFlow): void {
@@ -731,6 +956,8 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     deps.openOrchestrationEl.addEventListener('click', open)
     deps.closeOrchestrationEl.addEventListener('click', close)
     deps.closeAutoOrchestrationEl.addEventListener('click', closeAutoPanel)
+    deps.openOrchestrationTemplateEl.addEventListener('click', openTemplatePicker)
+    deps.closeOrchestrationTemplateEl.addEventListener('click', closeTemplatePicker)
     deps.arrangeOrchestrationEl.addEventListener('click', arrangeCanvas)
     deps.autoOrchestrationEl.addEventListener('click', openAutoPanel)
     deps.orchestrationMaxRoundsEl.addEventListener('input', render)
@@ -745,6 +972,47 @@ function autoGenerateSuccessMessage(createdCount: number, reusedCount: number): 
   if (createdCount > 0 && reusedCount > 0) return `已自动生成编排草稿，复用 ${reusedCount} 个成员，新增 ${createdCount} 个 DeepSeek 人员`
   if (createdCount > 0) return `已自动生成编排草稿，新增 ${createdCount} 个 DeepSeek 人员`
   return '已自动生成编排草稿，可继续调整后保存或运行'
+}
+
+function templateCategoryLabel(category: OrchestrationTemplateCategory): string {
+  return category === 'structure' ? '编排类型' : '业务场景'
+}
+
+function templateCapabilityLabel(capability: string): string {
+  if (capability === 'sequential') return '顺序'
+  if (capability === 'parallel') return '并行'
+  if (capability === 'review') return '审核'
+  if (capability === 'loop') return '循环'
+  if (capability === 'merge') return '汇总'
+  return capability
+}
+
+function requireTemplateRoleId(roleIdsByKey: Map<string, string>, roleKey: string, templateName: string): string {
+  const roleId = roleIdsByKey.get(roleKey)
+  if (!roleId) throw new Error(`模板「${templateName}」缺少人员：${roleKey}`)
+  return roleId
+}
+
+function findReusableTemplateRole(templateRole: OrchestrationTemplateRole, roles: GroupRole[], usedRoleIds: Set<string>): GroupRole | undefined {
+  const acceptableNames = new Set([templateRole.name, ...(templateRole.aliases ?? [])].map(normalizeTemplateRoleName))
+  return roles.find(role => !usedRoleIds.has(role.id) && acceptableNames.has(normalizeTemplateRoleName(role.name)))
+}
+
+function isGeneratedEditableRole(role: GroupRole): boolean {
+  return role.createdBy === 'orchestration-auto' || role.createdBy === 'orchestration-template'
+}
+
+function isBuiltinOrchestrationTemplateRoleName(name: string): boolean {
+  const normalizedName = normalizeTemplateRoleName(name)
+  return builtinOrchestrationTemplateRoleNames().has(normalizedName)
+}
+
+function builtinOrchestrationTemplateRoleNames(): Set<string> {
+  return new Set(BUILTIN_ORCHESTRATION_TEMPLATES.flatMap(template => template.roles.map(role => normalizeTemplateRoleName(role.name))))
+}
+
+function normalizeTemplateRoleName(name: string): string {
+  return name.trim().toLowerCase()
 }
 
 function cloneStages(stages: OrchestrationStage[]): OrchestrationStage[] {

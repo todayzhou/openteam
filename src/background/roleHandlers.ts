@@ -118,6 +118,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     const templateId = readOptionalString(message.roleTemplateId) ?? readOptionalString(message.templateId)
     const { store, result } = await mutateStore(store => createGroupRole(store, {
       chatId,
+      createdBy: readRoleCreatedBy(message.createdBy),
       templateId,
       modelSource: readModelSource(message.modelSource),
       chatSite: readChatSite(message.chatSite),
@@ -306,6 +307,7 @@ function readGroupRoleBatchItem(value: unknown): Parameters<typeof createGroupRo
     return {
       source: 'temporary',
       name: requireString(value.name, '人员名称不能为空'),
+      createdBy: readRoleCreatedBy(value.createdBy),
       description: readOptionalString(value.description),
       systemPrompt: readOptionalString(value.systemPrompt) ?? '',
       modelSource: readModelSource(value.modelSource),
@@ -316,6 +318,10 @@ function readGroupRoleBatchItem(value: unknown): Parameters<typeof createGroupRo
   }
 
   throw new Error('添加人员来源无效')
+}
+
+function readRoleCreatedBy(value: unknown): Parameters<typeof createGroupRole>[1]['createdBy'] {
+  return value === 'orchestration-auto' || value === 'orchestration-template' ? value : undefined
 }
 
 function getBatchSource(items: Parameters<typeof createGroupRolesBatch>[2]): 'library' | 'temporary' | 'mixed' {

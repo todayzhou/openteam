@@ -478,6 +478,7 @@
           <label class="field" for="orchestration-task">任务</label>
           <div class="orchestration-task-input-row">
             <textarea id="orchestration-task" placeholder="描述要让编排流程完成的任务；不需要 @ 人员。"></textarea>
+            <button id="open-orchestration-template" class="btn orchestration-template-trigger" type="button">模板</button>
             <button id="auto-orchestration" class="btn orchestration-auto" type="button">自动编排</button>
           </div>
         </div>
@@ -527,6 +528,19 @@
           <button id="close-auto-orchestration" class="icon-btn modal-close" type="button" aria-label="关闭自动编排">×</button>
         </div>
         <div id="orchestration-auto-content" class="orchestration-auto-content"></div>
+      </section>
+    </div>
+
+    <div id="orchestration-template-modal" class="modal-backdrop modal-backdrop-secondary" hidden>
+      <section class="modal orchestration-template-modal" role="dialog" aria-modal="true" aria-labelledby="orchestration-template-title">
+        <div class="modal-header">
+          <div>
+            <h2 id="orchestration-template-title">选择编排模板</h2>
+            <p class="tiny">先套用一套结构，再按当前任务微调人员和节点。</p>
+          </div>
+          <button id="close-orchestration-template" class="icon-btn modal-close" type="button" aria-label="关闭模板选择">×</button>
+        </div>
+        <div id="orchestration-template-content" class="orchestration-template-content"></div>
       </section>
     </div>
 

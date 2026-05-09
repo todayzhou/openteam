@@ -128,7 +128,7 @@ describe('OpenTeam extension E2E runtime flow', () => {
 
     const recovered = await harness.invoke({ type: 'GROUP_ROLE_RECOVER', chatId: chat.id, roleId: role.id, hostTabId: 900 }) as { ok: boolean; iframeSrc: string }
     expect(recovered.ok).toBe(true)
-    expect(recovered.iframeSrc).toBe('https://gemini.google.com/')
+    expect(recovered.iframeSrc).toBe('https://chat.deepseek.com/')
     await readyFrame(harness, chat.id, role.id)
 
     const retried = await harness.invoke({ type: 'GROUP_ROLE_RETRY_REPLY', chatId: chat.id, roleId: role.id, messageId: sent.message.id }) as { ok: boolean; messageId: string }

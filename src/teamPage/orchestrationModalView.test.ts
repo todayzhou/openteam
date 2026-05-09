@@ -54,6 +54,10 @@ interface Harness {
     closeOrchestrationEl: HTMLButtonElement
     orchestrationTaskEl: HTMLTextAreaElement
     autoOrchestrationEl: HTMLButtonElement
+    openOrchestrationTemplateEl: HTMLButtonElement
+    orchestrationTemplateModalEl: HTMLElement
+    closeOrchestrationTemplateEl: HTMLButtonElement
+    orchestrationTemplateContentEl: HTMLElement
     closeAutoOrchestrationEl: HTMLButtonElement
     orchestrationAutoContentEl: HTMLElement
     orchestrationPeopleListEl: HTMLElement
@@ -67,7 +71,7 @@ interface Harness {
     runOrchestrationEl: HTMLButtonElement
   }
   store: OpenTeamStore
-  sendRuntimeMessage: Mock<[string, Record<string, unknown>?], Promise<{ ok?: boolean; store?: OpenTeamStore; flow?: OrchestrationFlow; createdRoleIds?: string[]; reusedRoleIds?: string[] }>>
+  sendRuntimeMessage: Mock<[string, Record<string, unknown>?], Promise<{ ok?: boolean; store?: OpenTeamStore; flow?: OrchestrationFlow; roles?: GroupRole[]; createdRoleIds?: string[]; reusedRoleIds?: string[] }>>
   runCommand: Mock<[string, Record<string, unknown>?], Promise<void>>
   reconnectRolesForSend: Mock<[GroupChat, GroupRole[]], Promise<void>>
   errors: string[]
@@ -80,6 +84,7 @@ function createHarness(): Harness {
     <div id="orchestration-modal" hidden>
       <button id="close-orchestration"></button>
       <textarea id="orchestration-task"></textarea>
+      <button id="open-orchestration-template"></button>
       <button id="auto-orchestration"></button>
       <div id="orchestration-people-list"></div>
       <button id="arrange-orchestration"></button>
@@ -98,6 +103,10 @@ function createHarness(): Harness {
     <div id="orchestration-auto-modal" hidden>
       <button id="close-auto-orchestration"></button>
       <div id="orchestration-auto-content"></div>
+    </div>
+    <div id="orchestration-template-modal" hidden>
+      <button id="close-orchestration-template"></button>
+      <div id="orchestration-template-content"></div>
     </div>
   `
   const store = createDefaultStore()
@@ -121,6 +130,10 @@ function createHarness(): Harness {
       closeOrchestrationEl: document.querySelector('#close-orchestration') as HTMLButtonElement,
       orchestrationTaskEl: document.querySelector('#orchestration-task') as HTMLTextAreaElement,
       autoOrchestrationEl: document.querySelector('#auto-orchestration') as HTMLButtonElement,
+      openOrchestrationTemplateEl: document.querySelector('#open-orchestration-template') as HTMLButtonElement,
+      orchestrationTemplateModalEl: document.querySelector('#orchestration-template-modal') as HTMLElement,
+      closeOrchestrationTemplateEl: document.querySelector('#close-orchestration-template') as HTMLButtonElement,
+      orchestrationTemplateContentEl: document.querySelector('#orchestration-template-content') as HTMLElement,
       closeAutoOrchestrationEl: document.querySelector('#close-auto-orchestration') as HTMLButtonElement,
       orchestrationAutoContentEl: document.querySelector('#orchestration-auto-content') as HTMLElement,
       orchestrationPeopleListEl: document.querySelector('#orchestration-people-list') as HTMLElement,
@@ -134,7 +147,7 @@ function createHarness(): Harness {
       runOrchestrationEl: document.querySelector('#run-orchestration') as HTMLButtonElement,
     },
     store,
-    sendRuntimeMessage: vi.fn<[string, Record<string, unknown>?], Promise<{ ok?: boolean; store?: OpenTeamStore; flow?: OrchestrationFlow; createdRoleIds?: string[]; reusedRoleIds?: string[] }>>(async () => ({ ok: true })),
+    sendRuntimeMessage: vi.fn<[string, Record<string, unknown>?], Promise<{ ok?: boolean; store?: OpenTeamStore; flow?: OrchestrationFlow; roles?: GroupRole[]; createdRoleIds?: string[]; reusedRoleIds?: string[] }>>(async () => ({ ok: true })),
     runCommand: vi.fn<[string, Record<string, unknown>?], Promise<void>>(async () => undefined),
     reconnectRolesForSend: vi.fn<[GroupChat, GroupRole[]], Promise<void>>(async () => undefined),
     errors: [],
@@ -192,6 +205,179 @@ describe('orchestration modal view', () => {
     const runPayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_RUN')?.[1] as { flow?: OrchestrationFlow }
     expect(runPayload.flow?.stages.map(stage => stage.roleIds)).toEqual([['role-1'], ['role-2']])
     expect(runPayload.flow?.graph?.edges).toEqual([])
+  })
+
+  it('opens built-in orchestration templates from a compact picker button', () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+
+    harness.refs.openOrchestrationEl.click()
+
+    expect(harness.refs.openOrchestrationTemplateEl.textContent).toContain('模板')
+    expect(harness.refs.orchestrationModalEl.textContent).not.toContain('并行汇总')
+    expect(harness.refs.orchestrationTemplateModalEl.hidden).toBe(true)
+
+    harness.refs.openOrchestrationTemplateEl.click()
+
+    expect(harness.refs.orchestrationTemplateModalEl.hidden).toBe(false)
+    expect(harness.refs.orchestrationTemplateContentEl.textContent).toContain('编排类型')
+    expect(harness.refs.orchestrationTemplateContentEl.textContent).toContain('业务场景')
+    expect(harness.refs.orchestrationTemplateContentEl.textContent).toContain('并行汇总')
+    expect(harness.refs.orchestrationTemplateContentEl.textContent).toContain('循环审核')
+  })
+
+  it('applies a built-in loop template by creating missing roles and generating a review fail edge', async () => {
+    const harness = createHarness()
+    const nextStore = structuredClone(harness.store)
+    const createdRoles: GroupRole[] = [
+      { id: 'role-writer', chatId: 'chat-1', name: '执行者', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+      { id: 'role-reviewer', chatId: 'chat-1', name: '审核员', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+    ]
+    nextStore.chatsById['chat-1'].roleIds.push(...createdRoles.map(role => role.id))
+    for (const role of createdRoles) nextStore.rolesById[role.id] = role
+    harness.sendRuntimeMessage.mockResolvedValue({ ok: true, store: nextStore, roles: createdRoles })
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="review-loop"]')?.click()
+    await flushAsync()
+
+    expect(harness.sendRuntimeMessage).toHaveBeenCalledWith('GROUP_ROLES_CREATE_BATCH', expect.objectContaining({
+      chatId: 'chat-1',
+      items: expect.arrayContaining([
+        expect.objectContaining({ source: 'temporary', createdBy: 'orchestration-template', name: '执行者', chatSite: 'deepseek' }),
+        expect.objectContaining({ source: 'temporary', createdBy: 'orchestration-template', name: '审核员', chatSite: 'deepseek' }),
+      ]),
+    }))
+    expect(harness.refs.orchestrationTemplateModalEl.hidden).toBe(true)
+    expect(harness.successes[harness.successes.length - 1]).toContain('循环审核')
+    harness.refs.orchestrationTaskEl.value = '打磨一篇发布文案'
+    harness.refs.saveOrchestrationEl.click()
+    await flushAsync()
+
+    const savePayload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_FLOW_SAVE')?.[1] as { flow?: OrchestrationFlow }
+    expect(savePayload.flow?.stages.map(stage => stage.name)).toEqual(['产出初稿', '修改完善', '审核把关'])
+    expect(savePayload.flow?.graph?.edges).toContainEqual(expect.objectContaining({ sourceStageId: expect.any(String), targetStageId: expect.any(String), sourcePort: 'fail' }))
+    expect(savePayload.flow?.stages.find(stage => stage.kind === 'review')?.review?.instructions).toContain('通过')
+  })
+
+  it('removes previously template-created roles before applying another built-in template', async () => {
+    const harness = createHarness()
+    const loopRoles: GroupRole[] = [
+      { id: 'role-loop-writer', chatId: 'chat-1', name: '执行者', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+      { id: 'role-loop-reviewer', chatId: 'chat-1', name: '审核员', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+    ]
+    const parallelRoles: GroupRole[] = [
+      { id: 'role-angle-a', chatId: 'chat-1', name: '视角A', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-b', chatId: 'chat-1', name: '视角B', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-c', chatId: 'chat-1', name: '视角C', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-merger', chatId: 'chat-1', name: '汇总者', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+    ]
+    harness.sendRuntimeMessage
+      .mockResolvedValueOnce({ ok: true, store: storeWithRoles(harness.store, loopRoles), roles: loopRoles })
+      .mockResolvedValueOnce({ ok: true, store: storeWithRoles(harness.store, parallelRoles), roles: parallelRoles })
+    harness.runCommand.mockImplementation(async (type, payload) => {
+      if (type !== 'GROUP_ROLE_DELETE') return
+      const roleId = payload?.roleId
+      if (typeof roleId !== 'string') return
+      delete harness.store.rolesById[roleId]
+      harness.store.chatsById['chat-1'].roleIds = harness.store.chatsById['chat-1'].roleIds.filter(id => id !== roleId)
+    })
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="review-loop"]')?.click()
+    await flushAsync()
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="parallel-merge"]')?.click()
+    await flushAsync()
+
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-loop-writer' })
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-loop-reviewer' })
+    expect(harness.store.chatsById['chat-1'].roleIds).not.toEqual(expect.arrayContaining(['role-loop-writer', 'role-loop-reviewer']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-angle-a', 'role-angle-b', 'role-angle-c', 'role-merger']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-1', 'role-2']))
+  })
+
+  it('removes legacy template roles that were previously marked as auto-generated', async () => {
+    const harness = createHarness()
+    const legacyTemplateRoles: GroupRole[] = [
+      { id: 'role-legacy-writer', chatId: 'chat-1', name: '执行者', createdBy: 'orchestration-auto', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+      { id: 'role-legacy-reviewer', chatId: 'chat-1', name: '审核员', createdBy: 'orchestration-auto', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+    ]
+    harness.store = storeWithRoles(harness.store, legacyTemplateRoles)
+    const parallelRoles: GroupRole[] = [
+      { id: 'role-angle-a', chatId: 'chat-1', name: '视角A', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-b', chatId: 'chat-1', name: '视角B', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-c', chatId: 'chat-1', name: '视角C', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-merger', chatId: 'chat-1', name: '汇总者', createdBy: 'orchestration-template', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+    ]
+    harness.sendRuntimeMessage.mockImplementation(async () => ({ ok: true, store: storeWithRoles(harness.store, parallelRoles), roles: parallelRoles }))
+    harness.runCommand.mockImplementation(async (type, payload) => {
+      if (type !== 'GROUP_ROLE_DELETE') return
+      const roleId = payload?.roleId
+      if (typeof roleId !== 'string') return
+      delete harness.store.rolesById[roleId]
+      harness.store.chatsById['chat-1'].roleIds = harness.store.chatsById['chat-1'].roleIds.filter(id => id !== roleId)
+    })
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="parallel-merge"]')?.click()
+    await flushAsync()
+
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-legacy-writer' })
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-legacy-reviewer' })
+    expect(harness.store.chatsById['chat-1'].roleIds).not.toEqual(expect.arrayContaining(['role-legacy-writer', 'role-legacy-reviewer']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-angle-a', 'role-angle-b', 'role-angle-c', 'role-merger']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-1', 'role-2']))
+  })
+
+  it('deletes roles created by the previous template even when the store has no template marker', async () => {
+    const harness = createHarness()
+    const loopRoles: GroupRole[] = [
+      { id: 'role-loop-writer', chatId: 'chat-1', name: '执行者', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+      { id: 'role-loop-reviewer', chatId: 'chat-1', name: '审核员', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 },
+    ]
+    const parallelRoles: GroupRole[] = [
+      { id: 'role-angle-a', chatId: 'chat-1', name: '视角A', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-b', chatId: 'chat-1', name: '视角B', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-angle-c', chatId: 'chat-1', name: '视角C', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+      { id: 'role-merger', chatId: 'chat-1', name: '汇总者', chatSite: 'deepseek', status: 'pending', contextCursor: 0, createdAt: 3, updatedAt: 3 },
+    ]
+    harness.sendRuntimeMessage
+      .mockResolvedValueOnce({ ok: true, store: storeWithRoles(harness.store, loopRoles), roles: loopRoles })
+      .mockResolvedValueOnce({ ok: true, store: storeWithRoles(harness.store, parallelRoles), roles: parallelRoles })
+    harness.runCommand.mockImplementation(async (type, payload) => {
+      if (type !== 'GROUP_ROLE_DELETE') return
+      const roleId = payload?.roleId
+      if (typeof roleId !== 'string') return
+      delete harness.store.rolesById[roleId]
+      harness.store.chatsById['chat-1'].roleIds = harness.store.chatsById['chat-1'].roleIds.filter(id => id !== roleId)
+    })
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="review-loop"]')?.click()
+    await flushAsync()
+    harness.refs.openOrchestrationTemplateEl.click()
+    harness.refs.orchestrationTemplateContentEl.querySelector<HTMLButtonElement>('[data-template-id="parallel-merge"]')?.click()
+    await flushAsync()
+
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-loop-writer' })
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-loop-reviewer' })
+    expect(harness.store.chatsById['chat-1'].roleIds).not.toEqual(expect.arrayContaining(['role-loop-writer', 'role-loop-reviewer']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-angle-a', 'role-angle-b', 'role-angle-c', 'role-merger']))
+    expect(harness.store.chatsById['chat-1'].roleIds).toEqual(expect.arrayContaining(['role-1', 'role-2']))
   })
 
   it('opens a blank draft by default when the chat has no saved orchestration flow', () => {
@@ -539,6 +725,8 @@ describe('orchestration modal view', () => {
 
     expect(harness.refs.orchestrationAutoModalEl.hidden).toBe(false)
     expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-panel')).not.toBeNull()
+    expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-panel-header')).toBeNull()
+    expect(harness.refs.orchestrationAutoContentEl.querySelector('[aria-label="关闭自动编排面板"]')).toBeNull()
     expect(harness.refs.orchestrationModalEl.querySelector('.orchestration-auto-panel')).toBeNull()
   })
 
@@ -645,6 +833,13 @@ function dropRole(harness: Harness, roleId: string): void {
   const drop = new Event('drop', { bubbles: true, cancelable: true })
   Object.defineProperty(drop, 'dataTransfer', { value: { getData: () => roleId, types: ['application/x-openteam-role-id'] } })
   harness.refs.orchestrationCanvasEl.dispatchEvent(drop)
+}
+
+function storeWithRoles(baseStore: OpenTeamStore, roles: GroupRole[]): OpenTeamStore {
+  const store = structuredClone(baseStore)
+  store.chatsById['chat-1'].roleIds.push(...roles.map(role => role.id))
+  for (const role of roles) store.rolesById[role.id] = role
+  return store
 }
 
 function flushAsync(): Promise<void> {

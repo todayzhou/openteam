@@ -234,8 +234,11 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
     return {
       nodes: stages.map((stage, index) => {
         const roleNames = stage.roleIds.map(getRoleName)
-        const roleLabel = roleNames[0] ?? '未选择人员'
-        const siteLabel = stage.roleIds[0] ? getRoleSiteLabel?.(stage.roleIds[0]).trim() : ''
+        const roleLabel = parallelRoleLabel(roleNames)
+        const firstSiteLabel = stage.roleIds[0] ? getRoleSiteLabel?.(stage.roleIds[0]).trim() : ''
+        const siteLabel = stage.roleIds.length > 1
+          ? `${firstSiteLabel ? `${firstSiteLabel} · ` : ''}${stage.roleIds.length} 人并行`
+          : firstSiteLabel
         const isReview = stage.kind === 'review'
         const selected = selectedStageId === stage.id
         const style = nodeStyle(selected)
@@ -323,6 +326,13 @@ function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: Or
       },
     },
   }
+}
+
+function parallelRoleLabel(roleNames: string[]): string {
+  if (roleNames.length === 0) return '未选择人员'
+  if (roleNames.length === 1) return roleNames[0] ?? '未选择人员'
+  if (roleNames.length === 2) return roleNames.join(' + ')
+  return `${roleNames[0]} +${roleNames.length - 1}`
 }
 
 function orthogonalConnector(): Record<string, unknown> {

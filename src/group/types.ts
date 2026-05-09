@@ -227,7 +227,7 @@ export interface RoleTemplate {
 export interface GroupRole {
   id: string
   chatId: string
-  createdBy?: 'orchestration-auto'
+  createdBy?: 'orchestration-auto' | 'orchestration-template'
   templateId?: string
   modelSource?: RoleModelSource
   chatSite?: ChatSite

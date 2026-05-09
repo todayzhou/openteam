@@ -16,6 +16,7 @@ export interface RoleTemplateInput {
 
 export interface GroupRoleInput {
   chatId: string
+  createdBy?: GroupRole['createdBy']
   templateId?: string
   modelSource?: RoleModelSource
   chatSite?: ChatSite
@@ -38,6 +39,7 @@ export type GroupRoleBatchInput =
     }
   | {
       source: 'temporary'
+      createdBy?: GroupRole['createdBy']
       name: string
       description?: string
       systemPrompt: string
@@ -224,6 +226,7 @@ export function createGroupRole(
   if (externalModelId) role.externalModelId = externalModelId
 
   if (input.templateId) role.templateId = input.templateId
+  if (input.createdBy) role.createdBy = input.createdBy
 
   const chatGptGptsUrl = modelSource !== 'external' && chatSite === 'chatgpt' ? normalizeOptionalChatGptGptsUrl(input.chatGptGptsUrl ?? template?.chatGptGptsUrl) : undefined
   if (chatGptGptsUrl) role.chatGptGptsUrl = chatGptGptsUrl
@@ -272,7 +275,7 @@ export function updateGroupRole(
     }
   }
   if (patch.systemPrompt !== undefined) {
-    if (role.createdBy !== 'orchestration-auto') throw new Error('群聊内人员人设不可编辑')
+    if (role.createdBy !== 'orchestration-auto' && role.createdBy !== 'orchestration-template') throw new Error('群聊内人员人设不可编辑')
     const systemPrompt = assertValidSystemPrompt(patch.systemPrompt)
     if (systemPrompt) {
       role.systemPrompt = systemPrompt
@@ -378,6 +381,7 @@ function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index
   if (item.source === 'temporary') {
     return {
       modelSource: item.modelSource,
+      createdBy: item.createdBy,
       chatSite: item.chatSite ?? store.settings.defaultChatSite,
       externalModelId: item.externalModelId,
       name: assertValidRoleName(item.name, []),
