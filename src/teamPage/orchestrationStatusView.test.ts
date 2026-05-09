@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow, OrchestrationRun } from '../group/types'
@@ -379,6 +381,13 @@ describe('orchestration status view', () => {
 
     expect(collapsed.style.left).toBe('')
     expect(collapsed.style.top).toBe('')
+  })
+
+  it('keeps the collapsed launcher aligned above the composer right edge', () => {
+    const source = readFileSync(resolve(process.cwd(), 'public/team.css'), 'utf8')
+
+    expect(source).toMatch(/\.orchestration-status-collapsed\s*{[^}]*right:\s*22px;/s)
+    expect(source).toMatch(/\.orchestration-status-collapsed\s*{[^}]*bottom:\s*154px;/s)
   })
 
   it('clamps saved expanded floating positions back into the viewport', () => {
