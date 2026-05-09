@@ -217,11 +217,11 @@ describe('background role handlers', () => {
     startingStore.settings.externalModelsById = {
       'model-1': {
         id: 'model-1',
-        name: '本地 Qwen',
+        name: '本地模型',
         format: 'openai',
         baseUrl: 'https://api.example.test/v1',
         apiKey: 'sk-test',
-        modelName: 'qwen-plus',
+        modelName: 'local-chat-model',
         createdAt: 1,
         updatedAt: 1,
       },

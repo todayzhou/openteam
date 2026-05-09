@@ -34,18 +34,18 @@ describe('background external model handlers', () => {
     const create = routes.find(route => route.type === 'EXTERNAL_MODEL_CREATE')!
     await create.handler({
       type: 'EXTERNAL_MODEL_CREATE',
-      name: '本地 Qwen',
+      name: '本地模型',
       format: 'openai',
       baseUrl: 'https://api.example.test/v1',
       apiKey: 'sk-test',
-      modelName: 'qwen-plus',
+      modelName: 'local-chat-model',
     }, {})
 
     expect(currentStore.settings.externalModelOrder).toEqual(['external-model-1'])
     expect(currentStore.settings.externalModelsById['external-model-1']).toMatchObject({
-      name: '本地 Qwen',
+      name: '本地模型',
       format: 'openai',
-      modelName: 'qwen-plus',
+      modelName: 'local-chat-model',
     })
 
     const update = routes.find(route => route.type === 'EXTERNAL_MODEL_UPDATE')!

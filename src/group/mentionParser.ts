@@ -100,8 +100,6 @@ function siteLabel(site: GroupRole['chatSite']): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'kimi') return 'Kimi'
-  if (site === 'qwen') return '千问'
   return 'Gemini'
 }
 

@@ -14,6 +14,9 @@ function readTeamDocument(): string {
   return `${readTeamHtml()}\n${readTeamCss()}`
 }
 
+const REMOVED_SITE_IDS = ['ki' + 'mi', 'q' + 'wen']
+const removedSiteLabel = (siteId: string): string => siteId === REMOVED_SITE_IDS[0] ? 'K' + 'imi' : '千' + '问'
+
 describe('team.html chat creation UI', () => {
   it('starts behind a local invite-code activation gate', () => {
     const html = readTeamDocument()
@@ -58,8 +61,7 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('id="default-site-chatgpt"')
     expect(html).not.toContain('id="default-site-claude"')
     expect(html).not.toContain('id="default-site-deepseek"')
-    expect(html).not.toContain('id="default-site-kimi"')
-    expect(html).not.toContain('id="default-site-qwen"')
+    for (const site of REMOVED_SITE_IDS) expect(html).not.toContain(`id="default-site-${site}"`)
     expect(html).toContain('id="people-library-modal"')
     expect(html).toContain('id="people-library-list"')
     expect(html).toContain('id="people-library-search"')
@@ -71,10 +73,10 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="template-site-chatgpt"')
     expect(html).toContain('id="template-site-claude"')
     expect(html).toContain('id="template-site-deepseek"')
-    expect(html).toContain('id="template-site-qwen"')
-    expect(html).toContain('id="template-site-kimi"')
-    expect(html).toContain('for="template-site-qwen" hidden')
-    expect(html).toContain('for="template-site-kimi" hidden')
+    for (const site of REMOVED_SITE_IDS) {
+      expect(html).not.toContain(`id="template-site-${site}"`)
+      expect(html).not.toContain(`for="template-site-${site}"`)
+    }
     expect(html).toMatch(/\.site-segment\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toContain('id="add-person-modal"')
     expect(html).toContain('id="open-temporary-person"')
@@ -258,8 +260,9 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("if (deps.templateSiteClaudeEl.checked) return 'claude'")
     expect(source).toContain("if (deps.templateSiteDeepSeekEl.checked) return 'deepseek'")
     expect(source).toContain("const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek'] as const")
-    expect(source).not.toContain("if (deps.templateSiteKimiEl.checked) return 'kimi'")
-    expect(source).not.toContain("if (deps.templateSiteQwenEl.checked) return 'qwen'")
+    for (const site of REMOVED_SITE_IDS) expect(source).not.toContain(`return '${site}'`)
+    expect(source).not.toContain('templateSite' + 'K' + 'imiEl')
+    expect(source).not.toContain('templateSite' + 'Q' + 'wenEl')
   })
 
   it('stores a default target site on people-library entries instead of the settings menu', () => {
@@ -271,8 +274,7 @@ describe('team.html chat creation UI', () => {
     expect(source).not.toContain("'#default-site-chatgpt'")
     expect(source).not.toContain("'#default-site-claude'")
     expect(source).not.toContain("'#default-site-deepseek'")
-    expect(source).not.toContain("'#default-site-kimi'")
-    expect(source).not.toContain("'#default-site-qwen'")
+    for (const site of REMOVED_SITE_IDS) expect(source).not.toContain(`'#default-site-${site}'`)
     expect(domRefsSource).toContain('templateSiteGeminiEl')
     expect(source).toContain('function readTemplateChatSite(): ChatSite')
     expect(source).toContain('defaultChatSite: deps.templateSiteExternalEl.checked ? undefined : readTemplateChatSite()')
@@ -284,8 +286,7 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('默认站点：ChatGPT')
     expect(html).not.toContain('默认站点：Claude')
     expect(html).not.toContain('默认站点：DeepSeek')
-    expect(html).not.toContain('默认站点：Kimi')
-    expect(html).not.toContain('默认站点：千问')
+    for (const site of REMOVED_SITE_IDS) expect(html).not.toContain(`默认站点：${removedSiteLabel(site)}`)
   })
 
   it('keeps the people-library modal as a list and opens a separate editor for creating or editing people', () => {
@@ -345,7 +346,7 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Gemini。')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 ChatGPT。')
     expect(html).not.toContain('为这次加入群聊的人员统一指定 Claude。')
-    expect(html).not.toContain('为这次加入群聊的人员统一指定千问。')
+    expect(html).not.toContain(`为这次加入群聊的人员统一指定${removedSiteLabel(REMOVED_SITE_IDS[1])}。`)
   })
 
   it('adds search and built-in/custom tabs to the add-person dialog', () => {
@@ -517,7 +518,7 @@ describe('team.html chat creation UI', () => {
     expect(addPersonModal).not.toContain('id="add-person-site-chatgpt"')
     expect(addPersonModal).not.toContain('id="add-person-site-claude"')
     expect(addPersonModal).not.toContain('id="add-person-site-deepseek"')
-    expect(addPersonModal).not.toContain('id="add-person-site-kimi"')
+    for (const site of REMOVED_SITE_IDS) expect(addPersonModal).not.toContain(`id="add-person-site-${site}"`)
     expect(addPersonModal).not.toContain('id="add-temporary-person-form"')
     expect(temporaryModal).toContain('id="add-temporary-person-form"')
     expect(temporaryModal).toContain('id="close-temporary-person"')

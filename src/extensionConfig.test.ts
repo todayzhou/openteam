@@ -51,8 +51,7 @@ describe('extension security configuration', () => {
     }
 
     const scripts = manifest.content_scripts ?? []
-    expect(scripts.flatMap(script => script.js ?? [])).not.toContain('kimiPageWorldBridge.js')
-    expect(scripts.flatMap(script => script.js ?? [])).not.toContain('qwenPageWorldBridge.js')
+    expect(scripts.flatMap(script => script.js ?? []).some(script => script.endsWith('PageWorldBridge.js'))).toBe(false)
     expect(scripts.some(script => script.world === 'MAIN')).toBe(false)
   })
 

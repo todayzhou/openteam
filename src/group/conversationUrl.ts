@@ -10,10 +10,6 @@ const CLAUDE_ORIGIN = 'https://claude.ai'
 const CLAUDE_HOME_URL = 'https://claude.ai/new'
 const DEEPSEEK_ORIGIN = 'https://chat.deepseek.com'
 const DEEPSEEK_HOME_URL = `${DEEPSEEK_ORIGIN}/`
-const KIMI_ORIGIN = 'https://www.kimi.com'
-const KIMI_HOME_URL = `${KIMI_ORIGIN}/chat/`
-const QWEN_ORIGIN = 'https://www.qianwen.com'
-const QWEN_HOME_URL = `${QWEN_ORIGIN}/`
 
 interface ChatSiteStartUrlRole {
   chatSite?: ChatSite
@@ -40,7 +36,7 @@ export function getSafeGeminiIframeSrc(value: string | undefined): string {
 }
 
 export function isSafeSupportedChatUrl(value: string | undefined): value is string {
-  return isSafeGeminiUrl(value) || isSafeChatGptUrl(value) || isSafeClaudeUrl(value) || isSafeDeepSeekUrl(value) || isSafeKimiUrl(value) || isSafeQwenUrl(value)
+  return isSafeGeminiUrl(value) || isSafeChatGptUrl(value) || isSafeClaudeUrl(value) || isSafeDeepSeekUrl(value)
 }
 
 export function getSafeSupportedChatUrl(value: string | undefined): string {
@@ -55,8 +51,6 @@ export function getDefaultChatSiteUrl(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return CHATGPT_HOME_URL
   if (site === 'claude') return CLAUDE_HOME_URL
   if (site === 'deepseek') return DEEPSEEK_HOME_URL
-  if (site === 'kimi') return KIMI_HOME_URL
-  if (site === 'qwen') return QWEN_HOME_URL
   return GEMINI_HOME_URL
 }
 
@@ -92,9 +86,7 @@ export function extractSupportedConversationId(value: string | undefined): strin
     extractGeminiConversationId(value) ??
     extractChatGptConversationId(value) ??
     extractClaudeConversationId(value) ??
-    extractDeepSeekConversationId(value) ??
-    extractKimiConversationId(value) ??
-    extractQwenConversationId(value)
+    extractDeepSeekConversationId(value)
   )
 }
 
@@ -108,8 +100,6 @@ export function getSupportedChatOriginForSite(value: string | undefined, site: C
   if (site === 'chatgpt') return CHATGPT_ORIGIN
   if (site === 'claude') return CLAUDE_ORIGIN
   if (site === 'deepseek') return DEEPSEEK_ORIGIN
-  if (site === 'kimi') return KIMI_ORIGIN
-  if (site === 'qwen') return QWEN_ORIGIN
   return GEMINI_ORIGIN
 }
 
@@ -190,46 +180,5 @@ function extractDeepSeekConversationId(value: string | undefined): string | unde
   const url = new URL(value)
   const match = url.pathname.match(/^\/a\/chat\/s\/([^/]+)/)
   const conversationId = match?.[1]
-  return conversationId ? decodeURIComponent(conversationId) : undefined
-}
-
-function isSafeKimiUrl(value: string | undefined): value is string {
-  if (!value || !value.startsWith(`${KIMI_ORIGIN}/`)) return false
-
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'www.kimi.com'
-  } catch {
-    return false
-  }
-}
-
-function extractKimiConversationId(value: string | undefined): string | undefined {
-  if (!isSafeKimiUrl(value)) return undefined
-
-  const url = new URL(value)
-  if (!url.pathname.startsWith('/chat/')) return undefined
-
-  const conversationId = url.pathname.slice('/chat/'.length).split('/')[0]
-  return conversationId ? decodeURIComponent(conversationId) : undefined
-}
-
-function isSafeQwenUrl(value: string | undefined): value is string {
-  if (!value || !value.startsWith(QWEN_HOME_URL)) return false
-
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'www.qianwen.com'
-  } catch {
-    return false
-  }
-}
-
-function extractQwenConversationId(value: string | undefined): string | undefined {
-  if (!isSafeQwenUrl(value)) return undefined
-
-  const url = new URL(value)
-  const pathConversationId = url.pathname.match(/^\/chat\/([^/]+)/)?.[1]
-  const conversationId = pathConversationId ?? url.searchParams.get('chatId') ?? url.searchParams.get('sessionId')
   return conversationId ? decodeURIComponent(conversationId) : undefined
 }

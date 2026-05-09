@@ -388,7 +388,7 @@ function readNumber(value: unknown, fallback: number): number {
 }
 
 function readChatSite(value: unknown): ChatSite | undefined {
-  return value === 'chatgpt' || value === 'claude' || value === 'gemini' || value === 'deepseek' || value === 'kimi' || value === 'qwen' ? value : undefined
+  return value === 'chatgpt' || value === 'claude' || value === 'gemini' || value === 'deepseek' ? value : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

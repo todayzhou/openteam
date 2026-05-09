@@ -589,11 +589,11 @@ describe('background message handlers', () => {
     startingStore.settings.externalModelsById = {
       'model-1': {
         id: 'model-1',
-        name: '本地 Qwen',
+        name: '本地模型',
         format: 'openai',
         baseUrl: 'https://api.example.test/v1',
         apiKey: 'sk-test',
-        modelName: 'qwen-plus',
+        modelName: 'local-chat-model',
         createdAt: 1,
         updatedAt: 1,
       },
@@ -648,7 +648,7 @@ describe('background message handlers', () => {
     })
     expect(getByRole).not.toHaveBeenCalledWith('chat-1', 'role-1')
     expect(externalModelClient.complete).toHaveBeenCalledWith(expect.objectContaining({
-      model: expect.objectContaining({ id: 'model-1', modelName: 'qwen-plus' }),
+      model: expect.objectContaining({ id: 'model-1', modelName: 'local-chat-model' }),
       prompt: expect.stringContaining('用 API 回答'),
     }))
     expect(broadcastStoreUpdated).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -674,7 +674,7 @@ describe('background message handlers', () => {
         format: 'openai',
         baseUrl: 'https://api.example.test/v1',
         apiKey: 'sk-test',
-        modelName: 'qwen-plus',
+        modelName: 'local-chat-model',
         createdAt: 1,
         updatedAt: 1,
       },
@@ -761,7 +761,7 @@ describe('background message handlers', () => {
         format: 'openai',
         baseUrl: 'https://api.example.test/v1',
         apiKey: 'sk-test',
-        modelName: 'qwen-plus',
+        modelName: 'local-chat-model',
         createdAt: 1,
         updatedAt: 1,
       },
@@ -997,7 +997,7 @@ describe('background message handlers', () => {
         format: 'openai',
         baseUrl: 'https://api.example.test/v1',
         apiKey: 'sk-test',
-        modelName: 'qwen-plus',
+        modelName: 'local-chat-model',
         createdAt: 1,
         updatedAt: 1,
       },

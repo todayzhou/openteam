@@ -57,4 +57,4 @@ Expected: PASS.
 
 Run: `npm run build`
 
-Expected: PASS and `dist/content.js`, `dist/kimiPageWorldBridge.js`, and `dist/qwenPageWorldBridge.js` are compact production bundles.
+Expected: PASS and `dist/content.js` is a compact production bundle.

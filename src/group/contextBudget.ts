@@ -5,8 +5,6 @@ export const CONTEXT_CHAR_BUDGET_BY_SITE: Record<ChatSite, number> = {
   chatgpt: 272_000,
   claude: 500_000,
   deepseek: 1_000_000,
-  kimi: 128_000,
-  qwen: 128_000,
 }
 
 export function contextCharBudgetForRole(store: OpenTeamStore, role: GroupRole): number {

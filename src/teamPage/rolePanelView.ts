@@ -263,8 +263,6 @@ function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'kimi') return 'Kimi'
-  if (site === 'qwen') return '千问'
   return 'Gemini'
 }
 
@@ -306,7 +304,7 @@ function modelKeyForExternal(modelId: string): string {
 }
 
 function visibleChatSite(value: string | undefined): ChatSite {
-  return value === 'chatgpt' || value === 'claude' || value === 'deepseek' || value === 'kimi' || value === 'qwen' ? value : 'gemini'
+  return value === 'chatgpt' || value === 'claude' || value === 'deepseek' ? value : 'gemini'
 }
 
 function statusPill(status: string, label: string): HTMLElement {
@@ -341,4 +339,3 @@ function roleStatusLabel(status: RoleStatus): string {
   }
   return labels[status]
 }
-

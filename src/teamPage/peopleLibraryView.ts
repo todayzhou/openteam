@@ -46,8 +46,6 @@ export interface PeopleLibraryViewDependencies {
   templateSiteChatGptEl: HTMLInputElement
   templateSiteClaudeEl: HTMLInputElement
   templateSiteDeepSeekEl: HTMLInputElement
-  templateSiteQwenEl: HTMLInputElement
-  templateSiteKimiEl: HTMLInputElement
   templateSiteExternalEl: HTMLInputElement
   templateExternalModelFieldEl: HTMLElement
   templateExternalModelSelectEl: HTMLSelectElement
@@ -128,8 +126,6 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl.checked = !externalSelected && defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = !externalSelected && defaultChatSite === 'claude'
       deps.templateSiteDeepSeekEl.checked = !externalSelected && defaultChatSite === 'deepseek'
-      deps.templateSiteQwenEl.checked = !externalSelected && defaultChatSite === 'qwen'
-      deps.templateSiteKimiEl.checked = false
       deps.templateSiteExternalEl.checked = externalSelected
       deps.templateExternalModelSelectEl.value = selectedTemplate.defaultExternalModelId ?? firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = selectedTemplate.chatGptGptsUrl ?? ''
@@ -143,8 +139,6 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl.checked = defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = defaultChatSite === 'claude'
       deps.templateSiteDeepSeekEl.checked = defaultChatSite === 'deepseek'
-      deps.templateSiteQwenEl.checked = defaultChatSite === 'qwen'
-      deps.templateSiteKimiEl.checked = false
       deps.templateSiteExternalEl.checked = false
       deps.templateExternalModelSelectEl.value = firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = ''
@@ -710,8 +704,6 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl,
       deps.templateSiteClaudeEl,
       deps.templateSiteDeepSeekEl,
-      deps.templateSiteQwenEl,
-      deps.templateSiteKimiEl,
       deps.templateSiteExternalEl,
     ]
   }
@@ -782,8 +774,6 @@ function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
-  if (site === 'kimi') return 'Kimi'
-  if (site === 'qwen') return '千问'
   return 'Gemini'
 }
 

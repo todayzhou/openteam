@@ -595,11 +595,7 @@ function normalizeSettings(raw: unknown): OpenTeamSettings {
           ? 'claude'
           : raw.defaultChatSite === 'deepseek'
             ? 'deepseek'
-            : raw.defaultChatSite === 'kimi'
-              ? 'kimi'
-              : raw.defaultChatSite === 'qwen'
-                ? 'qwen'
-                : DEFAULT_SETTINGS.defaultChatSite,
+            : DEFAULT_SETTINGS.defaultChatSite,
     externalModelOrder: normalizeExternalModelOrder(raw.externalModelOrder, externalModelsById),
     externalModelsById,
   }
