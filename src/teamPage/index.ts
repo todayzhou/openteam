@@ -22,6 +22,7 @@ import { createRolePanelView } from './rolePanelView'
 import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeClient'
 import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
 import { createErrorPresenter, createSuccessPresenter, teamPageLog } from './teamPageServices'
+import { createThemeController } from './themeController'
 import { createTeamUiController } from './teamUiController'
 import { emptyCard, getChatRecentSummary as getStoreChatRecentSummary, messageTitle, roleAvatarLabel, roleToneClass } from './viewHelpers'
 
@@ -33,7 +34,7 @@ const teamDomRefs = createTeamPageDomRefs()
 const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
-const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl } = teamDomRefs
+const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, themeLightEl, themeDarkEl } = teamDomRefs
 const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl, allNotesActiveTitleEl, allNotesActiveMetaEl, allNotesEditorEl } = teamDomRefs
 const { allNoteBoldEl, allNoteItalicEl, allNoteStrikeEl, allNoteBulletListEl, allNoteOrderedListEl, allNoteUndoEl, allNoteRedoEl } = teamDomRefs
 const { openPeopleLibraryEl, openExternalModelsEl, openOrchestrationEl, closeOrchestrationEl, orchestrationModalEl, orchestrationAutoModalEl, orchestrationTaskEl, autoOrchestrationEl, openOrchestrationTemplateEl, orchestrationTemplateModalEl, closeOrchestrationTemplateEl, orchestrationTemplateContentEl, closeAutoOrchestrationEl, orchestrationAutoContentEl, orchestrationPeopleListEl, arrangeOrchestrationEl, orchestrationCanvasEl, orchestrationHintEl, orchestrationStageSettingsEl, orchestrationReviewSettingsEl, orchestrationMaxRoundsEl, saveOrchestrationEl, runOrchestrationEl, closeExternalModelsEl, externalModelsModalEl, externalModelsListEl, externalModelFormEl, externalModelIdEl, externalModelNameEl, externalModelFormatEl, externalModelBaseUrlEl, externalModelApiKeyEl, externalModelModelNameEl, resetExternalModelFormEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
@@ -47,6 +48,12 @@ const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl, windowResizeHandleE
 const log = teamPageLog
 const showError = createErrorPresenter(errorEl)
 const showSuccess = createSuccessPresenter(errorEl)
+const themeController = createThemeController({
+  root: document.documentElement,
+  lightButton: themeLightEl,
+  darkButton: themeDarkEl,
+})
+themeController.initializeTheme()
 
 const iframeHost = createIframeHost({
   visibleHost: teamDomRefs.iframeHostEl,
@@ -143,6 +150,7 @@ const chatHeaderView = createChatHeaderView({
   chatSubtitleEl,
   chatStatusEl,
   togglePeopleDrawerEl,
+  openOrchestrationEl,
   getCurrentChat,
   getCurrentRoles,
   getCurrentMessages,
@@ -596,6 +604,7 @@ async function boot(): Promise<void> {
   await primaryCoordinator.start()
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })
   registerRuntimePush()
+  themeController.registerThemeEvents()
   registerFloatingWindowControls()
   registerAllNotesEvents()
   registerUi()

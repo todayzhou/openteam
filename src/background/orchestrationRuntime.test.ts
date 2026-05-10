@@ -255,6 +255,48 @@ describe('orchestration runtime', () => {
     expect(run.stageRuns.map(stageRun => stageRun.stageId)).toEqual(['stage-a', 'stage-b', 'stage-c'])
   })
 
+  it('limits DeepSeek orchestration fan-out deliveries to two active replies', async () => {
+    const store = makeStore(['role-root', 'role-a', 'role-b', 'role-c'])
+    store.rolesById['role-root'].chatSite = 'gemini'
+    store.rolesById['role-a'].chatSite = 'deepseek'
+    store.rolesById['role-b'].chatSite = 'deepseek'
+    store.rolesById['role-c'].chatSite = 'deepseek'
+    const stages: OrchestrationFlow['stages'] = [
+      { id: 'stage-root', kind: 'roles', name: 'Root', roleIds: ['role-root'] },
+      { id: 'stage-a', kind: 'roles', name: 'A', roleIds: ['role-a'] },
+      { id: 'stage-b', kind: 'roles', name: 'B', roleIds: ['role-b'] },
+      { id: 'stage-c', kind: 'roles', name: 'C', roleIds: ['role-c'] },
+    ]
+    store.orchestrationFlowsById['flow-1'] = {
+      ...makeFlow('chat-1', stages),
+      graph: {
+        stageNodes: stages,
+        edges: [
+          { sourceStageId: 'stage-root', targetStageId: 'stage-a' },
+          { sourceStageId: 'stage-root', targetStageId: 'stage-b' },
+          { sourceStageId: 'stage-root', targetStageId: 'stage-c' },
+        ],
+      },
+    }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-root' }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 1, url: 'https://gemini.google.com/app/root' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-a' }, { tab: { id: 102 } as chrome.tabs.Tab, frameId: 2, url: 'https://chat.deepseek.com/a/chat/s/a' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-b' }, { tab: { id: 103 } as chrome.tabs.Tab, frameId: 3, url: 'https://chat.deepseek.com/a/chat/s/b' })
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-c' }, { tab: { id: 104 } as chrome.tabs.Tab, frameId: 4, url: 'https://chat.deepseek.com/a/chat/s/c' })
+
+    const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: 'Ship the plan' }) as { ok: boolean; run: { id: string } }
+
+    expect(started.ok).toBe(true)
+    expect(promptCalls(harness.tabsSendMessage).map(call => call[1].roleId)).toEqual(['role-root'])
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-root', messageId: firstPromptMessageId(harness.tabsSendMessage), content: 'root done' })
+    expect(promptCalls(harness.tabsSendMessage).map(call => call[1].roleId)).toEqual(['role-root', 'role-a', 'role-b'])
+
+    const roleAPrompt = promptCalls(harness.tabsSendMessage).find(call => call[1].roleId === 'role-a')?.[1].messageId
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'role-a', messageId: roleAPrompt, content: 'a done' })
+    await waitForPromptCallCount(harness.tabsSendMessage, 4)
+    expect(promptCalls(harness.tabsSendMessage).map(call => call[1].roleId)).toEqual(['role-root', 'role-a', 'role-b', 'role-c'])
+  })
+
   it('completes role-only flows at the last node instead of repeating from the root', async () => {
     const store = makeStore(['role-1'])
     store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
@@ -671,7 +713,7 @@ describe('orchestration runtime', () => {
   })
 })
 
-type PromptCall = [number, { type?: string; messageId: string; content: string }, { frameId: number }]
+type PromptCall = [number, { type?: string; roleId: string; messageId: string; content: string }, { frameId: number }]
 
 function promptCalls(mock: ReturnType<typeof vi.fn>): PromptCall[] {
   return mock.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT') as PromptCall[]
@@ -684,6 +726,14 @@ function firstPromptMessageId(mock: ReturnType<typeof vi.fn>): string {
 function lastPromptMessageId(mock: ReturnType<typeof vi.fn>): string {
   const calls = promptCalls(mock)
   return calls[calls.length - 1][1].messageId
+}
+
+async function waitForPromptCallCount(mock: ReturnType<typeof vi.fn>, count: number): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (promptCalls(mock).length === count) return
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
+  expect(promptCalls(mock)).toHaveLength(count)
 }
 
 function latestUserMessage(store: OpenTeamStore, chatId: string) {

@@ -19,6 +19,7 @@ import type { PromptDelivery, PromptSender } from './promptDelivery'
 import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } from './promptDeliveryRetry'
 import { isExternalModelRole, prepareRolePromptDelivery, type ExternalPromptDelivery } from './rolePromptDelivery'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
+import type { SitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
 export interface OrchestrationRuntimeDependencies {
@@ -32,6 +33,7 @@ export interface OrchestrationRuntimeDependencies {
   now(): number
   runtimeFrames: Pick<RuntimeFrameRegistry, 'getByRole'>
   sendPrompt: PromptSender
+  promptDeliveryLimiter?: SitePromptDeliveryLimiter
   externalModelClient?: ExternalModelClient
   deliveryRetryDelaysMs?: readonly number[]
   requestRoleRecovery?(chatId: string, roleId: string, reason?: string): Promise<boolean>
@@ -251,6 +253,7 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
   })
 
   await deps.broadcastStoreUpdated(advance.store)
+  await deps.promptDeliveryLimiter?.complete(input.chatId, promptMessageId, input.roleId)
   if (advance.result.next) await startStages(deps, advance.result.runId, advance.result.stageIndices)
   return advance.store
 }
@@ -288,7 +291,10 @@ export async function markOrchestrationRoleError(deps: OrchestrationRuntimeDepen
     error: input.error,
     marked: result,
   })
-  if (result) await deps.broadcastStoreUpdated(store)
+  if (result) {
+    await deps.broadcastStoreUpdated(store)
+    await deps.promptDeliveryLimiter?.complete(input.chatId, promptMessageId, input.roleId)
+  }
   return result ? store : undefined
 }
 
@@ -499,7 +505,38 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
       messageId: delivery.messageId,
     })),
   })
-  await Promise.all(prepared.result.deliveries.map(delivery => sendPromptDeliveryWithRetry({
+  await sendOrchestrationPromptDeliveries(deps, prepared.result.deliveries)
+  for (const delivery of prepared.result.externalDeliveries) {
+    sendExternalOrchestrationPrompt(deps, delivery).catch(error => {
+      deps.log.warn('orchestration-external:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, error: error instanceof Error ? error.message : String(error) })
+    })
+  }
+  return { store: prepared.store, deliveries: prepared.result.deliveries, externalDeliveries: prepared.result.externalDeliveries }
+}
+
+async function sendOrchestrationPromptDeliveries(deps: OrchestrationRuntimeDependencies, deliveries: PromptDelivery[]): Promise<void> {
+  await Promise.all(deliveries.map(delivery => {
+    const send = () => sendOrchestrationPromptDelivery(deps, delivery)
+    if (!deps.promptDeliveryLimiter) return send().then(() => undefined)
+    return deps.promptDeliveryLimiter.enqueue({
+      chatId: delivery.message.chatId,
+      messageId: delivery.message.messageId,
+      roleId: delivery.roleId,
+      chatSite: delivery.chatSite,
+      send,
+    })
+  }))
+}
+
+async function sendOrchestrationPromptDelivery(deps: OrchestrationRuntimeDependencies, delivery: PromptDelivery): Promise<boolean> {
+  const stillActive = await isOrchestrationPromptDeliveryStillActive(
+    delivery.message.chatId,
+    delivery.roleId,
+    delivery.message.messageId,
+    delivery.message.replyAttemptId,
+  )
+  if (!stillActive) return false
+  return sendPromptDeliveryWithRetry({
     log: deps.log,
     sendPrompt: deps.sendPrompt,
     getLatestBinding: (chatId, roleId) => deps.runtimeFrames.getByRole(chatId, roleId),
@@ -512,13 +549,7 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     messageId: delivery.message.messageId,
     delivery,
     retryDelaysMs: deps.deliveryRetryDelaysMs ?? DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS,
-  })))
-  for (const delivery of prepared.result.externalDeliveries) {
-    sendExternalOrchestrationPrompt(deps, delivery).catch(error => {
-      deps.log.warn('orchestration-external:failed', { chatId: delivery.chatId, roleId: delivery.roleId, messageId: delivery.messageId, error: error instanceof Error ? error.message : String(error) })
-    })
-  }
-  return { store: prepared.store, deliveries: prepared.result.deliveries, externalDeliveries: prepared.result.externalDeliveries }
+  })
 }
 
 async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDependencies, delivery: ExternalPromptDelivery): Promise<void> {

@@ -42,13 +42,86 @@ describe('team.html chat creation UI', () => {
     expect(css).toContain('body {')
   })
 
+  it('includes a two-option theme switch and both page theme style sets', () => {
+    const html = readTeamDocument()
+
+    expect(html).toContain('id="theme-switch"')
+    expect(html).toContain('id="theme-light"')
+    expect(html).toContain('id="theme-dark"')
+    expect(html).toContain('浅色')
+    expect(html).toContain('深色')
+    expect(html).toContain('data-theme="dark"')
+    expect(html).toMatch(/:root\[data-theme="light"\]\s*{/)
+    expect(html).toMatch(/:root\[data-theme="dark"\]\s*{/)
+    expect(html).toMatch(/\.theme-switch\s*{[^}]*position:\s*relative;/s)
+    expect(html).toMatch(/\.theme-option\[aria-pressed="true"\]\s*{[^}]*background:/s)
+  })
+
+  it('light theme restyles dense dark surfaces instead of leaving dark component islands', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/:root\[data-theme="light"\][\s\S]*--orchestration-node-bg:/)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.chat-avatar\s*{[^}]*border:\s*1px solid rgba\(17,\s*24,\s*39,\s*0\.1\);[^}]*background:\s*#6b7280;[^}]*color:\s*#ffffff;[^}]*box-shadow:\s*none;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.chat-avatar\.role-tone-0\s*{[^}]*background:\s*#42b883;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-task-strip\s*{[^}]*background:/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-person\s*{[^}]*background:/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-template-card\s*{[^}]*background:/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.all-notes-editor-header h3\s*{[^}]*color:\s*var\(--text\);/s)
+  })
+
+  it('uses a WeChat-like light gray hover state for the light chat list', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/:root\[data-theme="light"\] \.chat-item:hover,\s*:root\[data-theme="light"\] \.chat-item\.active\s*{[^}]*background:\s*#f2f3f5;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.chat-item\.active\s*{[^}]*border-color:\s*rgba\(17,\s*24,\s*39,\s*0\.08\);[^}]*box-shadow:\s*none;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.chat-name:hover\s*{[^}]*color:\s*var\(--text\);/s)
+  })
+
+  it('keeps light theme page and modal backgrounds pure white instead of blue-gray washes', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/:root\[data-theme="light"\]\s*{[^}]*--bg:\s*#ffffff;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] body\s*{[^}]*background:\s*#ffffff;/s)
+    expect(html).not.toMatch(/:root\[data-theme="light"\] body\s*{[^}]*gradient/s)
+
+    for (const selector of [
+      '.invite-gate',
+      '.app-shell',
+      '.rail',
+      '.sidebar',
+      '.workspace',
+      '.chat-header',
+      '.all-notes-list',
+      '.modal-backdrop',
+      '#iframe-host',
+      '.orchestration-workspace',
+      '.orchestration-task-strip',
+      '.orchestration-person',
+      '.orchestration-template-card',
+    ]) {
+      expect(html).toMatch(new RegExp(`:root\\[data-theme="light"\\] ${selector.replace('.', '\\.')}\\s*{[^}]*background:\\s*#ffffff;`, 's'))
+    }
+  })
+
+  it('keeps light theme automatic orchestration history readable instead of disabled-looking', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history > span\s*{[^}]*color:\s*#4b5563;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history-item\s*{[^}]*border-color:\s*rgba\(17,\s*24,\s*39,\s*0\.12\);[^}]*background:\s*#ffffff;[^}]*color:\s*#374151;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history-item\.assistant\s*{[^}]*color:\s*#4b5563;/s)
+  })
+
   it('offers an explicit chat mode choice before creating a chat from the plus button', () => {
     const html = readTeamDocument()
+    const modeOptions = html.match(/<div class="mode-options">[\s\S]*?<\/div>\s*<\/div>\s*<div class="two-col">/)?.[0] ?? ''
 
     expect(html).toContain('id="chat-create-popover"')
     expect(html).toContain('id="new-chat-mode-independent"')
     expect(html).toContain('id="new-chat-mode-collaborative"')
     expect(html).toContain('协作群聊')
+    expect(modeOptions.indexOf('new-chat-mode-collaborative')).toBeLessThan(modeOptions.indexOf('new-chat-mode-independent'))
+    expect(modeOptions).toMatch(/id="new-chat-mode-collaborative"[^>]*checked/)
+    expect(modeOptions).not.toMatch(/id="new-chat-mode-independent"[^>]*checked/)
   })
 
   it('includes the people-library workflows, right drawer, iframe host, and minimized launcher', () => {
@@ -159,7 +232,7 @@ describe('team.html chat creation UI', () => {
 
   it('adds an orchestration modal and chat-header entry before members without exposing stage wording', () => {
     const html = readTeamDocument()
-    const chatRow = html.match(/<div class="chat-row">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
+    const chatRow = html.match(/<header class="chat-header">(?<body>[\s\S]*?)<\/header>/)?.groups?.body ?? ''
     const railActions = html.match(/<div class="rail-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? ''
 
     expect(html).toContain('id="open-orchestration"')
@@ -264,6 +337,12 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("closeWindowEl?.addEventListener('click', () => setWindowMinimized(true))")
   })
 
+  it('keeps the orchestration entry visually hidden when the hidden attribute is set', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/#open-orchestration\[hidden\]\s*{[^}]*display:\s*none;/s)
+  })
+
   it('uses template default sites for library people and the add-person picker for temporary people', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/teamPage/peopleLibraryView.ts'), 'utf8')
 
@@ -350,6 +429,15 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.add-person-site-option\s*{[^}]*border-color:\s*rgba\(132,\s*153,\s*171,\s*0\.22\);[^}]*background:\s*rgba\(132,\s*153,\s*171,\s*0\.08\);[^}]*color:\s*var\(--muted\);/s)
     expect(html).toMatch(/\.add-person-site-option\.active\s*{[^}]*border-color:\s*rgba\(47,\s*216,\s*204,\s*0\.56\);[^}]*background:\s*rgba\(47,\s*216,\s*204,\s*0\.16\);[^}]*color:\s*#eaffff;/s)
     expect(html).toMatch(/\.role-site-menu\s*{[^}]*position:\s*absolute;/s)
+  })
+
+  it('normalizes light theme site pills so model badges do not leak dark brand colors', () => {
+    const html = readTeamDocument()
+
+    for (const siteClass of ['gemini', 'chatgpt', 'claude', 'deepseek', 'external']) {
+      expect(html).toMatch(new RegExp(`:root\\[data-theme="light"\\] \\.site-pill-${siteClass}\\s*{[^}]*background:\\s*#f6f7f8;[^}]*color:\\s*#4b5563;`, 's'))
+    }
+    expect(html).toMatch(/:root\[data-theme="light"\] #iframe-host \.role-frame-site\s*{[^}]*background:\s*#f6f7f8;[^}]*color:\s*#4b5563;/s)
   })
 
   it('does not keep a global add-person site picker', () => {

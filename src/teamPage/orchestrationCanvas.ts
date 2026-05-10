@@ -269,7 +269,7 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
           attrs: {
             root: { 'data-stage-id': stage.id },
             body: {
-              fill: '#101e2a',
+              fill: 'var(--orchestration-node-bg)',
               stroke: style.stroke,
               strokeWidth: style.strokeWidth,
               refPoints: isReview ? '0,10 10,0 20,10 10,20' : undefined,
@@ -278,7 +278,7 @@ export function createOrchestrationCanvas(deps: OrchestrationCanvasDependencies)
               filter: style.filter,
             },
             label: {
-              fill: '#edf5f7',
+              fill: 'var(--orchestration-node-text)',
               fontSize: 11,
               fontWeight: 720,
               lineHeight: 15,
@@ -318,7 +318,7 @@ function buildEdge(edge: OrchestrationGraphSnapshot['edges'][number], stages: Or
     tools: edgeTools(),
     attrs: {
       line: {
-        stroke: '#7de6ea',
+        stroke: 'var(--orchestration-edge)',
         strokeWidth: 1.3,
         strokeLinecap: 'round',
         strokeDasharray: undefined,
@@ -346,8 +346,8 @@ function orthogonalRouter(): Record<string, unknown> {
 function edgeTools(): Record<string, unknown> {
   const handleAttrs = {
     r: 3.6,
-    fill: '#07111b',
-    stroke: '#7de6ea',
+    fill: 'var(--orchestration-port-bg)',
+    stroke: 'var(--orchestration-edge)',
     strokeWidth: 1.7,
   }
   return {
@@ -365,13 +365,13 @@ function edgeBranchLabel(branch: 'pass' | 'fail'): Record<string, unknown> {
     attrs: {
       label: {
         text: failBranch ? '不通过' : '通过',
-        fill: '#c9fbef',
+        fill: 'var(--orchestration-edge-label-text)',
         fontSize: 9,
         fontWeight: 720,
       },
       body: {
-        fill: 'rgba(5, 32, 34, 0.92)',
-        stroke: 'rgba(125, 230, 234, 0.5)',
+        fill: 'var(--orchestration-edge-label-bg)',
+        stroke: 'var(--orchestration-edge-label-stroke)',
         strokeWidth: 1,
         rx: 5,
         ry: 5,
@@ -391,9 +391,9 @@ function reviewEdgeBranch(edge: OrchestrationGraphSnapshot['edges'][number], sta
 
 function nodeStyle(selected: boolean): { stroke: string; strokeWidth: number; filter: string } {
   return {
-    stroke: selected ? '#7de6ea' : '#42667c',
+    stroke: selected ? 'var(--orchestration-node-selected)' : 'var(--orchestration-node-stroke)',
     strokeWidth: selected ? 2.4 : 1.3,
-    filter: selected ? 'drop-shadow(0 0 10px rgba(87, 216, 221, 0.24))' : 'drop-shadow(0 8px 18px rgba(0, 0, 0, 0.24))',
+    filter: selected ? 'var(--orchestration-node-selected-shadow)' : 'var(--orchestration-node-shadow)',
   }
 }
 
@@ -423,9 +423,9 @@ function portGroup(position: 'left' | 'right' | 'bottom'): Record<string, unknow
       circle: {
         r: 4.5,
         magnet: true,
-        stroke: '#57d8dd',
+        stroke: 'var(--orchestration-edge)',
         strokeWidth: 2,
-        fill: '#07111b',
+        fill: 'var(--orchestration-port-bg)',
         opacity: 0.98,
         cursor: position === 'left' ? 'default' : 'crosshair',
       },

@@ -39,6 +39,8 @@ describe('team page dom refs', () => {
       <div id="template-form-title"></div>
       <button id="settings-button"></button>
       <div id="settings-menu"></div>
+      <button id="theme-light"></button>
+      <button id="theme-dark"></button>
       <button id="open-all-notes"></button>
       <button id="open-external-models"></button>
       <button id="open-orchestration"></button>
@@ -155,6 +157,8 @@ describe('team page dom refs', () => {
     expect(refs.appShellEl.id).toBe('app')
     expect(refs.closeWindowEl.id).toBe('close-window')
     expect(refs.toggleFullscreenEl.id).toBe('toggle-fullscreen')
+    expect(refs.themeLightEl.id).toBe('theme-light')
+    expect(refs.themeDarkEl.id).toBe('theme-dark')
     expect(refs.openOrchestrationEl.id).toBe('open-orchestration')
     expect(refs.autoOrchestrationEl.id).toBe('auto-orchestration')
     expect(refs.orchestrationMaxRoundsEl.id).toBe('orchestration-max-rounds')

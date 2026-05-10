@@ -17,6 +17,7 @@ import { createPromptSender } from './promptDelivery'
 import { createRoleHandlers } from './roleHandlers'
 import { createOrchestrationHandlers } from './orchestrationHandlers'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
+import { createSitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatRoles, mutateStore } from './storeAccess'
 import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
@@ -25,6 +26,7 @@ const runtimeFrames = createRuntimeFrameRegistry()
 const log = createLogger('background')
 
 const sendPrompt = createPromptSender({ log })
+const promptDeliveryLimiter = createSitePromptDeliveryLimiter({ log })
 const externalModelClient = createExternalModelClient()
 
 function sendRoleMessage(tabId: number, frameId: number, message: BackgroundToRoleMessage): Promise<unknown> {
@@ -79,8 +81,8 @@ const routeMessage = createMessageRouter([
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, newId, now }),
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
-  ...createOrchestrationHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, requestRoleRecovery, runtimeFrames, sendPrompt }),
-  ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
+  ...createOrchestrationHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
+  ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 
 chrome.runtime.onInstalled.addListener(() => {

@@ -7,6 +7,7 @@ export interface ChatHeaderViewDependencies {
   chatSubtitleEl: HTMLElement
   chatStatusEl: HTMLElement
   togglePeopleDrawerEl: HTMLButtonElement
+  openOrchestrationEl: HTMLButtonElement
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
   getCurrentMessages(): GroupMessage[]
@@ -28,6 +29,7 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
       deps.chatStatusEl.textContent = '空'
       deps.togglePeopleDrawerEl.textContent = '成员 0'
       deps.togglePeopleDrawerEl.disabled = true
+      deps.openOrchestrationEl.hidden = true
       return
     }
 
@@ -39,6 +41,7 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
     deps.togglePeopleDrawerEl.textContent = `成员 ${roles.length}`
     deps.togglePeopleDrawerEl.setAttribute('aria-label', deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板')
     deps.togglePeopleDrawerEl.setAttribute('aria-expanded', String(deps.state.peopleDrawerOpen))
+    deps.openOrchestrationEl.hidden = chat.mode !== 'collaborative'
   }
 
   return { renderChatHeader }

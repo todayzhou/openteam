@@ -33,6 +33,8 @@ export interface TeamPageDomRefs {
   templateFormTitleEl: HTMLElement
   settingsButtonEl: HTMLButtonElement
   settingsMenuEl: HTMLElement
+  themeLightEl: HTMLButtonElement
+  themeDarkEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
   closeAllNotesEl: HTMLButtonElement
   allNotesModalEl: HTMLElement
@@ -186,6 +188,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateFormTitleEl: requireElement<HTMLElement>('#template-form-title'),
     settingsButtonEl: requireElement<HTMLButtonElement>('#settings-button'),
     settingsMenuEl: requireElement<HTMLElement>('#settings-menu'),
+    themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
+    themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),
     closeAllNotesEl: requireElement<HTMLButtonElement>('#close-all-notes'),
     allNotesModalEl: requireElement<HTMLElement>('#all-notes-modal'),

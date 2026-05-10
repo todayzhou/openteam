@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -94,18 +94,18 @@
           <div class="field">
             <label>群聊模式</label>
             <div class="mode-options">
-              <label class="mode-option" for="new-chat-mode-independent">
-                <input id="new-chat-mode-independent" type="radio" name="new-chat-mode" value="independent" checked />
-                <span>
-                  <span class="mode-name">独立专家</span>
-                  <span class="mode-help">人员独立回答，适合并行评审。</span>
-                </span>
-              </label>
               <label class="mode-option" for="new-chat-mode-collaborative">
-                <input id="new-chat-mode-collaborative" type="radio" name="new-chat-mode" value="collaborative" />
+                <input id="new-chat-mode-collaborative" type="radio" name="new-chat-mode" value="collaborative" checked />
                 <span>
                   <span class="mode-name">协作群聊</span>
                   <span class="mode-help">人员参考群聊上下文，适合接力讨论。</span>
+                </span>
+              </label>
+              <label class="mode-option" for="new-chat-mode-independent">
+                <input id="new-chat-mode-independent" type="radio" name="new-chat-mode" value="independent" />
+                <span>
+                  <span class="mode-name">独立专家</span>
+                  <span class="mode-help">人员独立回答，适合并行评审。</span>
                 </span>
               </label>
             </div>
@@ -126,6 +126,16 @@
             <p id="chat-subtitle" class="chat-subtitle">创建或选择一个群聊开始协作</p>
           </div>
           <div class="chat-row">
+            <div id="theme-switch" class="theme-switch" role="group" aria-label="界面模式">
+              <button id="theme-light" class="theme-option" type="button" aria-pressed="false" title="浅色模式">
+                <span aria-hidden="true">☼</span>
+                <span>浅色</span>
+              </button>
+              <button id="theme-dark" class="theme-option" type="button" aria-pressed="true" title="深色模式">
+                <span aria-hidden="true">☾</span>
+                <span>深色</span>
+              </button>
+            </div>
             <button id="open-orchestration" class="btn drawer-summary" type="button">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
                 <path d="M5 7.5h4.5v4H5z" />

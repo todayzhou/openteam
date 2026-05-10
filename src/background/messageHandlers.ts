@@ -11,6 +11,7 @@ import { DEFAULT_PROMPT_DELIVERY_RETRY_DELAYS_MS, sendPromptDeliveryWithRetry } 
 import { getExternalModelForRole, isExternalModelRole, prepareRolePromptDelivery, type ExternalPromptDelivery, type PreparedRolePromptDelivery } from './rolePromptDelivery'
 import { messageTabId, rememberHost, senderFrameId, senderTabId, type RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
+import type { SitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 import { markOrchestrationRoleError, maybeAdvanceOrchestrationRun } from './orchestrationRuntime'
 
@@ -54,6 +55,7 @@ export interface MessageHandlersDependencies {
   sendRoleMessage(tabId: number, frameId: number, message: BackgroundToRoleMessage): Promise<unknown>
   sendError(reason: string): Promise<void> | void
   sendPrompt: PromptSender
+  promptDeliveryLimiter?: SitePromptDeliveryLimiter
   externalModelClient?: ExternalModelClient
   externalModelRuns?: ExternalModelRunRegistry
   deliveryRetryDelaysMs?: readonly number[]
@@ -64,7 +66,6 @@ export interface MessageHandlersDependencies {
 }
 
 export function createMessageHandlers(deps: MessageHandlersDependencies): BackgroundMessageRoute[] {
-  const deepSeekPromptBatcher = createDeepSeekPromptBatcher(deps)
   const externalModelClient = deps.externalModelClient ?? createExternalModelClient()
   const externalModelRuns = deps.externalModelRuns ?? createExternalModelRunRegistry()
   const roleErrorRetryCounts = new Map<string, number>()
@@ -193,7 +194,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     })
     await deps.broadcastStoreUpdated(store)
 
-    await sendPromptDeliveries(deps, deepSeekPromptBatcher, chatId, result.message.id, result.deliveries)
+    await sendPromptDeliveries(deps, chatId, result.message.id, result.deliveries)
     let responseStore = store
     for (const delivery of result.externalDeliveries) {
       responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, delivery) ?? responseStore
@@ -264,7 +265,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       tabId: delivery.tabId,
       frameId: delivery.frameId,
     })
-    await sendPromptDelivery(deps, chatId, delivery.message.messageId, delivery)
+    await enqueuePromptDelivery(deps, chatId, delivery.message.messageId, delivery)
     return { ok: true, store, messageId: delivery.message.messageId }
   }
 
@@ -587,7 +588,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     deps.log.info('role-reply:stored', { chatId: result.reply.chatId, roleId: result.reply.roleId, replyMessageId: result.reply.id })
     await deps.broadcastStoreUpdated(store)
     if (promptMessageId) clearRoleErrorRetryCount(roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId)
-    if (promptMessageId) await deepSeekPromptBatcher.complete(identity.chatId, promptMessageId, identity.roleId)
+    if (promptMessageId) await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
     if (promptMessageId) await maybeAdvanceOrchestrationRun(deps, { chatId: identity.chatId, roleId: identity.roleId, promptMessageId, replyMessage: result.reply })
     return { ok: true, message: result.reply, store }
   }
@@ -644,7 +645,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         const responseStore = await sendExternalModelDelivery(deps, externalModelClient, externalModelRuns, retry.externalDelivery) ?? retry.store
         return { ok: true, retried: true, store: responseStore }
       }
-      await sendPromptDelivery(deps, identity.chatId, promptMessageId!, retry.delivery)
+      await enqueuePromptDelivery(deps, identity.chatId, promptMessageId!, retry.delivery)
       return { ok: true, retried: true, store: retry.store }
     }
 
@@ -674,7 +675,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     await deps.broadcastStoreUpdated(store)
     await deps.sendError(reason)
     if (promptMessageId) clearRoleErrorRetryCount(roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId)
-    if (promptMessageId) await deepSeekPromptBatcher.complete(identity.chatId, promptMessageId, identity.roleId)
+    if (promptMessageId) await deps.promptDeliveryLimiter?.complete(identity.chatId, promptMessageId, identity.roleId)
     if (promptMessageId) await markOrchestrationRoleError(deps, { chatId: identity.chatId, roleId: identity.roleId, promptMessageId, error: reason })
     return { ok: true, store }
   }
@@ -931,75 +932,23 @@ async function waitForRetryDelay(deps: MessageHandlersDependencies, delayMs: num
   await new Promise<void>(resolve => setTimeout(resolve, delayMs))
 }
 
-interface DeepSeekPromptBatcher {
-  enqueue(chatId: string, messageId: string, deliveries: PromptDelivery[]): Promise<void>
-  complete(chatId: string, messageId: string, roleId: string): Promise<void>
+async function sendPromptDeliveries(deps: MessageHandlersDependencies, chatId: string, messageId: string, deliveries: PromptDelivery[]): Promise<void> {
+  await Promise.all(deliveries.map(delivery => enqueuePromptDelivery(deps, chatId, messageId, delivery)))
 }
 
-interface DeepSeekPromptBatchState {
-  chatId: string
-  messageId: string
-  pending: PromptDelivery[]
-  activeRoleIds: Set<string>
-}
-
-function createDeepSeekPromptBatcher(deps: MessageHandlersDependencies): DeepSeekPromptBatcher {
-  const batches = new Map<string, DeepSeekPromptBatchState>()
-
-  const pump = async (state: DeepSeekPromptBatchState): Promise<void> => {
-    const launched: Array<Promise<void>> = []
-    while (state.activeRoleIds.size < 2 && state.pending.length > 0) {
-      const delivery = state.pending.shift()!
-      state.activeRoleIds.add(delivery.roleId)
-      deps.log.info('deepseek-prompt:batch-send', {
-        chatId: state.chatId,
-        messageId: state.messageId,
-        roleId: delivery.roleId,
-        activeCount: state.activeRoleIds.size,
-        remainingCount: state.pending.length,
-      })
-      launched.push(sendPromptDelivery(deps, state.chatId, state.messageId, delivery).then(async sent => {
-        if (!sent) await complete(state.chatId, state.messageId, delivery.roleId)
-      }))
-    }
-    await Promise.all(launched)
+async function enqueuePromptDelivery(deps: MessageHandlersDependencies, chatId: string, messageId: string, delivery: PromptDelivery): Promise<void> {
+  const send = () => sendPromptDelivery(deps, chatId, messageId, delivery)
+  if (!deps.promptDeliveryLimiter) {
+    await send()
+    return
   }
-
-  const complete = async (chatId: string, messageId: string, roleId: string): Promise<void> => {
-    const key = deepSeekBatchKey(chatId, messageId)
-    const state = batches.get(key)
-    if (!state || !state.activeRoleIds.delete(roleId)) return
-    if (state.pending.length === 0 && state.activeRoleIds.size === 0) {
-      batches.delete(key)
-      return
-    }
-    await pump(state)
-  }
-
-  return {
-    async enqueue(chatId, messageId, deliveries) {
-      if (deliveries.length === 0) return
-      const key = deepSeekBatchKey(chatId, messageId)
-      const state: DeepSeekPromptBatchState = { chatId, messageId, pending: [...deliveries], activeRoleIds: new Set() }
-      batches.set(key, state)
-      await pump(state)
-    },
-    complete,
-  }
-}
-
-async function sendPromptDeliveries(deps: MessageHandlersDependencies, deepSeekPromptBatcher: DeepSeekPromptBatcher, chatId: string, messageId: string, deliveries: PromptDelivery[]): Promise<void> {
-  const deepSeekDeliveries: PromptDelivery[] = []
-  const standardDeliveries: Array<Promise<boolean>> = []
-  for (const delivery of deliveries) {
-    if (delivery.chatSite === 'deepseek') {
-      deepSeekDeliveries.push(delivery)
-      continue
-    }
-    standardDeliveries.push(sendPromptDelivery(deps, chatId, messageId, delivery))
-  }
-  await Promise.all(standardDeliveries)
-  await deepSeekPromptBatcher.enqueue(chatId, messageId, deepSeekDeliveries)
+  await deps.promptDeliveryLimiter.enqueue({
+    chatId,
+    messageId,
+    roleId: delivery.roleId,
+    chatSite: delivery.chatSite,
+    send,
+  })
 }
 
 async function sendPromptDelivery(deps: MessageHandlersDependencies, chatId: string, messageId: string, delivery: PromptDelivery): Promise<boolean> {
@@ -1366,10 +1315,6 @@ async function* abortableChunks<T>(stream: AsyncIterable<T>, signal: AbortSignal
     if (abortListener) signal.removeEventListener('abort', abortListener)
     if (signal.aborted) Promise.resolve(iterator.return?.()).catch(() => undefined)
   }
-}
-
-function deepSeekBatchKey(chatId: string, messageId: string): string {
-  return `${chatId}:${messageId}`
 }
 
 function createExternalModelRunRegistry(): ExternalModelRunRegistry {

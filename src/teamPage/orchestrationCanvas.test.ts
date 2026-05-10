@@ -137,6 +137,8 @@ describe('orchestration canvas', () => {
       height: 56,
       label: expect.stringContaining('ChatGPT'),
     }))
+    expect((MockGraph.instances[0].nodes[0] as { attrs?: { body?: { fill?: string }; label?: { fill?: string } } }).attrs?.body?.fill).toBe('var(--orchestration-node-bg)')
+    expect((MockGraph.instances[0].nodes[0] as { attrs?: { body?: { fill?: string }; label?: { fill?: string } } }).attrs?.label?.fill).toBe('var(--orchestration-node-text)')
     expect((MockGraph.instances[0].nodes[0] as { label?: string }).label).not.toContain('▸')
     expect((MockGraph.instances[0].nodes[0] as { label?: string }).label).not.toContain('执行')
     expect(MockGraph.instances[0].nodes[1]).toEqual(expect.objectContaining({
@@ -286,12 +288,12 @@ describe('orchestration canvas', () => {
     expect(MockGraph.instances[0].edges).toEqual([
       expect.objectContaining({
         source: expect.objectContaining({ cell: 'review-1', port: 'pass' }),
-        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: '#7de6ea', strokeWidth: 1.3, strokeDasharray: undefined }) }),
+        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: 'var(--orchestration-edge)', strokeWidth: 1.3, strokeDasharray: undefined }) }),
         labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '通过', fontSize: 9 }) }) })],
       }),
       expect.objectContaining({
         source: expect.objectContaining({ cell: 'review-1', port: 'fail' }),
-        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: '#7de6ea', strokeWidth: 1.3, strokeDasharray: undefined }) }),
+        attrs: expect.objectContaining({ line: expect.objectContaining({ stroke: 'var(--orchestration-edge)', strokeWidth: 1.3, strokeDasharray: undefined }) }),
         labels: [expect.objectContaining({ attrs: expect.objectContaining({ label: expect.objectContaining({ text: '不通过', fontSize: 9 }) }) })],
       }),
     ])
