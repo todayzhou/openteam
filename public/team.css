@@ -4178,12 +4178,12 @@ select:focus {
 }
 
 :root[data-theme="light"] .message-row.user .message-bubble {
-  background: #bff0d8;
+  background: #b0f0a7;
   color: #0d3324;
 }
 
 :root[data-theme="light"] .message-row.user .message-bubble::before {
-  border-left-color: #bff0d8;
+  border-left-color: #b0f0a7;
 }
 
 :root[data-theme="light"] .message-row.thinking .message-bubble {

@@ -720,6 +720,8 @@ describe('team.html chat creation UI', () => {
     expect(html).toMatch(/\.message-row\.user \.message-inner\s*{[^}]*flex-direction:\s*row-reverse;/s)
     expect(html).toMatch(/\.message-row\.user \.message-bubble\s*{[^}]*background:\s*#35d18c;/s)
     expect(html).toMatch(/\.message-row\.user \.message-bubble::before\s*{[^}]*border-left-color:\s*#35d18c;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.message-row\.user \.message-bubble\s*{[^}]*background:\s*#b0f0a7;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.message-row\.user \.message-bubble::before\s*{[^}]*border-left-color:\s*#b0f0a7;/s)
     expect(html).not.toContain('.message-content')
   })
 
