@@ -9,6 +9,7 @@ export interface RuntimeResponse<T = unknown> {
 
 export type StorePushMessage =
   | { type: 'GROUP_STORE_UPDATED'; store: OpenTeamStore }
+  | { type: 'GROUP_ORCHESTRATION_AUTO_STREAM_CHUNK'; streamId: string; chunk?: string; content?: string }
   | { type: 'GROUP_ROLE_STATUS_UPDATED'; store?: OpenTeamStore }
   | { type: 'GROUP_MESSAGE_DELIVERED'; store?: OpenTeamStore }
   | { type: 'GROUP_MESSAGE_RECEIVED'; store?: OpenTeamStore }

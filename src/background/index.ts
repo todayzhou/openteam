@@ -15,7 +15,7 @@ import { createExternalModelHandlers } from './externalModelHandlers'
 import { createExternalModelClient } from './externalModelClient'
 import { createPromptSender } from './promptDelivery'
 import { createRoleHandlers } from './roleHandlers'
-import { createOrchestrationHandlers } from './orchestrationHandlers'
+import { createOrchestrationHandlers, type OrchestrationAutoStreamMessage } from './orchestrationHandlers'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
 import { createSitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatRoles, mutateStore } from './storeAccess'
@@ -44,6 +44,14 @@ function newId(prefix: string): string {
 
 async function broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> {
   await broadcastRuntimeStoreUpdated(store, { excludeTabId })
+}
+
+async function broadcastAutoGenerateStream(message: OrchestrationAutoStreamMessage): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage(message)
+  } catch (error) {
+    log.debug('auto-orchestration-stream:runtime-failed', { error: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 function getChatStatusFromRoles(store: OpenTeamStore, chat: GroupChat): GroupChat['status'] {
@@ -81,7 +89,7 @@ const routeMessage = createMessageRouter([
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, newId, now }),
   ...createRoleHandlers({ broadcastStoreUpdated, externalModelClient, log, newId, now, runtimeFrames, sendPrompt }),
-  ...createOrchestrationHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
+  ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
   ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
 

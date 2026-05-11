@@ -28,7 +28,7 @@ describe('orchestration auto plan', () => {
       ],
     }), new Set(['role-pm']))
 
-    expect(plan.roles.find(role => role.key === 'writer')?.preferredSite).toBe('deepseek')
+    expect(plan.roles.find(role => role.key === 'writer')?.preferredSite).toBe('chatgpt')
     expect(plan.edges).toEqual([
       { from: 'plan', to: 'write' },
       { from: 'plan', to: 'risk' },
@@ -56,6 +56,46 @@ describe('orchestration auto plan', () => {
     expect(plan.edges).toContainEqual({ from: 'a', to: 'b' })
   })
 
+  it('normalizes display-name preferred sites from planner JSON', () => {
+    const plan = normalizeAutoOrchestrationPlan({
+      flowName: '站点名称归一',
+      roles: [
+        { key: 'chatgpt', name: 'ChatGPT 写手', preferredSite: 'ChatGPT' },
+        { key: 'gemini', name: 'Gemini 分析师', preferredSite: 'Gemini' },
+        { key: 'claude', name: 'Claude 审核员', preferredSite: 'Claude' },
+        { key: 'deepseek', name: 'DeepSeek 助手', preferredSite: 'DeepSeek' },
+      ],
+      nodes: [
+        { id: 'n1', kind: 'execute', roleKeys: ['chatgpt'], title: '写作', instruction: '写作' },
+        { id: 'n2', kind: 'execute', roleKeys: ['gemini'], title: '分析', instruction: '分析' },
+        { id: 'n3', kind: 'execute', roleKeys: ['claude'], title: '审核', instruction: '审核' },
+        { id: 'n4', kind: 'execute', roleKeys: ['deepseek'], title: '整理', instruction: '整理' },
+      ],
+      edges: [],
+    }, new Set())
+
+    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude', 'deepseek'])
+  })
+
+  it('accepts common planner site field aliases', () => {
+    const plan = normalizeAutoOrchestrationPlan({
+      flowName: '站点字段别名',
+      roles: [
+        { key: 'writer', name: '写手', site: 'ChatGPT' },
+        { key: 'analyst', name: '分析师', chatSite: 'Gemini' },
+        { key: 'reviewer', name: '审核员', preferred_site: 'Claude' },
+      ],
+      nodes: [
+        { id: 'write', kind: 'execute', roleKeys: ['writer'], title: '写作', instruction: '写作' },
+        { id: 'analysis', kind: 'execute', roleKeys: ['analyst'], title: '分析', instruction: '分析' },
+        { id: 'review', kind: 'review', roleKeys: ['reviewer'], title: '审核', instruction: '审核', review: { criteria: '通过', maxAttempts: 1, onMaxAttempts: 'stop' } },
+      ],
+      edges: [],
+    }, new Set())
+
+    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude'])
+  })
+
   it('rejects invalid role and edge references', () => {
     expect(() => normalizeAutoOrchestrationPlan({
       flowName: '坏流程',
@@ -72,13 +112,17 @@ describe('orchestration auto plan', () => {
     }, new Set())).toThrow('连线引用了不存在的节点')
   })
 
-  it('builds a prompt that tells the planner to use existing roles first and DeepSeek for new roles', () => {
+  it('builds a prompt that tells the planner to use existing roles first and choose from supported chat sites', () => {
     const store = createDefaultStore()
     const role: GroupRole = { id: 'role-1', chatId: 'chat-1', name: '产品经理', chatSite: 'chatgpt', description: '做产品', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
     const prompt = buildAutoOrchestrationPrompt({ task: '做一个方案', existingRoles: [role], store })
 
     expect(prompt).toContain('优先复用 existingRoles')
-    expect(prompt).toContain('preferredSite 必须使用 "deepseek"')
+    expect(prompt).toContain('preferredSite 必须使用 "chatgpt"、"gemini"、"claude" 或 "deepseek"')
+    expect(prompt).toContain('ChatGPT')
+    expect(prompt).toContain('Gemini')
+    expect(prompt).toContain('Claude')
+    expect(prompt).toContain('DeepSeek')
     expect(prompt).toContain('不要创建 kind=parallel')
     expect(prompt).toContain('"id": "role-1"')
   })

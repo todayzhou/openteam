@@ -4,21 +4,27 @@ import type { GroupChat, GroupRole, OpenTeamStore, OrchestrationFlow } from '../
 type RuntimeMessage = { type: string; [key: string]: unknown }
 type MessageSender = chrome.runtime.MessageSender
 
-async function setupBackground(initialStore?: OpenTeamStore, externalModelContent?: string) {
+async function setupBackground(initialStore?: OpenTeamStore, externalModelContent?: string, externalStreamChunks?: string[]) {
   vi.resetModules()
   const externalComplete = vi.fn(async () => ({ content: externalModelContent ?? '{"flowName":"Empty","roles":[],"nodes":[],"edges":[]}' }))
+  const externalStream = externalStreamChunks
+    ? vi.fn(async function* () {
+      for (const chunk of externalStreamChunks) yield chunk
+    })
+    : undefined
   vi.doMock('./externalModelClient', () => ({
-    createExternalModelClient: () => ({ complete: externalComplete }),
+    createExternalModelClient: () => ({ complete: externalComplete, ...(externalStream ? { stream: externalStream } : {}) }),
   }))
   const { STORE_KEY, createDefaultStore, loadStore } = await import('../group/store')
   const stored: Record<string, unknown> = { [STORE_KEY]: structuredClone(initialStore ?? createDefaultStore()) }
   const listeners: Array<(message: RuntimeMessage, sender: MessageSender, sendResponse: (response: unknown) => void) => boolean> = []
+  const runtimeSendMessage = vi.fn().mockResolvedValue({ ok: true })
   const tabsSendMessage = vi.fn().mockResolvedValue({ ok: true })
   vi.stubGlobal('chrome', {
     runtime: {
       onInstalled: { addListener: vi.fn() },
       onMessage: { addListener: vi.fn(listener => listeners.push(listener)) },
-      sendMessage: vi.fn().mockResolvedValue({ ok: true }),
+      sendMessage: runtimeSendMessage,
       getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
     },
     storage: {
@@ -41,6 +47,8 @@ async function setupBackground(initialStore?: OpenTeamStore, externalModelConten
   expect(listeners).toHaveLength(1)
   return {
     externalComplete,
+    externalStream,
+    runtimeSendMessage,
     tabsSendMessage,
     getStore: loadStore,
     invoke: (message: RuntimeMessage, sender = { tab: { id: 900 } as chrome.tabs.Tab, frameId: 0, url: 'https://gemini.google.com/app/test' }) => new Promise(resolve => listeners[0](message, sender, resolve)),
@@ -87,7 +95,7 @@ describe('orchestration background handlers', () => {
     expect(latestStore.orchestrationRunsById[started.run.id].stageRuns[0]).toMatchObject({ stageId: 'draft-stage' })
   })
 
-  it('auto-generates a flow draft using existing roles and DeepSeek temporary roles', async () => {
+  it('auto-generates a flow draft using existing roles and requested temporary role sites', async () => {
     const store = makeStore(['role-existing'])
     store.settings.externalModelOrder = ['planner']
     store.settings.externalModelsById.planner = { id: 'planner', name: 'Planner', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'key', modelName: 'planner-model', createdAt: 1, updatedAt: 1 }
@@ -97,9 +105,9 @@ describe('orchestration background handlers', () => {
       flowName: '自动文章流程',
       maxNodeExecutions: 30,
       roles: [
-        { key: 'pm', reuseRoleId: 'role-existing', name: '产品经理', preferredSite: 'deepseek' },
-        { key: 'writer', name: '写手', description: '负责正文写作', systemPrompt: '你负责写清楚正文。', preferredSite: 'deepseek' },
-        { key: 'reviewer', name: '审核员', description: '负责质量审核', systemPrompt: '你负责判断是否通过。', preferredSite: 'deepseek' },
+        { key: 'pm', reuseRoleId: 'role-existing', name: '产品经理', preferredSite: 'ChatGPT' },
+        { key: 'writer', name: '写手', description: '负责正文写作', systemPrompt: '你负责写清楚正文。', site: 'ChatGPT' },
+        { key: 'reviewer', name: '审核员', description: '负责质量审核', systemPrompt: '你负责判断是否通过。', chatSite: 'Claude' },
       ],
       nodes: [
         { id: 'plan', kind: 'execute', roleKeys: ['pm'], title: '规划', instruction: '拆解目标' },
@@ -120,7 +128,7 @@ describe('orchestration background handlers', () => {
     expect(harness.externalComplete).toHaveBeenCalledTimes(1)
     expect(generated.createdRoleIds).toHaveLength(2)
     expect(generated.reusedRoleIds).toEqual(['role-existing'])
-    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['deepseek', 'deepseek'])
+    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['chatgpt', 'claude'])
     expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].createdBy)).toEqual(['orchestration-auto', 'orchestration-auto'])
     expect(generated.flow.id).toBe('flow-existing')
     expect(generated.flow.stages.map(stage => stage.id)).toEqual(['stage-plan', 'stage-write', 'stage-review'])
@@ -131,10 +139,76 @@ describe('orchestration background handlers', () => {
       { sourceStageId: 'stage-write', targetStageId: 'stage-review' },
       { sourceStageId: 'stage-review', targetStageId: 'stage-write', sourcePort: 'fail' },
     ])
-    expect(generated.store.orchestrationFlowsById['flow-existing']).toBeUndefined()
+    expect(generated.store.orchestrationFlowsById['flow-existing']).toEqual(generated.flow)
+    expect(generated.store.orchestrationFlowOrderByChatId['chat-1']).toContain('flow-existing')
   })
 
-  it('auto-generates DeepSeek roles for an empty chat', async () => {
+  it('honors explicit site changes for reused site roles and persists auto chat history', async () => {
+    const store = makeStore(['role-existing'])
+    store.settings.externalModelOrder = ['planner']
+    store.settings.externalModelsById.planner = { id: 'planner', name: 'Planner', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'key', modelName: 'planner-model', createdAt: 1, updatedAt: 1 }
+    store.rolesById['role-existing'].name = '写手'
+    store.rolesById['role-existing'].chatSite = 'deepseek'
+    const modelOutput = JSON.stringify({
+      flowName: '切换站点流程',
+      maxNodeExecutions: 10,
+      roles: [
+        { key: 'writer', reuseRoleId: 'role-existing', name: '写手', site: 'ChatGPT' },
+      ],
+      nodes: [
+        { id: 'write', kind: 'execute', roleKeys: ['writer'], title: '写作', instruction: '用 ChatGPT 写作' },
+      ],
+      edges: [],
+    })
+    const harness = await setupBackground(store, modelOutput)
+
+    const generated = await harness.invoke({ type: 'GROUP_ORCHESTRATION_AUTO_GENERATE', chatId: 'chat-1', task: '写一篇文章', instruction: '把写手切到 ChatGPT' }) as { ok: boolean; flow: OrchestrationFlow; store: OpenTeamStore; createdRoleIds: string[]; reusedRoleIds: string[] }
+
+    expect(generated.ok).toBe(true)
+    expect(generated.createdRoleIds).toEqual([])
+    expect(generated.reusedRoleIds).toEqual(['role-existing'])
+    expect(generated.store.rolesById['role-existing'].chatSite).toBe('chatgpt')
+    expect(generated.store.orchestrationFlowsById[generated.flow.id]).toEqual(generated.flow)
+    expect(generated.store.orchestrationFlowOrderByChatId['chat-1']).toContain(generated.flow.id)
+    expect(generated.flow.autoPlanHistory?.map(entry => entry.role)).toEqual(['user', 'assistant'])
+    expect(generated.flow.autoPlanHistory?.[0]?.content).toBe('把写手切到 ChatGPT')
+  })
+
+  it('streams automatic orchestration model output to the team page', async () => {
+    const store = makeStore([])
+    store.settings.externalModelOrder = ['planner']
+    store.settings.externalModelsById.planner = { id: 'planner', name: 'Planner', format: 'openai', baseUrl: 'https://api.example.test/v1', apiKey: 'key', modelName: 'planner-model', createdAt: 1, updatedAt: 1 }
+    const modelOutput = JSON.stringify({
+      flowName: '流式编排流程',
+      maxNodeExecutions: 20,
+      roles: [
+        { key: 'pm', name: '产品经理', description: '负责拆解需求', systemPrompt: '你负责产品规划。', preferredSite: 'gemini' },
+        { key: 'writer', name: '写手', description: '负责写作', systemPrompt: '你负责写作。', preferredSite: 'chatgpt' },
+      ],
+      nodes: [
+        { id: 'plan', kind: 'execute', roleKeys: ['pm'], title: '需求拆解', instruction: '拆解需求' },
+        { id: 'write', kind: 'execute', roleKeys: ['writer'], title: '写作', instruction: '完成初稿' },
+      ],
+      edges: [{ from: 'plan', to: 'write' }],
+    })
+    const streamChunks = [modelOutput.slice(0, 32), modelOutput.slice(32)]
+    const harness = await setupBackground(store, modelOutput, streamChunks)
+
+    const generated = await harness.invoke({ type: 'GROUP_ORCHESTRATION_AUTO_GENERATE', chatId: 'chat-1', task: '写一篇文章', streamId: 'auto-stream-1' }) as { ok: boolean; flow: OrchestrationFlow }
+
+    expect(generated.ok).toBe(true)
+    expect(harness.externalStream).toHaveBeenCalledTimes(1)
+    expect(harness.externalComplete).not.toHaveBeenCalled()
+    const streamMessages = harness.runtimeSendMessage.mock.calls
+      .map(call => call[0])
+      .filter((message): message is { type: string; streamId: string; chunk: string; content: string } => message?.type === 'GROUP_ORCHESTRATION_AUTO_STREAM_CHUNK')
+    expect(streamMessages.map(message => message.chunk)).toEqual(streamChunks)
+    expect(streamMessages.map(message => message.content)).toEqual([streamChunks[0], modelOutput])
+    expect(generated.flow.autoPlanHistory?.map(entry => entry.role)).toEqual(['user', 'assistant'])
+    expect(generated.flow.autoPlanHistory?.[1]?.content).toBe(modelOutput)
+  })
+
+  it('auto-generates roles with mixed supported sites for an empty chat', async () => {
     const store = makeStore([])
     store.chatsById['chat-1'].status = 'draft'
     store.settings.externalModelOrder = ['planner']
@@ -143,8 +217,8 @@ describe('orchestration background handlers', () => {
       flowName: '空群聊自动流程',
       maxNodeExecutions: 20,
       roles: [
-        { key: 'pm', name: '产品经理', description: '负责拆解需求', systemPrompt: '你负责产品规划。', preferredSite: 'deepseek' },
-        { key: 'engineer', name: '工程师', description: '负责技术判断', systemPrompt: '你负责技术可行性。', preferredSite: 'deepseek' },
+        { key: 'pm', name: '产品经理', description: '负责拆解需求', systemPrompt: '你负责产品规划。', preferredSite: 'gemini' },
+        { key: 'engineer', name: '工程师', description: '负责技术判断', systemPrompt: '你负责技术可行性。', preferredSite: 'claude' },
       ],
       nodes: [
         { id: 'plan', kind: 'execute', roleKeys: ['pm'], title: '需求拆解', instruction: '拆解需求' },
@@ -159,7 +233,7 @@ describe('orchestration background handlers', () => {
     expect(generated.ok).toBe(true)
     expect(generated.reusedRoleIds).toEqual([])
     expect(generated.createdRoleIds).toHaveLength(2)
-    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['deepseek', 'deepseek'])
+    expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].chatSite)).toEqual(['gemini', 'claude'])
     expect(generated.createdRoleIds.map(roleId => generated.store.rolesById[roleId].createdBy)).toEqual(['orchestration-auto', 'orchestration-auto'])
     expect(generated.store.chatsById['chat-1'].roleIds).toEqual(generated.createdRoleIds)
     expect(generated.flow.stages.map(stage => stage.roleIds[0])).toEqual(generated.createdRoleIds)

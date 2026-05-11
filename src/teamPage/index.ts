@@ -545,8 +545,9 @@ function registerRuntimePush(): void {
       handleRoleRecoveryRequest(message, sendResponse)
       return true
     }
+    if (orchestrationModalView.handleRuntimeMessage(message)) return false
     if (message.type === 'TEAM_FRAME_ROLE_READY') iframeHost.markRoleReady(message.chatId, message.roleId)
-    if (message.store) {
+    if ('store' in message && message.store) {
       applyStore(message.store)
     } else if (message.type.startsWith('GROUP_') || message.type.startsWith('TEAM_')) {
       refreshStore(false).catch(error => log.warn('runtime-push:refresh-failed', { type: message.type, error: error instanceof Error ? error.message : String(error) }))

@@ -10,6 +10,7 @@ export interface AutoOrchestrationRolePlan {
   description?: string
   systemPrompt?: string
   preferredSite: ChatSite
+  preferredSiteExplicit?: boolean
 }
 
 export interface AutoOrchestrationReviewPlan {
@@ -67,7 +68,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '1. 如果 existingRoles 非空，优先复用 existingRoles，复用时 roles[].reuseRoleId 必须填 existingRoles 里的 id。',
     '2. 只有现有人员无法覆盖必要职责时，才创建新人员。',
     '3. 如果 existingRoles 为空，必须创建 2-5 个新人员。',
-    '4. 新建人员 preferredSite 必须使用 "deepseek"。',
+    '4. 每个 roles[].preferredSite 必须使用 "chatgpt"、"gemini"、"claude" 或 "deepseek"；如果用户明确要求 ChatGPT、Gemini、Claude 或 DeepSeek 站点，相关人员必须使用对应站点。',
     '5. 不要创建 kind=parallel 的节点；并行通过一个节点连接多个后继节点表达。',
     '6. 多个上游节点连接到同一个节点表示汇合，该节点要等所有上游完成。',
     '7. 同一个 roleKey 不能出现在同一批可并行执行的节点中；同一人员要做多件事时必须串行。',
@@ -80,6 +81,15 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '14. maxNodeExecutions 根据流程复杂度设置，默认 30。',
     '15. 自动编排生成的人员可以根据本次指令更新 description 和 systemPrompt；复用普通现有人员时不要改写其人设。',
     '',
+    '可用站点：',
+    JSON.stringify([
+      { value: 'chatgpt', label: 'ChatGPT' },
+      { value: 'gemini', label: 'Gemini' },
+      { value: 'claude', label: 'Claude' },
+      { value: 'deepseek', label: 'DeepSeek' },
+    ], null, 2),
+    `默认站点：${input.store.settings.defaultChatSite}`,
+    '',
     '返回 JSON schema：',
     JSON.stringify({
       flowName: '流程名称',
@@ -91,7 +101,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
           name: '产品经理',
           description: '人员职责',
           systemPrompt: '人设提示词',
-          preferredSite: 'deepseek',
+          preferredSite: 'chatgpt',
         },
       ],
       nodes: [
@@ -232,13 +242,15 @@ function normalizeRoles(value: unknown, existingRoleIds: Set<string>): AutoOrche
     if (reuseRoleId && !existingRoleIds.has(reuseRoleId)) throw new Error(`reuseRoleId 不存在：${reuseRoleId}`)
     const name = readString(item.name, reuseRoleId ? key : '')
     if (!name) throw new Error(`roles[${index}] 缺少人员名称`)
+    const preferredSite = readRoleChatSite(item)
     return {
       key,
       ...(reuseRoleId ? { reuseRoleId } : {}),
       name,
       description: readOptionalString(item.description),
       systemPrompt: readOptionalString(item.systemPrompt),
-      preferredSite: reuseRoleId ? readChatSite(item.preferredSite) ?? DEFAULT_NEW_ROLE_SITE : DEFAULT_NEW_ROLE_SITE,
+      preferredSite: preferredSite ?? DEFAULT_NEW_ROLE_SITE,
+      ...(preferredSite ? { preferredSiteExplicit: true } : {}),
     }
   })
 }
@@ -388,7 +400,33 @@ function readNumber(value: unknown, fallback: number): number {
 }
 
 function readChatSite(value: unknown): ChatSite | undefined {
-  return value === 'chatgpt' || value === 'claude' || value === 'gemini' || value === 'deepseek' ? value : undefined
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, '')
+  if (normalized.includes('chatgpt') || normalized === 'gpt' || normalized === 'openai') return 'chatgpt'
+  if (normalized.includes('claude') || normalized === 'anthropic') return 'claude'
+  if (normalized.includes('gemini') || normalized === 'google') return 'gemini'
+  if (normalized.includes('deepseek')) return 'deepseek'
+  return undefined
+}
+
+function readRoleChatSite(item: Record<string, unknown>): ChatSite | undefined {
+  const candidates = [
+    item.preferredSite,
+    item.preferred_site,
+    item.chatSite,
+    item.chat_site,
+    item.site,
+    item.modelSite,
+    item.model_site,
+    item.provider,
+    item.modelProvider,
+    item['站点'],
+  ]
+  for (const candidate of candidates) {
+    const site = readChatSite(candidate)
+    if (site) return site
+  }
+  return undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

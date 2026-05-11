@@ -111,12 +111,12 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toMatch(/:root\[data-theme="light"\] \.modal-backdrop\s*{[^}]*background:\s*#ffffff;/s)
   })
 
-  it('keeps light theme automatic orchestration history readable instead of disabled-looking', () => {
+  it('keeps light theme automatic orchestration chat messages readable', () => {
     const html = readTeamDocument()
 
-    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history > span\s*{[^}]*color:\s*#4b5563;/s)
-    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history-item\s*{[^}]*border-color:\s*rgba\(17,\s*24,\s*39,\s*0\.12\);[^}]*background:\s*#ffffff;[^}]*color:\s*#374151;/s)
-    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-history-item\.assistant\s*{[^}]*color:\s*#4b5563;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-message-content\s*{[^}]*border-color:\s*rgba\(17,\s*24,\s*39,\s*0\.12\);[^}]*background:\s*#ffffff;[^}]*color:\s*#374151;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-message\.user \.orchestration-auto-message-content\s*{[^}]*background:\s*#b0f0a7;/s)
+    expect(html).toMatch(/:root\[data-theme="light"\] \.orchestration-auto-input-shell\s*{[^}]*background:\s*#ffffff;/s)
   })
 
   it('offers an explicit chat mode choice before creating a chat from the plus button', () => {

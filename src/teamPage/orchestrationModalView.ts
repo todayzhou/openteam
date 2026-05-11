@@ -43,6 +43,7 @@ export interface OrchestrationModalView {
   close(): void
   render(): void
   registerOrchestrationEvents(): void
+  handleRuntimeMessage(message: unknown): boolean
 }
 
 interface FlowDraft {
@@ -65,6 +66,9 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   let applyingTemplate = false
   let autoPanelOpen = false
   let autoInstruction = ''
+  let autoStreamId: string | undefined
+  let autoPendingUserContent = ''
+  let autoStreamingAssistantContent = ''
   const templateManagedRoleIds = new Set<string>()
   const externalApiRequiredMessage = '编排依赖外部模型 API，请先配置一个外部模型。'
 
@@ -94,6 +98,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     deps.orchestrationModalEl.hidden = true
     autoPanelOpen = false
     autoInstruction = ''
+    clearAutoStreamingState()
     removeAutoPanel()
     closeTemplatePicker()
     canvas?.destroy()
@@ -526,12 +531,13 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     autoPanelOpen = true
     renderAutoPanel()
     updateActionButtons()
-    deps.orchestrationAutoContentEl.querySelector<HTMLTextAreaElement>('.orchestration-auto-instruction')?.focus()
+    deps.orchestrationAutoContentEl.querySelector<HTMLTextAreaElement>('.orchestration-auto-input')?.focus()
   }
 
   function closeAutoPanel(): void {
     autoPanelOpen = false
     autoInstruction = ''
+    clearAutoStreamingState()
     removeAutoPanel()
     updateActionButtons()
   }
@@ -542,67 +548,94 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       return
     }
     deps.orchestrationAutoModalEl.hidden = false
-    let panel = deps.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-panel')
-    if (!panel) {
-      panel = document.createElement('section')
-      panel.className = 'orchestration-auto-panel'
-      deps.orchestrationAutoContentEl.append(panel)
+    let chat = deps.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-chat')
+    if (!chat) {
+      chat = document.createElement('section')
+      chat.className = 'orchestration-auto-chat'
+      deps.orchestrationAutoContentEl.append(chat)
     }
-    panel.replaceChildren()
+    chat.replaceChildren()
 
-    const taskPreview = document.createElement('div')
-    taskPreview.className = 'orchestration-auto-task-preview'
-    const taskLabel = document.createElement('span')
-    taskLabel.textContent = '当前任务'
-    const taskText = document.createElement('strong')
-    taskText.textContent = deps.orchestrationTaskEl.value.trim() || '还没有填写任务'
-    taskPreview.append(taskLabel, taskText)
-
-    const history = document.createElement('div')
-    history.className = 'orchestration-auto-history'
-    const historyTitle = document.createElement('span')
-    historyTitle.textContent = '自动编排历史'
-    history.append(historyTitle)
-    const historyItems = draft.autoPlanHistory.slice(-6)
-    if (historyItems.length === 0) {
-      const empty = document.createElement('p')
-      empty.className = 'tiny'
-      empty.textContent = '还没有自动编排记录。'
-      history.append(empty)
+    const messages = document.createElement('div')
+    messages.className = 'orchestration-auto-messages'
+    const entries = currentAutoChatEntries()
+    if (entries.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'orchestration-auto-empty'
+      empty.textContent = '输入你的编排需求，自动编排会像网页对话一样返回结果。'
+      messages.append(empty)
     } else {
-      for (const item of historyItems) {
-        const bubble = document.createElement('p')
-        bubble.className = `orchestration-auto-history-item ${item.role === 'assistant' ? 'assistant' : 'user'}`
-        bubble.textContent = item.content
-        history.append(bubble)
-      }
+      for (const entry of entries) messages.append(renderAutoChatMessage(entry))
     }
 
-    const field = document.createElement('label')
-    field.className = 'field orchestration-auto-instruction-field'
-    field.textContent = draft.stages.length > 0 ? '修改描述' : '编排描述'
+    const form = document.createElement('form')
+    form.className = 'orchestration-auto-composer'
+    form.addEventListener('submit', event => {
+      event.preventDefault()
+      autoGenerate().catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+    })
+    const inputShell = document.createElement('div')
+    inputShell.className = 'orchestration-auto-input-shell'
     const textarea = document.createElement('textarea')
-    textarea.className = 'orchestration-auto-instruction'
+    textarea.className = 'orchestration-auto-input'
     textarea.value = autoInstruction
-    textarea.placeholder = draft.stages.length > 0
-      ? '例如：把审核失败连回写作节点，并把写手人设改成财经编辑。'
-      : '例如：先让产品拆解，再让工程写方案，最后审核；审核不通过回到产品修改。'
+    textarea.placeholder = draft.stages.length > 0 ? '继续修改当前编排...' : '输入自动编排需求...'
+    textarea.disabled = autoGenerating || saving || running
     textarea.addEventListener('input', () => {
       autoInstruction = textarea.value
     })
-    field.append(textarea)
-
-    const actions = document.createElement('div')
-    actions.className = 'orchestration-auto-panel-actions'
+    textarea.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+      event.preventDefault()
+      form.requestSubmit()
+    })
     const submit = document.createElement('button')
     submit.className = 'btn btn-primary orchestration-auto-submit'
-    submit.type = 'button'
-    submit.textContent = autoGenerating ? '生成中...' : draft.stages.length > 0 ? '基于当前编排修改' : '生成编排'
+    submit.type = 'submit'
+    submit.textContent = autoGenerating ? '生成中...' : '发送'
     submit.disabled = autoGenerating || saving || running
-    submit.addEventListener('click', () => autoGenerate().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
-    actions.append(submit)
+    inputShell.append(textarea, submit)
+    form.append(inputShell)
 
-    panel.append(taskPreview, history, field, actions)
+    chat.append(messages, form)
+    messages.scrollTop = messages.scrollHeight
+  }
+
+  function currentAutoChatEntries(): OrchestrationAutoPlanHistoryEntry[] {
+    const entries = cloneAutoPlanHistory(draft.autoPlanHistory)
+    if (autoGenerating && autoPendingUserContent) {
+      entries.push({ id: 'auto-pending-user', role: 'user', content: autoPendingUserContent, createdAt: Date.now() })
+      entries.push({ id: 'auto-pending-assistant', role: 'assistant', content: autoStreamingAssistantContent || '...', createdAt: Date.now() })
+    }
+    return entries
+  }
+
+  function renderAutoChatMessage(entry: OrchestrationAutoPlanHistoryEntry): HTMLElement {
+    const message = document.createElement('article')
+    message.className = `orchestration-auto-message ${entry.role}`
+    const content = document.createElement('div')
+    content.className = 'orchestration-auto-message-content'
+    content.textContent = entry.content
+    message.append(content)
+    return message
+  }
+
+  function handleRuntimeMessage(message: unknown): boolean {
+    if (!isRecord(message)) return false
+    if (message.type !== 'GROUP_ORCHESTRATION_AUTO_STREAM_CHUNK') return false
+    if (message.streamId !== autoStreamId) return false
+    const content = readOptionalString(message.content)
+    const chunk = readOptionalString(message.chunk)
+    if (!content && !chunk) return true
+    autoStreamingAssistantContent = content ?? `${autoStreamingAssistantContent}${chunk ?? ''}`
+    renderAutoPanel()
+    return true
+  }
+
+  function clearAutoStreamingState(): void {
+    autoStreamId = undefined
+    autoPendingUserContent = ''
+    autoStreamingAssistantContent = ''
   }
 
   function removeAutoPanel(): void {
@@ -825,10 +858,15 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     }
     const instruction = autoInstruction.trim()
     if (draft.stages.length > 0 && !instruction) {
-      deps.showError('请输入自动编排修改描述')
+      deps.showError('请输入自动编排消息')
       return
     }
+    const userContent = instruction || task
     autoGenerating = true
+    autoStreamId = newId('auto-stream')
+    autoPendingUserContent = userContent
+    autoStreamingAssistantContent = ''
+    autoInstruction = ''
     updateActionButtons()
     renderAutoPanel()
     try {
@@ -836,9 +874,10 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       const payload: Record<string, unknown> = {
         chatId: chat.id,
         task,
-        instruction: instruction || task,
+        instruction: userContent,
         flowId: draft.flowId,
         history: cloneAutoPlanHistory(draft.autoPlanHistory),
+        streamId: autoStreamId,
       }
       if (flow) payload.flow = flow
       const response = await deps.sendRuntimeMessage('GROUP_ORCHESTRATION_AUTO_GENERATE', payload)
@@ -846,9 +885,9 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       if (response.store) deps.applyStore(response.store)
       const generatedFlow = response.flow
       if (!generatedFlow) throw new Error('自动编排没有返回流程')
-      autoInstruction = ''
       applyGeneratedFlow(generatedFlow)
-      closeAutoPanel()
+      clearAutoStreamingState()
+      renderAutoPanel()
       deps.showSuccess(autoGenerateSuccessMessage(response.createdRoleIds?.length ?? 0, response.reusedRoleIds?.length ?? 0))
     } finally {
       autoGenerating = false
@@ -988,12 +1027,12 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     deps.runOrchestrationEl.addEventListener('click', () => run().catch(error => deps.showError(error instanceof Error ? error.message : String(error))))
   }
 
-  return { close, render, registerOrchestrationEvents }
+  return { close, render, registerOrchestrationEvents, handleRuntimeMessage }
 }
 
 function autoGenerateSuccessMessage(createdCount: number, reusedCount: number): string {
-  if (createdCount > 0 && reusedCount > 0) return `已自动生成编排草稿，复用 ${reusedCount} 个成员，新增 ${createdCount} 个 DeepSeek 人员`
-  if (createdCount > 0) return `已自动生成编排草稿，新增 ${createdCount} 个 DeepSeek 人员`
+  if (createdCount > 0 && reusedCount > 0) return `已自动生成编排草稿，复用 ${reusedCount} 个成员，新增 ${createdCount} 个人员`
+  if (createdCount > 0) return `已自动生成编排草稿，新增 ${createdCount} 个人员`
   return '已自动生成编排草稿，可继续调整后保存或运行'
 }
 
@@ -1185,4 +1224,12 @@ function visibleChatSite(site: ChatSite): ChatSite {
 function newId(prefix: string): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return `${prefix}-${crypto.randomUUID()}`
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
 }

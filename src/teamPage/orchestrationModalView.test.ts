@@ -706,11 +706,11 @@ describe('orchestration modal view', () => {
     expect(harness.runCommand.mock.invocationCallOrder[0]).toBeGreaterThan(harness.reconnectRolesForSend.mock.invocationCallOrder[0])
   })
 
-  it('auto-generates a draft with returned roles and graph edges', async () => {
+  it('auto-generates a draft from a chat-style dialog with streaming assistant text', async () => {
     const harness = createHarness()
     const generatedStore = structuredClone(harness.store)
     generatedStore.chatsById['chat-1'].roleIds.push('role-new')
-    generatedStore.rolesById['role-new'] = { id: 'role-new', chatId: 'chat-1', name: '写手', createdBy: 'orchestration-auto', chatSite: 'deepseek', systemPrompt: '旧写作人设', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 }
+    generatedStore.rolesById['role-new'] = { id: 'role-new', chatId: 'chat-1', name: '写手', createdBy: 'orchestration-auto', chatSite: 'chatgpt', systemPrompt: '旧写作人设', status: 'pending', contextCursor: 0, createdAt: 2, updatedAt: 2 }
     const generatedFlow: OrchestrationFlow = {
       id: 'flow-auto',
       chatId: 'chat-1',
@@ -742,6 +742,8 @@ describe('orchestration modal view', () => {
       createdAt: 2,
       updatedAt: 2,
     }
+    generatedStore.orchestrationFlowsById[generatedFlow.id] = generatedFlow
+    generatedStore.orchestrationFlowOrderByChatId['chat-1'] = [generatedFlow.id]
     harness.sendRuntimeMessage.mockResolvedValue({ ok: true, store: generatedStore, flow: generatedFlow, createdRoleIds: ['role-new'], reusedRoleIds: ['role-1', 'role-2'] })
     const view = createView(harness)
     view.registerOrchestrationEvents()
@@ -750,25 +752,39 @@ describe('orchestration modal view', () => {
 
     harness.refs.autoOrchestrationEl.click()
     expect(harness.sendRuntimeMessage).not.toHaveBeenCalled()
-    const panel = harness.refs.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-panel')
-    expect(panel?.hidden).toBe(false)
-    const instruction = panel?.querySelector<HTMLTextAreaElement>('.orchestration-auto-instruction')
-    expect(instruction).not.toBeNull()
-    instruction!.value = '先规划，再写作，最后审核'
-    instruction!.dispatchEvent(new Event('input', { bubbles: true }))
-    panel?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
+    const chat = harness.refs.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-chat')
+    expect(chat).not.toBeNull()
+    expect(chat?.querySelector('.orchestration-auto-task-preview')).toBeNull()
+    expect(chat?.querySelector('.orchestration-auto-history')).toBeNull()
+    const input = chat?.querySelector<HTMLTextAreaElement>('.orchestration-auto-input')
+    expect(input).not.toBeNull()
+    input!.value = '先规划，再写作，最后审核'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    chat?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
+    const payload = harness.sendRuntimeMessage.mock.calls[0][1] as { streamId?: string }
+    expect(payload.streamId).toMatch(/^auto-stream-/)
+    ;(view as ReturnType<typeof createView> & { handleRuntimeMessage(message: unknown): boolean }).handleRuntimeMessage({
+      type: 'GROUP_ORCHESTRATION_AUTO_STREAM_CHUNK',
+      streamId: payload.streamId,
+      chunk: '正在生成自动流程',
+      content: '正在生成自动流程',
+    })
+    expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('先规划，再写作，最后审核')
+    expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('正在生成自动流程')
     await flushAsync()
 
-    expect(harness.sendRuntimeMessage).toHaveBeenCalledWith('GROUP_ORCHESTRATION_AUTO_GENERATE', expect.objectContaining({ chatId: 'chat-1', task: '写一篇文章', instruction: '先规划，再写作，最后审核', flowId: undefined }))
+    expect(harness.sendRuntimeMessage).toHaveBeenCalledWith('GROUP_ORCHESTRATION_AUTO_GENERATE', expect.objectContaining({ chatId: 'chat-1', task: '写一篇文章', instruction: '先规划，再写作，最后审核', flowId: undefined, streamId: expect.any(String) }))
     expect(harness.refs.orchestrationPeopleListEl.textContent).toContain('写手')
-    expect(harness.refs.orchestrationAutoModalEl.hidden).toBe(true)
-    expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-panel')).toBeNull()
-    expect(harness.successes[harness.successes.length - 1]).toContain('新增 1 个 DeepSeek 人员')
+    expect(harness.refs.orchestrationAutoModalEl.hidden).toBe(false)
+    expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-chat')).not.toBeNull()
+    expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('已生成自动流程')
+    expect((MockGraph.latest().nodes.find(node => node.id === 'stage-write') as { label?: string } | undefined)?.label).toContain('ChatGPT')
+    expect(harness.successes[harness.successes.length - 1]).toContain('新增 1 个人员')
     MockGraph.latest().selectNode('stage-plan')
     expect(harness.refs.orchestrationStageSettingsEl.querySelector('.orchestration-auto-role-site-row')).toBeNull()
     MockGraph.latest().selectNode('stage-write')
     const siteSelect = harness.refs.orchestrationStageSettingsEl.querySelector<HTMLSelectElement>('.orchestration-auto-role-site-row select')
-    expect(siteSelect?.value).toBe('deepseek')
+    expect(siteSelect?.value).toBe('chatgpt')
     siteSelect!.value = 'chatgpt'
     siteSelect!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushAsync()
@@ -785,6 +801,11 @@ describe('orchestration modal view', () => {
     expect(savePayload.flow?.stages.map(stage => stage.id)).toEqual(['stage-plan', 'stage-write', 'stage-review'])
     expect(savePayload.flow?.graph?.edges).toContainEqual({ sourceStageId: 'stage-review', targetStageId: 'stage-write', sourcePort: 'fail', vertices: expect.any(Array) })
     expect(savePayload.flow?.autoPlanHistory?.map(entry => entry.role)).toEqual(['user', 'assistant'])
+    harness.refs.closeOrchestrationEl.click()
+    harness.refs.openOrchestrationEl.click()
+    harness.refs.autoOrchestrationEl.click()
+    expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('写一篇文章')
+    expect(harness.refs.orchestrationAutoContentEl.textContent).toContain('已生成自动流程')
   })
 
   it('opens automatic orchestration in a separate dialog instead of embedding it in the main editor', () => {
@@ -796,10 +817,10 @@ describe('orchestration modal view', () => {
     harness.refs.autoOrchestrationEl.click()
 
     expect(harness.refs.orchestrationAutoModalEl.hidden).toBe(false)
-    expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-panel')).not.toBeNull()
+    expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-chat')).not.toBeNull()
     expect(harness.refs.orchestrationAutoContentEl.querySelector('.orchestration-auto-panel-header')).toBeNull()
     expect(harness.refs.orchestrationAutoContentEl.querySelector('[aria-label="关闭自动编排面板"]')).toBeNull()
-    expect(harness.refs.orchestrationModalEl.querySelector('.orchestration-auto-panel')).toBeNull()
+    expect(harness.refs.orchestrationModalEl.querySelector('.orchestration-auto-chat')).toBeNull()
   })
 
   it('sends the current draft and auto history when modifying an existing orchestration from the panel', async () => {
@@ -828,12 +849,12 @@ describe('orchestration modal view', () => {
     harness.refs.openOrchestrationEl.click()
 
     harness.refs.autoOrchestrationEl.click()
-    const panel = harness.refs.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-panel')
-    expect(panel?.textContent).toContain('已生成写作节点')
-    const instruction = panel?.querySelector<HTMLTextAreaElement>('.orchestration-auto-instruction')
-    instruction!.value = '增加审核失败回写作'
-    instruction!.dispatchEvent(new Event('input', { bubbles: true }))
-    panel?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
+    const chat = harness.refs.orchestrationAutoContentEl.querySelector<HTMLElement>('.orchestration-auto-chat')
+    expect(chat?.textContent).toContain('已生成写作节点')
+    const input = chat?.querySelector<HTMLTextAreaElement>('.orchestration-auto-input')
+    input!.value = '增加审核失败回写作'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    chat?.querySelector<HTMLButtonElement>('.orchestration-auto-submit')?.click()
     await flushAsync()
 
     const payload = harness.sendRuntimeMessage.mock.calls[0][1] as { instruction?: string; flow?: OrchestrationFlow; history?: unknown[] }
