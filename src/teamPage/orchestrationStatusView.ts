@@ -218,7 +218,7 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     const actions = document.createElement('div')
     actions.className = 'orchestration-status-actions'
     if (run.status === 'stopped') {
-      actions.append(actionButton('继续', 'btn-primary', () => runAction('GROUP_ORCHESTRATION_RESUME', { chatId: chat.id, runId: run.id })))
+      actions.append(actionButton('继续', 'btn-primary', () => resumeAction(chat, run, flow)))
       actions.append(actionButton('重新运行', 'btn-ghost', () => rerunAction(chat, run, flow)))
     }
     if (run.status === 'completed') {
@@ -258,9 +258,22 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
       .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
   }
 
+  function resumeAction(chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow): void {
+    runCommandWithReconnect(deps, { chat, roles: getResumeRoles(run, flow), type: 'GROUP_ORCHESTRATION_RESUME', payload: { chatId: chat.id, runId: run.id }, preconnectAll: true })
+      .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+  }
+
   function retryAction(chat: GroupChat, current: OrchestrationStageRun, type: string, payload: Record<string, unknown>): void {
     runCommandWithReconnect(deps, { chat, roles: getStageRoles(current), type, payload, preconnectAll: true })
       .catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
+  }
+
+  function getResumeRoles(run: OrchestrationRun, flow: OrchestrationFlow): GroupRole[] {
+    const current = currentStageRun(run)
+    if (current && (current.status === 'skipped' || current.status === 'error' || current.status === 'pending' || current.status === 'running')) {
+      return getStageRoles(current)
+    }
+    return getFlowRoles(flow)
   }
 
   function getStageRoles(current: OrchestrationStageRun): GroupRole[] {

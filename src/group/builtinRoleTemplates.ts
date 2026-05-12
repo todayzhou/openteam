@@ -1,4 +1,5 @@
 import type { RoleTemplate } from './types'
+import { BUILTIN_GROUP_TEMPLATES, type BuiltinGroupTemplate, type BuiltinGroupTemplateRole } from './builtinGroupTemplates'
 
 const COMMON_PERSONA_BASE = `你不是本人，也不能声称自己就是某位真实人物。你是一个基于公开资料构建的「思想风格模拟顾问」。
 
@@ -16,6 +17,7 @@ const COMMON_PERSONA_BASE = `你不是本人，也不能声称自己就是某位
 回答风格：清醒、真诚、有洞察、不鸡汤、不贩卖焦虑、不居高临下。`
 
 const BUILTIN_TIMESTAMP = 0
+const FAMOUS_ROLE_CATEGORY = '思想风格顾问'
 
 interface BuiltinTemplateInput {
   id: string
@@ -24,7 +26,7 @@ interface BuiltinTemplateInput {
   prompt: string
 }
 
-export const BUILTIN_ROLE_TEMPLATES: RoleTemplate[] = [
+const FAMOUS_ROLE_TEMPLATES: RoleTemplate[] = [
   builtin({
     id: 'builtin-frankl',
     name: '弗兰克尔',
@@ -588,6 +590,13 @@ export const BUILTIN_ROLE_TEMPLATES: RoleTemplate[] = [
 
 禁止：不要冒充 WEF 官方立场，不要使用过时报告回答最新趋势，不要把不确定趋势说成确定结论。`,
   }),
+]
+
+const SCENARIO_ROLE_TEMPLATES: RoleTemplate[] = buildScenarioRoleTemplates(BUILTIN_GROUP_TEMPLATES)
+
+export const BUILTIN_ROLE_TEMPLATES: RoleTemplate[] = [
+  ...FAMOUS_ROLE_TEMPLATES,
+  ...SCENARIO_ROLE_TEMPLATES,
 ].map(template => Object.freeze(template))
 
 const BUILTIN_ROLE_TEMPLATES_BY_ID = new Map(BUILTIN_ROLE_TEMPLATES.map(template => [template.id, template]))
@@ -605,10 +614,67 @@ function builtin(input: BuiltinTemplateInput): RoleTemplate {
     id: input.id,
     type: 'builtin',
     name: input.name,
+    category: FAMOUS_ROLE_CATEGORY,
     description: input.description,
     defaultChatSite: 'deepseek',
     systemPrompt: `${COMMON_PERSONA_BASE}\n\n${input.prompt.trim()}`,
     createdAt: BUILTIN_TIMESTAMP,
     updatedAt: BUILTIN_TIMESTAMP,
   }
+}
+
+function buildScenarioRoleTemplates(groupTemplates: BuiltinGroupTemplate[]): RoleTemplate[] {
+  const roleNameCounts = new Map<string, number>()
+  for (const template of groupTemplates) {
+    for (const role of template.roles) {
+      roleNameCounts.set(role.name, (roleNameCounts.get(role.name) ?? 0) + 1)
+    }
+  }
+
+  return groupTemplates.flatMap(template => template.roles.map(role => scenarioRoleTemplate(template, role, roleNameCounts)))
+}
+
+function scenarioRoleTemplate(template: BuiltinGroupTemplate, role: BuiltinGroupTemplateRole, roleNameCounts: Map<string, number>): RoleTemplate {
+  const duplicatedName = (roleNameCounts.get(role.name) ?? 0) > 1
+  const name = duplicatedName ? `${scenarioNamePrefix(template)}·${role.name}` : role.name
+  return {
+    id: `builtin-scenario-${template.id}-${stableRoleNameHash(role.name)}`,
+    type: 'builtin',
+    name,
+    category: template.category,
+    description: role.description,
+    defaultChatSite: 'deepseek',
+    sourceTemplateId: template.id,
+    sourceTemplateName: template.name,
+    systemPrompt: role.systemPrompt,
+    createdAt: BUILTIN_TIMESTAMP,
+    updatedAt: BUILTIN_TIMESTAMP,
+  }
+}
+
+function scenarioNamePrefix(template: BuiltinGroupTemplate): string {
+  const prefixes: Record<string, string> = {
+    'short-video-creation': '短视频',
+    'xiaohongshu-seeding': '小红书',
+    'startup-advisory': '创业',
+    'product-requirement-review': '产品',
+    'local-store-growth': '门店',
+    'restaurant-operations': '餐饮',
+    'consulting-advisory': '咨询',
+    'financial-research': '金融',
+    'mental-support-growth': '心理支持',
+    'fitness-fat-loss': '健身',
+    'real-estate-analysis': '房地产',
+    'manufacturing-improvement': '制造业',
+    'supply-chain-procurement': '供应链',
+  }
+  return prefixes[template.id] ?? template.name.replace(/群$/, '')
+}
+
+function stableRoleNameHash(value: string): string {
+  let hash = 5381
+  for (const char of value) {
+    hash = ((hash << 5) + hash) ^ char.codePointAt(0)!
+  }
+  return (hash >>> 0).toString(36)
 }

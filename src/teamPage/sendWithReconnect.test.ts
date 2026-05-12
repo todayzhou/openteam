@@ -61,4 +61,22 @@ describe('runCommandWithReconnect', () => {
     expect(reconnectRolesForSend).toHaveBeenCalledWith(chat, roles)
     expect(runCommand.mock.invocationCallOrder[0]).toBeGreaterThan(reconnectRolesForSend.mock.invocationCallOrder[0])
   })
+
+  it('does not run preconnected commands when reconnecting target roles fails', async () => {
+    const roles = [role('role-1', 'ready')]
+    const reconnectRolesForSend = vi.fn(async () => {
+      throw new Error('等待人员恢复超时：role-1')
+    })
+    const runCommand = vi.fn(async () => undefined)
+
+    await expect(runCommandWithReconnect({ reconnectRolesForSend, runCommand }, {
+      chat,
+      roles,
+      type: 'GROUP_ORCHESTRATION_RESUME',
+      payload: { chatId: chat.id, runId: 'run-1' },
+      preconnectAll: true,
+    })).rejects.toThrow('等待人员恢复超时：role-1')
+
+    expect(runCommand).not.toHaveBeenCalled()
+  })
 })

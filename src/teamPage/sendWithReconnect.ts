@@ -4,7 +4,6 @@ import { isUnavailableRolesError, shouldAutoReconnectRole } from './chatExperien
 export interface SendWithReconnectDependencies {
   reconnectRolesForSend(chat: GroupChat, roles: GroupRole[]): Promise<void>
   runCommand(type: string, payload?: Record<string, unknown>): Promise<void>
-  showError?(message: string): void
 }
 
 export interface SendWithReconnectInput {
@@ -19,9 +18,7 @@ export async function runCommandWithReconnect(deps: SendWithReconnectDependencie
   const initialReconnectRoles = input.preconnectAll
     ? input.roles
     : input.roles.filter(role => role.status !== 'ready' && shouldAutoReconnectRole(role))
-  if (initialReconnectRoles.length > 0) {
-    await deps.reconnectRolesForSend(input.chat, initialReconnectRoles).catch(error => deps.showError?.(error instanceof Error ? error.message : String(error)))
-  }
+  if (initialReconnectRoles.length > 0) await deps.reconnectRolesForSend(input.chat, initialReconnectRoles)
   await runCommandAfterReconnect(deps, input, true)
 }
 

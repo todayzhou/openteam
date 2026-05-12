@@ -113,10 +113,12 @@ describe('team page dom refs', () => {
       <div id="people-library-list"></div>
       <div id="people-library-pagination"></div>
       <input id="people-library-search" />
+      <div id="people-library-category-filter"></div>
       <button id="people-library-tab-builtin"></button>
       <button id="people-library-tab-custom"></button>
       <div id="add-library-people-list"></div>
       <input id="add-person-search" />
+      <div id="add-person-category-filter"></div>
       <button id="add-person-tab-builtin"></button>
       <button id="add-person-tab-custom"></button>
       <div id="builtin-template-detail-modal"></div>
@@ -163,6 +165,8 @@ describe('team page dom refs', () => {
     expect(refs.autoOrchestrationEl.id).toBe('auto-orchestration')
     expect(refs.orchestrationMaxRoundsEl.id).toBe('orchestration-max-rounds')
     expect(refs.generateTemplatePersonaEl.id).toBe('generate-template-persona')
+    expect(refs.peopleLibraryCategoryFilterEl.id).toBe('people-library-category-filter')
+    expect(refs.addPersonCategoryFilterEl.id).toBe('add-person-category-filter')
     expect(refs.windowResizeHandleEl.id).toBe('window-resize-handle')
     expect(refs.messageInputEl.tagName).toBe('TEXTAREA')
     expect(refs.rolePanelEl.className).toBe('role-panel')

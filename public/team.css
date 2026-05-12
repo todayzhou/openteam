@@ -2914,33 +2914,38 @@ select:focus {
 }
 
 #people-library-modal .modal {
-  display: flex;
-  min-height: min(620px, calc(100vh - 48px));
+  display: grid;
+  height: min(760px, calc(100vh - 48px));
+  min-height: 0;
   width: min(640px, 100%);
-  flex-direction: column;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
 .people-library-content {
   min-height: 0;
-  flex: 1;
+  overflow: hidden;
 }
 
 .people-library-pane {
+  display: grid;
   min-height: 0;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+#people-library-list {
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .people-library-toolbar {
   display: grid;
   gap: 10px;
   margin-bottom: 12px;
-}
-
-#people-library-list {
-  max-height: calc(100vh - 220px);
-  overflow: auto;
-  padding-right: 2px;
 }
 
 .pagination-bar {
@@ -3079,6 +3084,31 @@ select:focus {
 
 .modal-grid-wide {
   grid-column: 1 / -1;
+}
+
+#add-person-modal .modal {
+  display: grid;
+  width: min(820px, 100%);
+  min-height: min(680px, calc(100vh - 48px));
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+#add-person-modal .modal-grid,
+#add-person-modal .modal-card,
+#add-library-people-form {
+  min-height: 0;
+}
+
+#add-library-people-form {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+#add-library-people-list {
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
 }
 
 .group-template-modal {
@@ -3346,6 +3376,32 @@ select:focus {
 }
 
 .template-type-tab.active {
+  border-color: rgba(47, 216, 204, 0.5);
+  background: rgba(47, 216, 204, 0.14);
+  color: #eaffff;
+}
+
+.template-category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.template-category-chip {
+  min-height: 28px;
+  border: 1px solid rgba(132, 153, 171, 0.16);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(132, 153, 171, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.template-category-chip:hover,
+.template-category-chip:focus-visible,
+.template-category-chip.active {
   border-color: rgba(47, 216, 204, 0.5);
   background: rgba(47, 216, 204, 0.14);
   color: #eaffff;
@@ -4306,6 +4362,7 @@ select:focus {
 :root[data-theme="light"] .group-template-category-filter.active,
 :root[data-theme="light"] .note-scope-tab.active,
 :root[data-theme="light"] .template-type-tab.active,
+:root[data-theme="light"] .template-category-chip.active,
 :root[data-theme="light"] .add-person-site-option.active {
   border-color: rgba(20, 127, 143, 0.36);
   background: #ffffff;
@@ -4328,6 +4385,8 @@ select:focus {
 :root[data-theme="light"] .group-template-option:focus-visible,
 :root[data-theme="light"] .group-template-category-filter:hover,
 :root[data-theme="light"] .group-template-category-filter:focus-visible,
+:root[data-theme="light"] .template-category-chip:hover,
+:root[data-theme="light"] .template-category-chip:focus-visible,
 :root[data-theme="light"] .mark-menu button:hover,
 :root[data-theme="light"] .mark-menu button:focus-visible {
   border-color: rgba(20, 127, 143, 0.28);
@@ -4523,6 +4582,7 @@ select:focus {
 :root[data-theme="light"] .note-scope-tab,
 :root[data-theme="light"] .template-type-tab,
 :root[data-theme="light"] .group-template-category-filter,
+:root[data-theme="light"] .template-category-chip,
 :root[data-theme="light"] .add-person-site-option {
   border-color: rgba(89, 111, 131, 0.16);
   background: #ffffff;

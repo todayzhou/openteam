@@ -160,6 +160,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="people-library-modal"')
     expect(html).toContain('id="people-library-list"')
     expect(html).toContain('id="people-library-search"')
+    expect(html).toContain('id="people-library-category-filter"')
     expect(html).toContain('id="people-library-tab-builtin"')
     expect(html).toContain('id="people-library-tab-custom"')
     expect(html).toContain('id="builtin-template-detail-modal"')
@@ -176,6 +177,7 @@ describe('team.html chat creation UI', () => {
     }
     expect(html).toMatch(/\.site-segment\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toContain('id="add-person-modal"')
+    expect(html).toContain('id="add-person-category-filter"')
     expect(html).toContain('id="open-temporary-person"')
     expect(html).toContain('id="temporary-person-modal"')
     expect(html).toContain('id="add-library-people-form"')
@@ -200,6 +202,8 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="template-chatgpt-gpts-url"')
     expect(html).toMatch(/\.field\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toMatch(/\.template-prompt-preview\s*{[^}]*white-space:\s*pre-wrap;/s)
+    expect(html).toMatch(/\.template-category-filter\s*{[^}]*flex-wrap:\s*wrap;/s)
+    expect(html).toMatch(/\.template-category-chip\.active\s*{[^}]*background:/s)
     expect(html).toContain('人员库')
     expect(html).toContain('人设')
     expect(html).toContain('站点')
@@ -433,9 +437,16 @@ describe('team.html chat creation UI', () => {
   it('keeps long people-library lists scrolling inside the left list pane', () => {
     const html = readTeamDocument()
 
+    expect(html).toMatch(/#people-library-modal \.modal\s*{[^}]*display:\s*grid;/s)
+    expect(html).toMatch(/#people-library-modal \.modal\s*{[^}]*height:\s*min\(760px,\s*calc\(100vh - 48px\)\);/s)
+    expect(html).toMatch(/#people-library-modal \.modal\s*{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/s)
     expect(html).toMatch(/#people-library-modal \.modal\s*{[^}]*overflow:\s*hidden;/s)
+    expect(html).toMatch(/\.people-library-content\s*{[^}]*overflow:\s*hidden;/s)
+    expect(html).toMatch(/\.people-library-pane\s*{[^}]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\) auto;/s)
+    expect(html).toMatch(/\.people-library-pane\s*{[^}]*min-height:\s*0;/s)
     expect(html).toMatch(/#people-library-list\s*{[^}]*overflow:\s*auto;/s)
-    expect(html).toMatch(/#people-library-list\s*{[^}]*max-height:\s*calc\(100vh - 220px\);/s)
+    expect(html).toMatch(/#people-library-list\s*{[^}]*min-height:\s*0;/s)
+    expect(html).toMatch(/#people-library-list\s*{[^}]*max-height:\s*none;/s)
   })
 
   it('shows role sites as compact pills with a menu instead of always-visible switch buttons', () => {
@@ -489,6 +500,17 @@ describe('team.html chat creation UI', () => {
     expect(domRefsSource).toContain("'#add-person-search'")
     expect(domRefsSource).toContain("'#add-person-tab-builtin'")
     expect(domRefsSource).toContain("'#add-person-tab-custom'")
+  })
+
+  it('keeps long add-person lists scrollable without hiding the submit button', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/#add-person-modal \.modal\s*{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/s)
+    expect(html).toMatch(/#add-person-modal \.modal\s*{[^}]*overflow:\s*hidden;/s)
+    expect(html).toMatch(/#add-library-people-form\s*{[^}]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\) auto;/s)
+    expect(html).toMatch(/#add-library-people-list\s*{[^}]*min-height:\s*0;/s)
+    expect(html).toMatch(/#add-library-people-list\s*{[^}]*max-height:\s*none;/s)
+    expect(html).toMatch(/#add-library-people-list\s*{[^}]*overflow:\s*auto;/s)
   })
 
   it('uses a deep desktop-style page background without decorative side panels', () => {

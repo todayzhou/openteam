@@ -156,7 +156,6 @@ export function createRoleRecoveryController(deps: RoleRecoveryDependencies): Ro
     await runCommandWithReconnect({
       reconnectRolesForSend,
       runCommand: deps.runCommand,
-      showError: deps.showError,
     }, {
       chat,
       roles: [role],

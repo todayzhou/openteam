@@ -41,9 +41,11 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const addLibraryPeopleListEl = document.createElement('div')
   const addLibraryPeopleFormEl = document.createElement('form')
   const peopleLibrarySearchEl = document.createElement('input')
+  const peopleLibraryCategoryFilterEl = document.createElement('div')
   const peopleLibraryBuiltinTabEl = document.createElement('button')
   const peopleLibraryCustomTabEl = document.createElement('button')
   const addPersonSearchEl = document.createElement('input')
+  const addPersonCategoryFilterEl = document.createElement('div')
   const addPersonBuiltinTabEl = document.createElement('button')
   const addPersonCustomTabEl = document.createElement('button')
   const peopleLibraryListEl = document.createElement('div')
@@ -89,10 +91,12 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     peopleLibraryListEl,
     peopleLibraryPaginationEl,
     peopleLibrarySearchEl,
+    peopleLibraryCategoryFilterEl,
     peopleLibraryBuiltinTabEl,
     peopleLibraryCustomTabEl,
     addLibraryPeopleListEl,
     addPersonSearchEl,
+    addPersonCategoryFilterEl,
     addPersonBuiltinTabEl,
     addPersonCustomTabEl,
     builtinTemplateDetailModalEl,
@@ -148,9 +152,11 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     addLibraryPeopleFormEl,
     addLibraryPeopleListEl,
     peopleLibrarySearchEl,
+    peopleLibraryCategoryFilterEl,
     peopleLibraryBuiltinTabEl,
     peopleLibraryCustomTabEl,
     addPersonSearchEl,
+    addPersonCategoryFilterEl,
     addPersonBuiltinTabEl,
     addPersonCustomTabEl,
     builtinTemplateDetailModalEl,
@@ -499,6 +505,51 @@ describe('team page people library view boundary', () => {
     expect(peopleLibraryListEl.textContent).toContain('没有匹配的内置人员')
   })
 
+  it('filters people library entries by built-in category and source group metadata', () => {
+    const templates: RoleTemplate[] = [
+      {
+        id: 'builtin-agent-prompt',
+        type: 'builtin',
+        name: 'Prompt规范工程师',
+        category: '技术研发',
+        sourceTemplateName: 'AI Agent 开发群',
+        defaultChatSite: 'deepseek',
+        systemPrompt: '负责设计 Agent 提示词规范',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'builtin-study-plan',
+        type: 'builtin',
+        name: '学习规划师',
+        category: '学生与学习',
+        sourceTemplateName: '学霸学习群',
+        defaultChatSite: 'deepseek',
+        systemPrompt: '负责学习计划',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]
+    const store = createDefaultStore()
+    const { view, peopleLibraryListEl, peopleLibrarySearchEl, peopleLibraryCategoryFilterEl } = setupPeopleLibraryView({ store, templates })
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    peopleLibraryCategoryFilterEl.querySelector<HTMLButtonElement>('[data-category="技术研发"]')?.click()
+
+    expect(peopleLibraryCategoryFilterEl.textContent).toContain('全部')
+    expect(peopleLibraryCategoryFilterEl.textContent).toContain('技术研发')
+    expect(peopleLibraryListEl.textContent).toContain('Prompt规范工程师')
+    expect(peopleLibraryListEl.textContent).toContain('技术研发')
+    expect(peopleLibraryListEl.textContent).toContain('AI Agent 开发群')
+    expect(peopleLibraryListEl.textContent).not.toContain('学习规划师')
+
+    peopleLibrarySearchEl.value = '学霸学习'
+    peopleLibrarySearchEl.dispatchEvent(new Event('input', { bubbles: true }))
+
+    expect(peopleLibraryListEl.textContent).toContain('当前分类暂无内置人员')
+  })
+
   it('opens a read-only prompt detail modal for built-in people', () => {
     const builtinTemplate: RoleTemplate = {
       id: 'builtin-frankl',
@@ -631,5 +682,61 @@ describe('team page people library view boundary', () => {
     addPersonSearchEl.value = '没有这个人'
     addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))
     expect(addLibraryPeopleListEl.textContent).toContain('没有匹配的内置人员')
+  })
+
+  it('filters add-person choices by built-in category while keeping selected people checked', () => {
+    const templates: RoleTemplate[] = [
+      {
+        id: 'builtin-agent-prompt',
+        type: 'builtin',
+        name: 'Prompt规范工程师',
+        category: '技术研发',
+        sourceTemplateName: 'AI Agent 开发群',
+        defaultChatSite: 'deepseek',
+        systemPrompt: '负责设计 Agent 提示词规范',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'builtin-study-plan',
+        type: 'builtin',
+        name: '学习规划师',
+        category: '学生与学习',
+        sourceTemplateName: '学霸学习群',
+        defaultChatSite: 'deepseek',
+        systemPrompt: '负责学习计划',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]
+    const chat = makeChat('chat-1')
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+    }
+    const { view, addLibraryPeopleListEl, addPersonBuiltinTabEl, addPersonCategoryFilterEl, addPersonSearchEl } = setupPeopleLibraryView({ store, templates, currentChat: chat })
+
+    view.registerPeopleLibraryEvents()
+    view.renderAddPersonDialog()
+    addPersonBuiltinTabEl.click()
+    addPersonCategoryFilterEl.querySelector<HTMLButtonElement>('[data-category="技术研发"]')?.click()
+    const promptPerson = addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="library:builtin-agent-prompt"]')!
+    promptPerson.checked = true
+    promptPerson.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(addLibraryPeopleListEl.textContent).toContain('Prompt规范工程师')
+    expect(addLibraryPeopleListEl.textContent).toContain('技术研发')
+    expect(addLibraryPeopleListEl.textContent).toContain('AI Agent 开发群')
+    expect(addLibraryPeopleListEl.textContent).not.toContain('学习规划师')
+
+    addPersonSearchEl.value = '学习'
+    addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(addLibraryPeopleListEl.textContent).toContain('当前分类暂无内置人员')
+
+    addPersonSearchEl.value = ''
+    addPersonSearchEl.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(addLibraryPeopleListEl.querySelector<HTMLInputElement>('input[type="checkbox"][value="library:builtin-agent-prompt"]')!.checked).toBe(true)
   })
 })

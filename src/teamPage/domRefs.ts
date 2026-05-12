@@ -107,10 +107,12 @@ export interface TeamPageDomRefs {
   peopleLibraryListEl: HTMLElement
   peopleLibraryPaginationEl: HTMLElement
   peopleLibrarySearchEl: HTMLInputElement
+  peopleLibraryCategoryFilterEl: HTMLElement
   peopleLibraryBuiltinTabEl: HTMLButtonElement
   peopleLibraryCustomTabEl: HTMLButtonElement
   addLibraryPeopleListEl: HTMLElement
   addPersonSearchEl: HTMLInputElement
+  addPersonCategoryFilterEl: HTMLElement
   addPersonBuiltinTabEl: HTMLButtonElement
   addPersonCustomTabEl: HTMLButtonElement
   builtinTemplateDetailModalEl: HTMLElement
@@ -262,10 +264,12 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     peopleLibraryListEl: requireElement<HTMLElement>('#people-library-list'),
     peopleLibraryPaginationEl: requireElement<HTMLElement>('#people-library-pagination'),
     peopleLibrarySearchEl: requireElement<HTMLInputElement>('#people-library-search'),
+    peopleLibraryCategoryFilterEl: requireElement<HTMLElement>('#people-library-category-filter'),
     peopleLibraryBuiltinTabEl: requireElement<HTMLButtonElement>('#people-library-tab-builtin'),
     peopleLibraryCustomTabEl: requireElement<HTMLButtonElement>('#people-library-tab-custom'),
     addLibraryPeopleListEl: requireElement<HTMLElement>('#add-library-people-list'),
     addPersonSearchEl: requireElement<HTMLInputElement>('#add-person-search'),
+    addPersonCategoryFilterEl: requireElement<HTMLElement>('#add-person-category-filter'),
     addPersonBuiltinTabEl: requireElement<HTMLButtonElement>('#add-person-tab-builtin'),
     addPersonCustomTabEl: requireElement<HTMLButtonElement>('#add-person-tab-custom'),
     builtinTemplateDetailModalEl: requireElement<HTMLElement>('#builtin-template-detail-modal'),

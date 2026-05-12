@@ -214,10 +214,13 @@ export interface RoleTemplate {
   id: string
   type: RoleTemplateType
   name: string
+  category?: string
   description?: string
   defaultModelSource?: RoleModelSource
   defaultChatSite?: ChatSite
   defaultExternalModelId?: string
+  sourceTemplateId?: string
+  sourceTemplateName?: string
   chatGptGptsUrl?: string
   systemPrompt: string
   createdAt: number

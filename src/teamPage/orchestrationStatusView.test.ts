@@ -316,6 +316,34 @@ describe('orchestration status view', () => {
     expect(stoppedRunCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RUN', { chatId: stopped.chat.id, flowId: stopped.flow.id, task: 'Use draft' })
   })
 
+  it('recovers the stopped node role before resuming a stopped run', async () => {
+    const fixture = baseFixture('stopped')
+    fixture.run.stageRuns[0].status = 'skipped'
+    fixture.run.stageRuns[0].roleRuns['role-1'].status = 'skipped'
+    const calls: string[] = []
+    const reconnectRolesForSend = vi.fn(async () => {
+      calls.push('reconnect')
+    })
+    const runCommand = vi.fn(async () => {
+      calls.push('resume')
+    })
+    const node = createOrchestrationStatusView({
+      getStore: () => fixture.store,
+      getCurrentChat: () => fixture.chat,
+      getCurrentRoles: () => fixture.roles,
+      reconnectRolesForSend,
+      runCommand,
+      showError: vi.fn(),
+    }).renderOrchestrationStatus()
+
+    findButton(node, '继续')?.click()
+    await flushAsync()
+
+    expect(calls).toEqual(['reconnect', 'resume'])
+    expect(reconnectRolesForSend).toHaveBeenCalledWith(fixture.chat, [fixture.roles[0]])
+    expect(runCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RESUME', { chatId: fixture.chat.id, runId: fixture.run.id })
+  })
+
   it('collapses into a compact floating launcher and persists the local preference', () => {
     const fixture = baseFixture('running')
     const view = createOrchestrationStatusView({

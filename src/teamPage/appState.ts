@@ -31,9 +31,11 @@ export interface TeamPageState {
   peopleLibraryPage: number
   peopleLibraryTemplateType: 'builtin' | 'custom'
   peopleLibrarySearchQuery: string
+  peopleLibraryCategory: string
   previewTemplateId?: string
   addPersonTemplateType: 'builtin' | 'custom'
   addPersonSearchQuery: string
+  addPersonCategory: string
   pendingSwitchAnimationFrame?: number
   thinkingTimeoutTimers: number[]
   loggedThinkingTimeoutRoleIds: Set<string>
@@ -63,8 +65,10 @@ export function createTeamPageState(): TeamPageState {
     peopleLibraryPage: 0,
     peopleLibraryTemplateType: 'custom',
     peopleLibrarySearchQuery: '',
+    peopleLibraryCategory: '全部',
     addPersonTemplateType: 'custom',
     addPersonSearchQuery: '',
+    addPersonCategory: '全部',
     notesPanelOpen: false,
     activeNoteScope: 'chat',
   }
