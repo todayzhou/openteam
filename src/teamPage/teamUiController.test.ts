@@ -101,9 +101,139 @@ describe('createTeamUiController', () => {
       name: template.defaultChatName,
       mode: template.defaultMode,
       roles: template.roles,
+      welcomeMessage: expect.stringContaining(`欢迎来到「${template.name}」`),
     })
     expect(document.querySelector<HTMLElement>('#group-template-modal')!.hidden).toBe(true)
     expect(document.querySelector<HTMLFormElement>('#create-chat-form')!.hidden).toBe(true)
+  })
+
+  it('filters group templates by category and search in the picker', () => {
+    createTeamUiController({
+      state: createTeamPageState(),
+      settingsButtonEl: document.querySelector<HTMLButtonElement>('#settings-button')!,
+      settingsMenuEl: document.querySelector<HTMLElement>('#settings-menu')!,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getCurrentChat: () => undefined,
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      log: { debug: vi.fn(), info: vi.fn() },
+    }).registerUi()
+
+    document.querySelector<HTMLButtonElement>('#open-group-template-create')!.click()
+
+    const categoryButton = [...document.querySelectorAll<HTMLButtonElement>('.group-template-category-filter')]
+      .find(button => button.textContent === '技术研发')
+    expect(categoryButton).toBeTruthy()
+    categoryButton!.click()
+    expect([...document.querySelectorAll<HTMLElement>('.group-template-option strong')].map(el => el.textContent)).toEqual([
+      '软件开发群',
+      'AI Agent 开发群',
+      '数据分析群',
+    ])
+
+    const searchEl = document.querySelector<HTMLInputElement>('#group-template-search')!
+    searchEl.value = 'Agent'
+    searchEl.dispatchEvent(new Event('input', { bubbles: true }))
+    expect([...document.querySelectorAll<HTMLElement>('.group-template-option strong')].map(el => el.textContent)).toEqual(['AI Agent 开发群'])
+
+    searchEl.value = '不存在的模板'
+    searchEl.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(document.querySelector('.group-template-option')).toBeNull()
+    expect(document.querySelector<HTMLElement>('.group-template-empty')?.textContent).toContain('没有找到匹配的小组')
+  })
+
+  it('keeps risk badges beside the template name and role count under the name', () => {
+    createTeamUiController({
+      state: createTeamPageState(),
+      settingsButtonEl: document.querySelector<HTMLButtonElement>('#settings-button')!,
+      settingsMenuEl: document.querySelector<HTMLElement>('#settings-menu')!,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getCurrentChat: () => undefined,
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      log: { debug: vi.fn(), info: vi.fn() },
+    }).registerUi()
+
+    document.querySelector<HTMLButtonElement>('#open-group-template-create')!.click()
+    const professionalCard = [...document.querySelectorAll<HTMLButtonElement>('.group-template-option')]
+      .find(card => card.querySelector('strong')?.textContent === '小公司财务群')
+
+    expect(professionalCard).toBeTruthy()
+    const top = professionalCard!.querySelector<HTMLElement>('.group-template-option-top')!
+    expect(top.querySelector<HTMLElement>('.group-template-risk')?.textContent).toBe('专业边界')
+    expect(top.querySelector<HTMLElement>('.group-template-role-count')?.textContent).toBe('6 个角色')
+    expect([...professionalCard!.children].some(child => child.classList.contains('group-template-card-footer'))).toBe(false)
+  })
+
+  it('renders a truncated preview of long group template summaries with the full text available on hover', () => {
+    createTeamUiController({
+      state: createTeamPageState(),
+      settingsButtonEl: document.querySelector<HTMLButtonElement>('#settings-button')!,
+      settingsMenuEl: document.querySelector<HTMLElement>('#settings-menu')!,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getCurrentChat: () => undefined,
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+      log: { debug: vi.fn(), info: vi.fn() },
+    }).registerUi()
+
+    document.querySelector<HTMLButtonElement>('#open-group-template-create')!.click()
+    const card = document.querySelector<HTMLButtonElement>('.group-template-option')!
+    const summary = card.querySelector<HTMLElement>('.group-template-summary')!
+    const template = BUILTIN_GROUP_TEMPLATES[0]
+
+    expect(card.classList.contains('has-long-summary')).toBe(true)
+    expect(summary.classList.contains('group-template-summary-collapsed')).toBe(false)
+    expect(summary.textContent).toBe(template.summary)
+    expect(summary.title).toBe(template.summary)
   })
 })
 
@@ -145,6 +275,8 @@ function teamUiBody(): string {
   </form>
   <div id="group-template-modal" hidden>
     <button id="close-group-template-modal"></button>
+    <input id="group-template-search" />
+    <div id="group-template-categories"></div>
     <div id="group-template-list"></div>
     <button id="confirm-group-template-create"></button>
   </div>

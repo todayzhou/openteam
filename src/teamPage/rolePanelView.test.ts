@@ -141,6 +141,55 @@ describe('team page role panel view boundary', () => {
     expect(runCommand).toHaveBeenCalledWith('GROUP_ROLE_DELETE', { roleId: 'role-1' })
     confirm.mockRestore()
   })
+
+  it('opens a member prompt detail dialog from the member card', () => {
+    const store = makeStoreWithRole()
+    store.rolesById['role-1'].description = '拆解需求和验收标准'
+    store.rolesById['role-1'].systemPrompt = '你是产品经理。请先澄清目标，再输出可执行方案。'
+    const rolePanelEl = document.createElement('aside')
+    const roleSummaryEl = document.createElement('p')
+    const roleListEl = document.createElement('div')
+    rolePanelEl.append(roleSummaryEl, roleListEl)
+
+    const view = createRolePanelView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      rolePanelEl,
+      roleSummaryEl,
+      roleListEl,
+      iframeHost: { recoverRole: vi.fn() },
+      getCurrentChat: () => store.chatsById['chat-1'],
+      getCurrentRoles: () => [store.rolesById['role-1']],
+      emptyCard: (title, body) => {
+        const card = document.createElement('div')
+        card.textContent = `${title}${body}`
+        return card
+      },
+      roleToneClass: () => 'role-tone-0',
+      roleAvatarLabel: name => name?.slice(0, 1) ?? '',
+      insertMention: vi.fn(),
+      refreshCurrentChat: vi.fn(async () => undefined),
+      focusRoleFrame: vi.fn(),
+      runCommand: vi.fn(async () => undefined),
+      showError: vi.fn(),
+    })
+
+    view.renderRolePanel()
+    const detail = roleListEl.querySelector<HTMLButtonElement>('[data-role-prompt-detail="role-1"]')
+    expect(detail?.getAttribute('aria-label')).toBe('查看 产品经理 的提示词')
+    expect(detail?.querySelector('svg')).not.toBeNull()
+    expect(detail?.textContent?.trim()).toBe('')
+    detail?.click()
+
+    const modal = document.querySelector<HTMLElement>('.role-prompt-modal')
+    expect(modal?.hidden).toBe(false)
+    expect(modal?.querySelector('h2')?.textContent).toBe('产品经理')
+    expect(modal?.textContent).toContain('拆解需求和验收标准')
+    expect(modal?.querySelector('pre')?.textContent).toBe('你是产品经理。请先澄清目标，再输出可执行方案。')
+
+    modal?.querySelector<HTMLButtonElement>('.role-prompt-close')?.click()
+    expect(document.querySelector('.role-prompt-modal')).toBeNull()
+  })
 })
 
 function makeStoreWithRole(): OpenTeamStore {

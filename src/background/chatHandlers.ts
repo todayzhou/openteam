@@ -1,5 +1,5 @@
 import { createGroupRole } from '../group/roleTemplates'
-import type { GroupChat, GroupRole, OpenTeamStore, RoomMode } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoomMode } from '../group/types'
 import type { BackgroundMessageRoute } from './messageRouter'
 import { messageTabId, type RuntimeMessage } from './runtimeClient'
 import type { RuntimeFrameRegistry } from './runtimeFrames'
@@ -210,20 +210,49 @@ function createChat(store: OpenTeamStore, message: RuntimeMessage, deps: ChatHan
   store.chatOrder.unshift(chat.id)
   store.currentChatId = chat.id
 
+  const createdRoles: GroupRole[] = []
   const roles = Array.isArray(message.roles) ? message.roles : []
   for (const input of roles) {
     if (!isRecord(input)) continue
-    createGroupRole(store, {
+    const role = createGroupRole(store, {
       chatId: chat.id,
       templateId: readOptionalString(input.roleTemplateId) ?? readOptionalString(input.templateId),
       name: readOptionalString(input.name),
       description: readOptionalString(input.description),
       systemPrompt: readOptionalString(input.systemPrompt),
     }, deps.newId('role'), timestamp)
+    createdRoles.push(role)
   }
 
+  appendWelcomeMessage(store, chat, createdRoles[0], readOptionalString(message.welcomeMessage), deps, timestamp)
   chat.status = chat.roleIds.length > 0 ? 'initializing' : 'draft'
   return chat
+}
+
+function appendWelcomeMessage(
+  store: OpenTeamStore,
+  chat: GroupChat,
+  role: GroupRole | undefined,
+  content: string | undefined,
+  deps: ChatHandlersDependencies,
+  timestamp: number,
+): void {
+  if (!content) return
+  const welcome: GroupMessage = {
+    id: deps.newId('msg'),
+    chatId: chat.id,
+    seq: chat.nextMessageSeq,
+    type: role ? 'assistant' : 'system',
+    content,
+    contentFormat: 'markdown',
+    ...(role ? { roleId: role.id, roleName: role.name } : {}),
+    createdAt: timestamp,
+    status: 'received',
+  }
+  store.messagesById[welcome.id] = welcome
+  chat.messageIds.push(welcome.id)
+  chat.nextMessageSeq += 1
+  markChatRead(store, chat)
 }
 
 function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {

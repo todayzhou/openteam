@@ -742,6 +742,27 @@ describe('team.html chat creation UI', () => {
     expect(source).not.toContain('人回复中')
   })
 
+  it('keeps right member card controls as borderless icons with horizontal status text', () => {
+    const css = readTeamCss()
+    const roleActionsRule = css.match(/(?:^|\n)\.role-delete,\s*\.role-prompt-detail,\s*\.role-refresh,\s*\.role-jump\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const detailRule = css.match(/(?:^|\n)\.role-prompt-detail\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const statusRule = css.match(/(?:^|\n)\.status-pill,\s*\.mention-chip\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+    const roleStatusRule = css.match(/(?:^|\n)\.role-card \.status-pill\s*{(?<body>[^}]*)}/)?.groups?.body ?? ''
+
+    expect(roleActionsRule).toContain('appearance: none;')
+    expect(roleActionsRule).toContain('border: 0;')
+    expect(roleActionsRule).toContain('background: transparent;')
+    expect(detailRule).not.toContain('border:')
+    expect(detailRule).not.toContain('background:')
+    expect(statusRule).toContain('white-space: nowrap;')
+    expect(roleStatusRule).toContain('flex: 0 0 auto;')
+    expect(roleStatusRule).toContain('position: absolute;')
+    expect(roleStatusRule).toContain('top: 12px;')
+    expect(roleStatusRule).toContain('right: 12px;')
+    expect(roleStatusRule).toContain('margin-left: 0;')
+    expect(css).not.toMatch(/:root\[data-theme="light"\] \.role-prompt-detail,/)
+  })
+
   it('places user messages on the right like a WeChat conversation', () => {
     const html = readTeamDocument()
 
@@ -762,6 +783,33 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("pill.className = 'message-system-pill'")
     expect(html).toMatch(/\.message-time-divider\s*{[^}]*align-self:\s*center;/s)
     expect(html).toMatch(/\.message-system-pill\s*{[^}]*border-radius:\s*999px;/s)
+  })
+
+  it('wraps group template categories instead of showing a horizontal scroller', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/\.group-template-categories\s*{[^}]*flex-wrap:\s*wrap;/s)
+    expect(html).not.toMatch(/\.group-template-categories\s*{[^}]*overflow-x:\s*auto;/s)
+  })
+
+  it('keeps group template cards roomy and descriptions fully readable', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/\.group-template-modal\s*{[^}]*width:\s*min\(1500px,\s*calc\(100vw - 32px\)\);/s)
+    expect(html).toMatch(/\.group-template-modal\s*{[^}]*min-height:\s*min\(820px,\s*calc\(100vh - 24px\)\);/s)
+    expect(html).toMatch(/\.group-template-list\s*{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(520px,\s*1fr\)\);/s)
+    expect(html).toMatch(/\.group-template-option\s*{[^}]*min-height:\s*190px;/s)
+    expect(html).toMatch(/\.group-template-summary\s*{[^}]*display:\s*-webkit-box;/s)
+    expect(html).toMatch(/\.group-template-summary\s*{[^}]*overflow:\s*hidden;/s)
+    expect(html).toMatch(/\.group-template-summary\s*{[^}]*-webkit-line-clamp:\s*2;/s)
+    expect(html).not.toMatch(/\.group-template-option\.has-long-summary:hover \.group-template-summary/s)
+    expect(html).not.toMatch(/\.group-template-option\.has-long-summary:focus-visible \.group-template-summary/s)
+    expect(html).not.toMatch(/\.group-template-summary\s*{[^}]*overflow:\s*visible;/s)
+    expect(html).not.toMatch(/\.group-template-summary\s*{[^}]*-webkit-line-clamp:\s*unset;/s)
+    expect(html).not.toMatch(/\.group-template-meta\s*{[^}]*white-space:\s*nowrap;/s)
+    expect(html).not.toMatch(/\.group-template-meta\s*{[^}]*text-overflow:\s*ellipsis;/s)
+    expect(html).not.toContain('群聊介绍 · 悬浮查看')
+    expect(html).not.toContain('group-template-summary-collapsed')
   })
 
   it('renders explicit mentions inline inside user message bubbles', () => {

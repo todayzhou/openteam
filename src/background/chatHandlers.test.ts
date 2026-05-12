@@ -55,7 +55,7 @@ describe('background chat handlers', () => {
 
   it('creates a chat with the people supplied by a group template', async () => {
     vi.resetModules()
-    const { BUILTIN_GROUP_TEMPLATES } = await import('../group/builtinGroupTemplates')
+    const { BUILTIN_GROUP_TEMPLATES, buildBuiltinGroupTemplateWelcomeMessage } = await import('../group/builtinGroupTemplates')
     const template = BUILTIN_GROUP_TEMPLATES[0]
     let draftStore: OpenTeamStore | undefined
     vi.doMock('./storeAccess', async importOriginal => {
@@ -91,6 +91,7 @@ describe('background chat handlers', () => {
       name: template.defaultChatName,
       mode: template.defaultMode,
       roles: template.roles,
+      welcomeMessage: buildBuiltinGroupTemplateWelcomeMessage(template),
     }, {})
 
     expect(response).toMatchObject({
@@ -103,6 +104,17 @@ describe('background chat handlers', () => {
       },
     })
     expect(draftStore?.chatsById['chat-1'].roleIds).toHaveLength(template.roles.length)
+    expect(draftStore?.chatsById['chat-1'].messageIds).toEqual(['msg-1'])
+    expect(draftStore?.chatsById['chat-1'].nextMessageSeq).toBe(2)
+    expect(draftStore?.messagesById['msg-1']).toMatchObject({
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'assistant',
+      contentFormat: 'markdown',
+      roleName: template.roles[0].name,
+      content: expect.stringContaining(`欢迎来到「${template.name}」`),
+      status: 'received',
+    })
     expect(Object.values(draftStore?.rolesById ?? {}).map(role => ({
       name: role.name,
       description: role.description,

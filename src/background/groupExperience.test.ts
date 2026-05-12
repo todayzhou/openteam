@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from '../group/defaultCustomRoleTemplates'
-import type { GroupChat, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
 
 const defaultCustomTemplateIds = DEFAULT_CUSTOM_ROLE_TEMPLATES.map(template => template.id)
 
@@ -323,6 +323,81 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls[0][1].content).toContain('只需要首轮发送的人设')
     expect(promptCalls[1][1].includesPersona).toBe(false)
     expect(promptCalls[1][1].content).not.toContain('只需要首轮发送的人设')
+  })
+
+  it('includes persona on the first real user message after a template welcome message', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = {
+      ...makeChat('chat-1', ['role-1']),
+      messageIds: ['msg-welcome'],
+      nextMessageSeq: 2,
+    }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '需求产品经理', {
+      systemPrompt: '模板人设：先澄清需求，再拆解可执行方案。',
+    })
+    store.messagesById['msg-welcome'] = {
+      id: 'msg-welcome',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'assistant',
+      roleId: 'role-1',
+      roleName: '需求产品经理',
+      content: '## 欢迎来到「产品评审群」\n\n你可以先问这些问题。',
+      contentFormat: 'markdown',
+      createdAt: 1,
+      status: 'received',
+    } satisfies GroupMessage
+    const harness = await setupBackground(store)
+
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/test' })
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@all 帮我评审这个需求' }) as { ok: boolean }
+
+    expect(response.ok).toBe(true)
+    const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
+    expect(promptCalls).toHaveLength(1)
+    const prompt = promptCalls[0][1]
+    expect(prompt.includesPersona).toBe(true)
+    expect(prompt.content).toContain('模板人设：先澄清需求，再拆解可执行方案。')
+    expect(prompt.content).toContain('帮我评审这个需求')
+  })
+
+  it('does not treat a locally inserted template opener as delivered persona history', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = {
+      ...makeChat('chat-1', ['role-1']),
+      messageIds: ['msg-template-opener'],
+      nextMessageSeq: 2,
+    }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '需求产品经理', {
+      systemPrompt: '模板人设：负责澄清需求、拆解范围和识别交付风险。',
+    })
+    store.messagesById['msg-template-opener'] = {
+      id: 'msg-template-opener',
+      chatId: 'chat-1',
+      seq: 1,
+      type: 'user',
+      content: '## 欢迎来到「产品评审群」\n\n你可以先问这些问题。',
+      contentFormat: 'markdown',
+      targetRoleIds: ['role-1'],
+      createdAt: 1,
+      status: 'received',
+    } satisfies GroupMessage
+    const harness = await setupBackground(store)
+
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://gemini.google.com/app/test' })
+    const response = await harness.invoke({ type: 'GROUP_MESSAGE_SEND', chatId: 'chat-1', raw: '@需求产品经理 继续评审这个需求' }) as { ok: boolean }
+
+    expect(response.ok).toBe(true)
+    const promptCalls = harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')
+    expect(promptCalls).toHaveLength(1)
+    const prompt = promptCalls[0][1]
+    expect(prompt.includesPersona).toBe(true)
+    expect(prompt.content).toContain('模板人设：负责澄清需求、拆解范围和识别交付风险。')
+    expect(prompt.content).toContain('继续评审这个需求')
   })
 
   it('includes persona on the first local user message even when the frame has an active Gemini conversation', async () => {

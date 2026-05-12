@@ -145,8 +145,9 @@ function countLocalRoleHistory(messages: GroupMessage[], role: GroupRole, curren
 }
 
 function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
-  if (message.roleId === roleId) return true
-  return Array.isArray(message.targetRoleIds) && message.targetRoleIds.includes(roleId)
+  if (message.type !== 'user' || !Array.isArray(message.targetRoleIds) || !message.targetRoleIds.includes(roleId)) return false
+  const deliveryStatus = message.deliveryStatus?.[roleId]
+  return deliveryStatus === 'sent' || deliveryStatus === 'received'
 }
 
 function responseInstructionForMessage(message: GroupMessage): string | undefined {

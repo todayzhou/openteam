@@ -1,5 +1,12 @@
 import { getDefaultChatSiteUrl } from '../group/conversationUrl'
-import { BUILTIN_GROUP_TEMPLATES, getBuiltinGroupTemplate, type BuiltinGroupTemplate } from '../group/builtinGroupTemplates'
+import {
+  GROUP_TEMPLATE_ALL_CATEGORY,
+  buildBuiltinGroupTemplateWelcomeMessage,
+  filterBuiltinGroupTemplates,
+  getBuiltinGroupTemplate,
+  getBuiltinGroupTemplateCategories,
+  type BuiltinGroupTemplate,
+} from '../group/builtinGroupTemplates'
 import type { ChatSite, GroupChat, GroupRole, RoomMode } from '../group/types'
 import type { TeamPageState } from './appState'
 import { requireElement } from './domRefs'
@@ -43,12 +50,18 @@ export interface TeamUiController {
   registerUi(): void
 }
 
+const GROUP_TEMPLATE_INLINE_SUMMARY_LIMIT = 72
+
 export function createTeamUiController(deps: TeamUiControllerDependencies): TeamUiController {
   let selectedGroupTemplateId: string | undefined
+  let selectedGroupTemplateCategory = GROUP_TEMPLATE_ALL_CATEGORY
+  let groupTemplateSearchQuery = ''
 
   function registerUi(): void {
     const openGroupTemplateCreateEl = requireElement<HTMLButtonElement>('#open-group-template-create')
     const groupTemplateModalEl = requireElement<HTMLElement>('#group-template-modal')
+    const groupTemplateSearchEl = requireElement<HTMLInputElement>('#group-template-search')
+    const groupTemplateCategoriesEl = requireElement<HTMLElement>('#group-template-categories')
     const groupTemplateListEl = requireElement<HTMLElement>('#group-template-list')
     const confirmGroupTemplateCreateEl = requireElement<HTMLButtonElement>('#confirm-group-template-create')
     const closeGroupTemplateModalEl = requireElement<HTMLButtonElement>('#close-group-template-modal')
@@ -111,7 +124,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
       deps.state.chatMenuChatId = undefined
       deps.state.roleSiteMenuRoleId = undefined
       deps.state.roleActionMenuRoleId = undefined
-      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
       deps.renderChatList()
       deps.renderRolePanel()
     })
@@ -121,23 +134,30 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     })
 
     openGroupTemplateCreateEl.addEventListener('click', () => {
-      openGroupTemplateModal(groupTemplateModalEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+      openGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
     })
 
     closeGroupTemplateModalEl.addEventListener('click', () => {
-      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+    })
+
+    groupTemplateSearchEl.addEventListener('input', () => {
+      groupTemplateSearchQuery = groupTemplateSearchEl.value
+      syncGroupTemplateSelection(confirmGroupTemplateCreateEl)
+      renderGroupTemplateList(groupTemplateListEl, confirmGroupTemplateCreateEl)
     })
 
     confirmGroupTemplateCreateEl.addEventListener('click', () => {
       const template = selectedGroupTemplateId ? getBuiltinGroupTemplate(selectedGroupTemplateId) : undefined
       if (!template) return
       deps.newChatNameEl.value = ''
-      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
+      closeGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
       setChatCreatePopoverVisible(false)
       deps.runCommand('GROUP_CHAT_CREATE', {
         name: template.defaultChatName,
         mode: template.defaultMode,
         roles: template.roles,
+        welcomeMessage: buildBuiltinGroupTemplateWelcomeMessage(template),
       }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
 
@@ -170,31 +190,74 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
 
   function openGroupTemplateModal(
     modalEl: HTMLElement,
+    searchEl: HTMLInputElement,
+    categoriesEl: HTMLElement,
     listEl: HTMLElement,
     confirmButton: HTMLButtonElement,
   ): void {
     selectedGroupTemplateId = undefined
-    confirmButton.disabled = true
+    selectedGroupTemplateCategory = GROUP_TEMPLATE_ALL_CATEGORY
+    groupTemplateSearchQuery = ''
+    searchEl.value = ''
+    updateGroupTemplateConfirmButton(confirmButton)
+    renderGroupTemplateCategories(categoriesEl, listEl, confirmButton)
     renderGroupTemplateList(listEl, confirmButton)
     modalEl.hidden = false
-    listEl.querySelector<HTMLButtonElement>('.group-template-option')?.focus()
+    searchEl.focus()
   }
 
   function closeGroupTemplateModal(
     modalEl: HTMLElement,
+    searchEl: HTMLInputElement,
+    categoriesEl: HTMLElement,
     listEl: HTMLElement,
     confirmButton: HTMLButtonElement,
   ): void {
     modalEl.hidden = true
     selectedGroupTemplateId = undefined
-    confirmButton.disabled = true
+    selectedGroupTemplateCategory = GROUP_TEMPLATE_ALL_CATEGORY
+    groupTemplateSearchQuery = ''
+    searchEl.value = ''
+    updateGroupTemplateConfirmButton(confirmButton)
+    categoriesEl.replaceChildren()
     listEl.replaceChildren()
   }
 
   function renderGroupTemplateList(listEl: HTMLElement, confirmButton: HTMLButtonElement): void {
     listEl.replaceChildren()
-    for (const template of BUILTIN_GROUP_TEMPLATES) {
+    const templates = filterBuiltinGroupTemplates({
+      category: selectedGroupTemplateCategory,
+      query: groupTemplateSearchQuery,
+    })
+    if (templates.length === 0) {
+      listEl.append(groupTemplateEmptyState(confirmButton))
+      return
+    }
+
+    for (const template of templates) {
       listEl.append(groupTemplateOption(template, listEl, confirmButton))
+    }
+  }
+
+  function renderGroupTemplateCategories(
+    categoriesEl: HTMLElement,
+    listEl: HTMLElement,
+    confirmButton: HTMLButtonElement,
+  ): void {
+    categoriesEl.replaceChildren()
+    for (const category of getBuiltinGroupTemplateCategories()) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = `group-template-category-filter${selectedGroupTemplateCategory === category ? ' active' : ''}`
+      button.textContent = category
+      button.setAttribute('aria-pressed', String(selectedGroupTemplateCategory === category))
+      button.addEventListener('click', () => {
+        selectedGroupTemplateCategory = category
+        syncGroupTemplateSelection(confirmButton)
+        renderGroupTemplateCategories(categoriesEl, listEl, confirmButton)
+        renderGroupTemplateList(listEl, confirmButton)
+      })
+      categoriesEl.append(button)
     }
   }
 
@@ -205,28 +268,49 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
   ): HTMLButtonElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = `group-template-option${selectedGroupTemplateId === template.id ? ' active' : ''}`
+    const hasLongSummary = template.summary.length > GROUP_TEMPLATE_INLINE_SUMMARY_LIMIT
+    button.className = [
+      'group-template-option',
+      selectedGroupTemplateId === template.id ? 'active' : '',
+      hasLongSummary ? 'has-long-summary' : '',
+    ].filter(Boolean).join(' ')
     button.dataset.templateId = template.id
     button.setAttribute('aria-pressed', String(selectedGroupTemplateId === template.id))
     button.addEventListener('click', () => {
       selectedGroupTemplateId = template.id
-      confirmButton.disabled = false
+      updateGroupTemplateConfirmButton(confirmButton)
       renderGroupTemplateList(listEl, confirmButton)
       listEl.querySelector<HTMLButtonElement>(`[data-template-id="${template.id}"]`)?.focus()
     })
 
     const top = document.createElement('span')
     top.className = 'group-template-option-top'
+    const heading = document.createElement('span')
+    heading.className = 'group-template-heading'
+    const titleRow = document.createElement('span')
+    titleRow.className = 'group-template-title-row'
     const name = document.createElement('strong')
     name.textContent = template.name
+    titleRow.append(name)
+    const risk = groupTemplateRiskLabel(template)
+    if (risk) titleRow.append(risk)
+    const count = document.createElement('span')
+    count.className = 'group-template-role-count'
+    count.textContent = `${template.roles.length} 个角色`
+    heading.append(titleRow, count)
     const category = document.createElement('span')
     category.className = 'group-template-category'
     category.textContent = template.category
-    top.append(name, category)
+    top.append(heading, category)
 
     const summary = document.createElement('span')
     summary.className = 'group-template-summary'
     summary.textContent = template.summary
+    if (hasLongSummary) summary.title = template.summary
+
+    const meta = document.createElement('span')
+    meta.className = 'group-template-meta'
+    meta.textContent = `适用：${template.userTypes.slice(0, 3).join('、')}`
 
     const roles = document.createElement('span')
     roles.className = 'group-template-roles'
@@ -236,8 +320,82 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
       roles.append(chip)
     }
 
-    button.append(top, summary, roles)
+    button.append(top, summary, meta, roles)
     return button
+  }
+
+  function groupTemplateEmptyState(confirmButton: HTMLButtonElement): HTMLElement {
+    updateGroupTemplateConfirmButton(confirmButton)
+    const empty = document.createElement('div')
+    empty.className = 'group-template-empty'
+
+    const title = document.createElement('strong')
+    title.textContent = '没有找到匹配的小组'
+    const description = document.createElement('p')
+    description.textContent = '可以试试换个说法，例如搜索「写论文」「合同」「面试」「投放」「装修」。'
+    const actions = document.createElement('div')
+    actions.className = 'group-template-empty-actions'
+
+    const clearSearch = document.createElement('button')
+    clearSearch.type = 'button'
+    clearSearch.className = 'btn btn-ghost'
+    clearSearch.textContent = '清空搜索'
+    clearSearch.addEventListener('click', () => {
+      const searchEl = requireElement<HTMLInputElement>('#group-template-search')
+      groupTemplateSearchQuery = ''
+      searchEl.value = ''
+      syncGroupTemplateSelection(confirmButton)
+      renderGroupTemplateList(requireElement<HTMLElement>('#group-template-list'), confirmButton)
+      searchEl.focus()
+    })
+
+    const showAll = document.createElement('button')
+    showAll.type = 'button'
+    showAll.className = 'btn btn-ghost'
+    showAll.textContent = '查看全部模板'
+    showAll.addEventListener('click', () => {
+      const searchEl = requireElement<HTMLInputElement>('#group-template-search')
+      const categoriesEl = requireElement<HTMLElement>('#group-template-categories')
+      const listEl = requireElement<HTMLElement>('#group-template-list')
+      selectedGroupTemplateCategory = GROUP_TEMPLATE_ALL_CATEGORY
+      groupTemplateSearchQuery = ''
+      searchEl.value = ''
+      syncGroupTemplateSelection(confirmButton)
+      renderGroupTemplateCategories(categoriesEl, listEl, confirmButton)
+      renderGroupTemplateList(listEl, confirmButton)
+      searchEl.focus()
+    })
+
+    actions.append(clearSearch, showAll)
+    empty.append(title, description, actions)
+    return empty
+  }
+
+  function groupTemplateRiskLabel(template: BuiltinGroupTemplate): HTMLElement | undefined {
+    if (template.riskLevel === 'normal') return undefined
+    const label = document.createElement('span')
+    label.className = `group-template-risk group-template-risk-${template.riskLevel}`
+    label.textContent = template.riskLevel === 'professional' ? '专业边界' : '需谨慎'
+    return label
+  }
+
+  function syncGroupTemplateSelection(confirmButton: HTMLButtonElement): void {
+    if (!selectedGroupTemplateId) {
+      updateGroupTemplateConfirmButton(confirmButton)
+      return
+    }
+    const visible = filterBuiltinGroupTemplates({
+      category: selectedGroupTemplateCategory,
+      query: groupTemplateSearchQuery,
+    }).some(template => template.id === selectedGroupTemplateId)
+    if (!visible) selectedGroupTemplateId = undefined
+    updateGroupTemplateConfirmButton(confirmButton)
+  }
+
+  function updateGroupTemplateConfirmButton(confirmButton: HTMLButtonElement): void {
+    const template = selectedGroupTemplateId ? getBuiltinGroupTemplate(selectedGroupTemplateId) : undefined
+    confirmButton.disabled = !template
+    confirmButton.textContent = template?.riskLevel === 'professional' ? '了解限制并创建' : '确认创建'
   }
 
   function readNewChatMode(): RoomMode {

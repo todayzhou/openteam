@@ -1113,6 +1113,7 @@ select:focus {
   color: var(--muted);
   font-size: 11px;
   font-weight: 740;
+  white-space: nowrap;
 }
 
 .status-pill::before {
@@ -2579,10 +2580,15 @@ select:focus {
 
 .role-card .role-row {
   justify-content: flex-start;
+  min-width: 0;
 }
 
 .role-card .status-pill {
-  margin-left: auto;
+  flex: 0 0 auto;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin-left: 0;
 }
 
 .role-card.active,
@@ -2630,6 +2636,11 @@ select:focus {
   min-width: 0;
 }
 
+.role-card .role-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .role-card-actions {
   display: inline-flex;
   align-items: center;
@@ -2637,18 +2648,30 @@ select:focus {
 }
 
 .role-delete,
+.role-prompt-detail,
 .role-refresh,
 .role-jump {
+  appearance: none;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
+  border: 0;
   border-radius: 8px;
   background: transparent;
   color: #95a7b5;
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
+}
+
+.role-prompt-detail {
+  opacity: 0.78;
+}
+
+.role-prompt-detail svg {
+  width: 16px;
+  height: 16px;
 }
 
 .role-delete svg {
@@ -2673,6 +2696,7 @@ select:focus {
 }
 
 .role-refresh:not(:disabled):hover,
+.role-prompt-detail:hover,
 .role-jump:hover,
 .role-delete:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -3059,29 +3083,84 @@ select:focus {
 
 .group-template-modal {
   display: grid;
-  width: min(780px, 100%);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1500px, calc(100vw - 32px));
+  min-height: min(820px, calc(100vh - 24px));
+  max-height: calc(100vh - 24px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+.group-template-toolbar {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.group-template-search-field {
+  display: grid;
+  gap: 6px;
+}
+
+.group-template-search-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.group-template-search-field input {
+  height: 38px;
+}
+
+.group-template-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: visible;
+  padding: 0 2px 2px;
+}
+
+.group-template-category-filter {
+  flex: 0 0 auto;
+  border: 1px solid rgba(132, 153, 171, 0.16);
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: rgba(14, 24, 35, 0.46);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.group-template-category-filter:hover,
+.group-template-category-filter:focus-visible,
+.group-template-category-filter.active {
+  border-color: rgba(47, 216, 204, 0.46);
+  background: rgba(47, 216, 204, 0.1);
+  color: #d9fffb;
+  outline: none;
 }
 
 .group-template-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 16px;
   min-height: 0;
-  max-height: min(520px, calc(100vh - 220px));
+  max-height: min(720px, calc(100vh - 240px));
   overflow: auto;
   padding-right: 2px;
 }
 
 .group-template-option {
+  position: relative;
   display: grid;
-  gap: 9px;
+  gap: 11px;
   align-content: start;
-  min-height: 154px;
+  min-height: 190px;
+  overflow: visible;
   border: 1px solid rgba(132, 153, 171, 0.16);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 16px;
   background:
     linear-gradient(145deg, rgba(47, 216, 204, 0.08), transparent 46%),
     rgba(14, 24, 35, 0.52);
@@ -3101,18 +3180,40 @@ select:focus {
 
 .group-template-option-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
 
+.group-template-heading {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.group-template-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .group-template-option strong {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   font-size: 14px;
   font-weight: 820;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.group-template-role-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.2;
 }
 
 .group-template-category {
@@ -3126,15 +3227,30 @@ select:focus {
 }
 
 .group-template-summary {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.6;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.group-template-meta {
+  overflow: visible;
+  color: #9fb2c1;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .group-template-roles {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-content: flex-start;
+  gap: 8px;
+  padding-bottom: 2px;
 }
 
 .group-template-roles span {
@@ -3145,6 +3261,53 @@ select:focus {
   color: #cbd9e3;
   font-size: 11px;
   line-height: 1.2;
+}
+
+.group-template-risk {
+  flex: 0 0 auto;
+  border: 1px solid rgba(240, 162, 58, 0.28);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(240, 162, 58, 0.08);
+  color: #ffd18a;
+}
+
+.group-template-risk-professional {
+  border-color: rgba(246, 96, 122, 0.34);
+  background: rgba(246, 96, 122, 0.1);
+  color: #ff9fb2;
+}
+
+.group-template-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+  min-height: 240px;
+  border: 1px dashed rgba(132, 153, 171, 0.24);
+  border-radius: 8px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.group-template-empty strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.group-template-empty p {
+  max-width: 420px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.group-template-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .group-template-footer {
@@ -4140,6 +4303,7 @@ select:focus {
 :root[data-theme="light"] .site-segment:has(input:checked),
 :root[data-theme="light"] .mode-option:has(input:checked),
 :root[data-theme="light"] .group-template-option.active,
+:root[data-theme="light"] .group-template-category-filter.active,
 :root[data-theme="light"] .note-scope-tab.active,
 :root[data-theme="light"] .template-type-tab.active,
 :root[data-theme="light"] .add-person-site-option.active {
@@ -4162,6 +4326,8 @@ select:focus {
 :root[data-theme="light"] .role-site-option.active,
 :root[data-theme="light"] .group-template-option:hover,
 :root[data-theme="light"] .group-template-option:focus-visible,
+:root[data-theme="light"] .group-template-category-filter:hover,
+:root[data-theme="light"] .group-template-category-filter:focus-visible,
 :root[data-theme="light"] .mark-menu button:hover,
 :root[data-theme="light"] .mark-menu button:focus-visible {
   border-color: rgba(20, 127, 143, 0.28);
@@ -4245,6 +4411,8 @@ select:focus {
 :root[data-theme="light"] .summary-line,
 :root[data-theme="light"] .message-name,
 :root[data-theme="light"] .group-template-summary,
+:root[data-theme="light"] .group-template-meta,
+:root[data-theme="light"] .group-template-role-count,
 :root[data-theme="light"] .orchestration-status-count span,
 :root[data-theme="light"] .orchestration-status-node-index,
 :root[data-theme="light"] .orchestration-status-current-label,
@@ -4261,6 +4429,7 @@ select:focus {
 :root[data-theme="light"] .role-card,
 :root[data-theme="light"] .template-card,
 :root[data-theme="light"] .group-template-option,
+:root[data-theme="light"] .group-template-empty,
 :root[data-theme="light"] .editor-card,
 :root[data-theme="light"] .modal-card,
 :root[data-theme="light"] .select-row,
@@ -4353,6 +4522,7 @@ select:focus {
 :root[data-theme="light"] .note-tool-btn,
 :root[data-theme="light"] .note-scope-tab,
 :root[data-theme="light"] .template-type-tab,
+:root[data-theme="light"] .group-template-category-filter,
 :root[data-theme="light"] .add-person-site-option {
   border-color: rgba(89, 111, 131, 0.16);
   background: #ffffff;
@@ -4437,6 +4607,7 @@ select:focus {
 :root[data-theme="light"] .notes-editor,
 :root[data-theme="light"] .all-note-target,
 :root[data-theme="light"] .all-note-target-title,
+:root[data-theme="light"] .group-template-empty strong,
 :root[data-theme="light"] .template-prompt-preview,
 :root[data-theme="light"] .orchestration-status,
 :root[data-theme="light"] .orchestration-status-title,
@@ -4551,6 +4722,18 @@ select:focus {
 :root[data-theme="light"] .chat-create-template-btn,
 :root[data-theme="light"] .group-template-category {
   color: #0f6f7d;
+}
+
+:root[data-theme="light"] .group-template-risk {
+  border-color: rgba(194, 129, 32, 0.26);
+  background: #fff8ec;
+  color: #8a5a0a;
+}
+
+:root[data-theme="light"] .group-template-risk-professional {
+  border-color: rgba(190, 48, 76, 0.24);
+  background: #fff2f4;
+  color: #a32644;
 }
 
 :root[data-theme="light"] .group-template-roles span {

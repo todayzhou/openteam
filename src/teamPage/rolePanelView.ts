@@ -87,10 +87,11 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
 
     const actions = document.createElement('div')
     actions.className = 'role-card-actions'
+    const promptDetail = rolePromptDetailButton(role)
     const refresh = roleRefreshButton(role)
     const jump = roleJumpButton(role)
     const remove = roleDeleteButton(role)
-    actions.append(refresh, jump, remove)
+    actions.append(promptDetail, refresh, jump, remove)
     card.append(avatar, main, actions)
 
     if (role.status === 'error') {
@@ -100,6 +101,66 @@ export function createRolePanelView(deps: RolePanelViewDependencies): RolePanelV
       main.append(error)
     }
     return card
+  }
+
+  function rolePromptDetailButton(role: GroupRole): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'role-prompt-detail'
+    button.dataset.rolePromptDetail = role.id
+    button.setAttribute('aria-label', `查看 ${role.name} 的提示词`)
+    button.title = '查看提示词'
+    button.append(promptDetailIcon())
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      openRolePromptDetail(role)
+    })
+    return button
+  }
+
+  function openRolePromptDetail(role: GroupRole): void {
+    document.querySelector('.role-prompt-modal')?.remove()
+
+    const backdrop = document.createElement('div')
+    backdrop.className = 'modal-backdrop role-prompt-modal'
+    backdrop.addEventListener('click', event => {
+      if (event.target === backdrop) backdrop.remove()
+    })
+
+    const modal = document.createElement('section')
+    modal.className = 'modal template-detail-modal'
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    modal.setAttribute('aria-labelledby', 'role-prompt-detail-title')
+    modal.addEventListener('click', event => event.stopPropagation())
+
+    const header = document.createElement('div')
+    header.className = 'modal-header'
+    const copy = document.createElement('div')
+    const title = document.createElement('h2')
+    title.id = 'role-prompt-detail-title'
+    title.textContent = role.name
+    const description = document.createElement('p')
+    description.className = 'tiny'
+    description.textContent = role.description || '未填写人员描述'
+    copy.append(title, description)
+
+    const close = document.createElement('button')
+    close.type = 'button'
+    close.className = 'icon-btn modal-close role-prompt-close'
+    close.setAttribute('aria-label', '关闭提示词详情')
+    close.textContent = '×'
+    close.addEventListener('click', () => backdrop.remove())
+    header.append(copy, close)
+
+    const prompt = document.createElement('pre')
+    prompt.className = 'template-prompt-preview'
+    prompt.textContent = role.systemPrompt?.trim() || '未填写提示词'
+
+    modal.append(header, prompt)
+    backdrop.append(modal)
+    document.body.append(backdrop)
+    close.focus()
   }
 
   function renderRolePanelActions(): void {
@@ -256,6 +317,32 @@ function trashIcon(): SVGSVGElement {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   path.setAttribute('d', 'M9 4h6l1 2h4v2H4V6h4l1-2Zm-2 6h10l-.7 9.1A2 2 0 0 1 14.3 21H9.7a2 2 0 0 1-2-1.9L7 10Zm3 2v6h1.6v-6H10Zm2.4 0v6H14v-6h-1.6Z')
   svg.append(path)
+  return svg
+}
+
+function promptDetailIcon(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('focusable', 'false')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '1.8')
+  svg.setAttribute('stroke-linecap', 'round')
+  svg.setAttribute('stroke-linejoin', 'round')
+
+  const page = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  page.setAttribute('d', 'M7 3.8h6.4L17 7.4V20H7V3.8Z')
+  const fold = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  fold.setAttribute('d', 'M13.2 4v3.6h3.6')
+  const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  line1.setAttribute('d', 'M9.6 11h4.8')
+  const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  line2.setAttribute('d', 'M9.6 14h4.8')
+  const line3 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  line3.setAttribute('d', 'M9.6 17h2.8')
+
+  svg.append(page, fold, line1, line2, line3)
   return svg
 }
 
