@@ -128,6 +128,7 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     const roles = deps.getCurrentRoles()
     const show = shouldShowMentionPanel(deps.messageInputEl.value) && roles.length > 0
     const options = createMentionOptions(roles)
+    deps.state.mentionIndex = clampMentionIndex(deps.state.mentionIndex, options)
     deps.mentionPanelEl.hidden = !show
     deps.mentionPanelEl.replaceChildren()
     if (!show) return
@@ -176,7 +177,9 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
     deps.messageInputEl.addEventListener('keydown', event => {
       const roles = deps.getCurrentRoles()
       const mentionOptions = createMentionOptions(roles)
-      if (!deps.mentionPanelEl.hidden) {
+      const canHandleMention = roles.length > 0 && (shouldShowMentionPanel(deps.messageInputEl.value) || !deps.mentionPanelEl.hidden)
+      if (canHandleMention) {
+        deps.state.mentionIndex = clampMentionIndex(deps.state.mentionIndex, mentionOptions)
         if (event.key === 'ArrowDown') {
           event.preventDefault()
           deps.state.mentionIndex = (deps.state.mentionIndex + 1) % mentionOptions.length
@@ -300,6 +303,11 @@ export function createComposerView(deps: ComposerViewDependencies): ComposerView
 
 function createMentionOptions(roles: GroupRole[]): MentionOption[] {
   return [{ type: 'all' }, ...roles.map(role => ({ type: 'role' as const, role }))]
+}
+
+function clampMentionIndex(index: number, options: MentionOption[]): number {
+  if (options.length === 0) return 0
+  return Math.min(Math.max(0, index), options.length - 1)
 }
 
 function mentionLabelOptionsFromStore(store: OpenTeamStore) {

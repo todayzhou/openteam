@@ -51,6 +51,49 @@ describe('team page composer targeting', () => {
     expect(deps.targetPreviewEl.textContent).toBe('将发送给：工程师（DeepSeek）')
   })
 
+  it('confirms the default all-members mention with Enter from the keyboard', () => {
+    const { view, deps, runCommand } = createComposerHarness()
+    view.registerComposerEvents()
+    deps.messageInputEl.value = '@'
+    deps.messageInputEl.setSelectionRange(1, 1)
+
+    const event = pressKey(deps.messageInputEl, 'Enter')
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(deps.messageInputEl.value).toBe('@所有人 ')
+    expect(runCommand).not.toHaveBeenCalled()
+  })
+
+  it('moves mention selection with arrow keys before confirming a role', () => {
+    const { view, deps } = createComposerHarness({
+      roles: [
+        makeRole('chat-1', 'role-1', '工程师', 'ready'),
+        makeRole('chat-1', 'role-2', '产品经理', 'ready'),
+      ],
+    })
+    view.registerComposerEvents()
+    deps.messageInputEl.value = '@'
+    deps.messageInputEl.setSelectionRange(1, 1)
+
+    const downEvent = pressKey(deps.messageInputEl, 'ArrowDown')
+
+    expect(downEvent.defaultPrevented).toBe(true)
+    expect(deps.state.mentionIndex).toBe(1)
+    expect(deps.mentionPanelEl.hidden).toBe(false)
+    expect(activeMentionName(deps.mentionPanelEl)).toBe('工程师')
+
+    const upEvent = pressKey(deps.messageInputEl, 'ArrowUp')
+
+    expect(upEvent.defaultPrevented).toBe(true)
+    expect(deps.state.mentionIndex).toBe(0)
+    expect(activeMentionName(deps.mentionPanelEl)).toBe('所有人')
+
+    pressKey(deps.messageInputEl, 'ArrowDown')
+    pressKey(deps.messageInputEl, 'Enter')
+
+    expect(deps.messageInputEl.value).toBe('@工程师（DeepSeek） ')
+  })
+
   it('previews no-mention messages as chat records without requiring ready roles', () => {
     const { view, deps } = createComposerHarness({ roleStatus: 'thinking' })
     deps.messageInputEl.value = '先记录这个背景'
@@ -121,6 +164,8 @@ function createComposerHarness(options: { roleStatus?: GroupRole['status']; role
   const runCommand = vi.fn(async () => undefined)
   const reconnectRolesForSend = vi.fn(async () => undefined)
   const showError = vi.fn()
+  const mentionPanelEl = document.createElement('div')
+  mentionPanelEl.hidden = true
   const deps: ComposerViewDependencies = {
     state,
     composerFormEl: document.createElement('form'),
@@ -129,7 +174,7 @@ function createComposerHarness(options: { roleStatus?: GroupRole['status']; role
     sendButtonEl: document.createElement('button'),
     messageInputEl: document.createElement('textarea'),
     referenceDraftEl: document.createElement('div'),
-    mentionPanelEl: document.createElement('div'),
+    mentionPanelEl,
     getStore: () => store,
     getCurrentChat: () => chat,
     getCurrentRoles: () => roles,
@@ -160,4 +205,14 @@ function makeRole(chatId: string, id: string, name: string, status: GroupRole['s
     createdAt: 0,
     updatedAt,
   }
+}
+
+function pressKey(target: HTMLElement, key: string): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+  target.dispatchEvent(event)
+  return event
+}
+
+function activeMentionName(panel: HTMLElement): string | undefined {
+  return panel.querySelector('.mention-option.active .mention-name')?.textContent ?? undefined
 }

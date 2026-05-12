@@ -696,6 +696,13 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toMatch(/\.mention-panel\s*{[^}]*right:\s*78px;/s)
   })
 
+  it('keeps mention keyboard selection visible in light theme', () => {
+    const html = readTeamDocument()
+
+    expect(html).toMatch(/:root\[data-theme="light"\] \.mention-option:hover,\s*:root\[data-theme="light"\] \.mention-option\.active\s*{[^}]*background:\s*#e7f7f5;[^}]*color:\s*#0f3f45;[^}]*box-shadow:\s*inset 3px 0 0 #147f8f;/s)
+    expect(html).not.toMatch(/:root\[data-theme="light"\] \.mention-option\.active\s*{[^}]*background:\s*#ffffff;/s)
+  })
+
   it('keeps the sidebar header focused on chat creation instead of a refresh control', () => {
     const html = readTeamDocument()
     const uiSource = readFileSync(resolve(process.cwd(), 'src/teamPage/teamUiController.ts'), 'utf8')
