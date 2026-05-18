@@ -554,6 +554,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         contentFormat,
         roleId: role.id,
         roleName: role.name,
+        sourceMessageId: promptMessageId,
         createdAt: timestamp,
         status: 'received',
       }
@@ -1079,6 +1080,7 @@ async function createExternalAssistantPlaceholder(
       contentFormat: 'markdown',
       roleId: role.id,
       roleName: role.name,
+      sourceMessageId: delivery.messageId,
       createdAt: timestamp,
       status: 'pending',
     }
@@ -1274,6 +1276,7 @@ function upsertFailedAssistantAfterPrompt(
     contentFormat: 'markdown',
     roleId: role.id,
     roleName: role.name,
+    sourceMessageId: promptMessageId,
     createdAt: timestamp,
     status: 'error',
   }

@@ -34,7 +34,7 @@ const teamDomRefs = createTeamPageDomRefs()
 const { appShellEl, closeWindowEl, toggleWindowSizeEl, toggleFullscreenEl, storeSummaryEl, chatListEl, chatTitleEl, chatSubtitleEl, chatStatusEl, messagesEl } = teamDomRefs
 const { roleSummaryEl, roleListEl, roleTemplateSelectEl, templateListEl, targetPreviewEl, busyPreviewEl, composerFormEl, sendButtonEl } = teamDomRefs
 const { messageInputEl, referenceDraftEl, mentionPanelEl, errorEl, newChatNameEl, createChatFormEl, quickCreateChatEl } = teamDomRefs
-const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, themeLightEl, themeDarkEl } = teamDomRefs
+const { templateNameEl, templateDescriptionEl, templatePromptEl, templateAiDescriptionEl, generateTemplatePersonaEl, templatePersonaGenerationStatusEl, templateFormTitleEl, settingsButtonEl, settingsMenuEl, agentControlToggleEl, agentControlStatusEl, themeLightEl, themeDarkEl } = teamDomRefs
 const { openAllNotesEl, closeAllNotesEl, allNotesModalEl, allNotesListEl, allNotesActiveTitleEl, allNotesActiveMetaEl, allNotesEditorEl } = teamDomRefs
 const { allNoteBoldEl, allNoteItalicEl, allNoteStrikeEl, allNoteBulletListEl, allNoteOrderedListEl, allNoteUndoEl, allNoteRedoEl } = teamDomRefs
 const { openPeopleLibraryEl, openExternalModelsEl, openOrchestrationEl, closeOrchestrationEl, orchestrationModalEl, orchestrationAutoModalEl, orchestrationTaskEl, autoOrchestrationEl, openOrchestrationTemplateEl, orchestrationTemplateModalEl, closeOrchestrationTemplateEl, orchestrationTemplateContentEl, closeAutoOrchestrationEl, orchestrationAutoContentEl, orchestrationPeopleListEl, arrangeOrchestrationEl, orchestrationCanvasEl, orchestrationHintEl, orchestrationStageSettingsEl, orchestrationReviewSettingsEl, orchestrationMaxRoundsEl, saveOrchestrationEl, runOrchestrationEl, closeExternalModelsEl, externalModelsModalEl, externalModelsListEl, externalModelFormEl, externalModelIdEl, externalModelNameEl, externalModelFormatEl, externalModelBaseUrlEl, externalModelApiKeyEl, externalModelModelNameEl, resetExternalModelFormEl, closePeopleLibraryEl, peopleLibraryModalEl, personTemplateModalEl, addPersonModalEl, temporaryPersonModalEl } = teamDomRefs
@@ -525,10 +525,27 @@ function handlePrimaryModeChange(isPrimary: boolean): void {
 function render(): void {
   renderSelectedChat()
   renderTemplates()
+  renderAgentControlSettings()
   if (!externalModelsModalEl.hidden) renderExternalModels()
   if (!orchestrationModalEl.hidden) renderOrchestrationModal()
   renderAddPersonDialog()
   if (!allNotesModalEl.hidden) renderAllNotes()
+}
+
+function renderAgentControlSettings(): void {
+  const enabled = store.settings.agentControlEnabled
+  const port = store.settings.agentControlPort
+  agentControlToggleEl.setAttribute('aria-pressed', String(enabled))
+  agentControlToggleEl.textContent = `本机智能体控制：${enabled ? '开启' : '关闭'}`
+  agentControlStatusEl.textContent = `端口 ${port}，仅允许本机连接。开启后本机工具可创建群聊并发送任务。`
+}
+
+function registerAgentControlSettings(): void {
+  agentControlToggleEl.addEventListener('click', () => {
+    runCommand('GROUP_SETTINGS_UPDATE', {
+      agentControlEnabled: !store.settings.agentControlEnabled,
+    }).catch(error => showError(error instanceof Error ? error.message : String(error)))
+  })
 }
 
 function renderSelectedChat(): void {
@@ -610,6 +627,7 @@ async function boot(): Promise<void> {
   themeController.registerThemeEvents()
   registerFloatingWindowControls()
   registerAllNotesEvents()
+  registerAgentControlSettings()
   registerUi()
   registerOrchestrationEvents()
   registerNotesEvents()

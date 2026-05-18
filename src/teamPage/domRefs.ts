@@ -33,6 +33,8 @@ export interface TeamPageDomRefs {
   templateFormTitleEl: HTMLElement
   settingsButtonEl: HTMLButtonElement
   settingsMenuEl: HTMLElement
+  agentControlToggleEl: HTMLButtonElement
+  agentControlStatusEl: HTMLElement
   themeLightEl: HTMLButtonElement
   themeDarkEl: HTMLButtonElement
   openAllNotesEl: HTMLButtonElement
@@ -190,6 +192,8 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateFormTitleEl: requireElement<HTMLElement>('#template-form-title'),
     settingsButtonEl: requireElement<HTMLButtonElement>('#settings-button'),
     settingsMenuEl: requireElement<HTMLElement>('#settings-menu'),
+    agentControlToggleEl: requireElement<HTMLButtonElement>('#agent-control-toggle'),
+    agentControlStatusEl: requireElement<HTMLElement>('#agent-control-status'),
     themeLightEl: requireElement<HTMLButtonElement>('#theme-light'),
     themeDarkEl: requireElement<HTMLButtonElement>('#theme-dark'),
     openAllNotesEl: requireElement<HTMLButtonElement>('#open-all-notes'),

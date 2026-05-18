@@ -855,7 +855,7 @@ function makeStore(roleIds: string[]): OpenTeamStore {
     orchestrationFlowOrderByChatId: { 'chat-1': ['flow-1'] },
     orchestrationRunsById: {},
     activeOrchestrationRunIdByChatId: {},
-    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {} },
+    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826 },
   }
 }
 

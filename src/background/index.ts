@@ -21,6 +21,8 @@ import { createSitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatRoles, mutateStore } from './storeAccess'
 import { createLogger } from '../shared/logger'
 import type { BackgroundToRoleMessage } from '../group/runtimeProtocol'
+import { createControlActionExecutor } from './controlHandlers'
+import { createControlClient } from './controlClient'
 
 const runtimeFrames = createRuntimeFrameRegistry()
 const log = createLogger('background')
@@ -74,8 +76,15 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
     if (defaultChatSite === 'chatgpt' || defaultChatSite === 'gemini' || defaultChatSite === 'claude' || defaultChatSite === 'deepseek') {
       store.settings.defaultChatSite = defaultChatSite
     }
+    if (typeof message.agentControlEnabled === 'boolean') {
+      store.settings.agentControlEnabled = message.agentControlEnabled
+    }
+    if (typeof message.agentControlPort === 'number' && Number.isInteger(message.agentControlPort) && message.agentControlPort >= 1024 && message.agentControlPort <= 65535) {
+      store.settings.agentControlPort = message.agentControlPort
+    }
   })
   await broadcastStoreUpdated(store)
+  syncControlClient().catch(error => log.warn('control-client:settings-sync-failed', { error: errorReason(error) }))
   return { ok: true, store }
 }
 
@@ -110,6 +119,66 @@ const routeMessage = createMessageRouter([
   ...createOrchestrationHandlers({ broadcastStoreUpdated, broadcastAutoGenerateStream, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt }),
   ...createMessageHandlers({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendError, sendPrompt, sendRoleMessage }),
 ])
+
+const executeControlCommand = createControlActionExecutor({
+  loadStore,
+  routeRuntimeMessage(message) {
+    return Promise.resolve(routeMessage(message, {}))
+  },
+  runtimeFrames,
+  openTeamPage,
+  waitFor(ms) {
+    return new Promise(resolve => globalThis.setTimeout(resolve, ms))
+  },
+  now,
+})
+
+console.info('[OpenTeam][control] background:createControlClient:before', {
+  at: new Date().toISOString(),
+  extensionId: getExtensionId(),
+  extensionVersion: getExtensionVersion(),
+})
+
+const controlClient = createControlClient({
+  loadStore,
+  executeCommand: executeControlCommand,
+  getExtensionVersion() {
+    return getExtensionVersion()
+  },
+  getProfileId() {
+    return getExtensionId()
+  },
+  log,
+  setTimer(handler, ms) {
+    return globalThis.setTimeout(handler, ms)
+  },
+  clearTimer(timerId) {
+    globalThis.clearTimeout(timerId)
+  },
+})
+
+function syncControlClient(): Promise<void> {
+  console.info('[OpenTeam][control] background:syncControlClient:start', {
+    at: new Date().toISOString(),
+  })
+  return controlClient.sync()
+}
+
+function getExtensionVersion(): string {
+  try {
+    return chrome.runtime.getManifest?.().version ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+function getExtensionId(): string {
+  return chrome.runtime.id ?? 'unknown-extension'
+}
+
+async function openTeamPage(): Promise<void> {
+  await chrome.tabs.create({ url: chrome.runtime.getURL('team.html'), active: true })
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   try {
@@ -175,4 +244,15 @@ chrome.tabs.onRemoved.addListener(tabId => {
   } catch (error) {
     logBackgroundFailure('tab-removed:failed', error, { tabId })
   }
+})
+
+console.info('[OpenTeam][control] background:initial-sync:scheduled', {
+  at: new Date().toISOString(),
+})
+syncControlClient().catch(error => {
+  console.warn('[OpenTeam][control] background:initial-sync:failed', {
+    at: new Date().toISOString(),
+    error: errorReason(error),
+  })
+  log.warn('control-client:initial-sync-failed', { error: errorReason(error) })
 })

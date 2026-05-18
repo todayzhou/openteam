@@ -10,7 +10,8 @@
     "e2e:extension": "npm run build && node scripts/e2e-extension-smoke.mjs",
     "e2e": "npm run test:e2e && npm run e2e:extension",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test && npm run test:e2e && npm run build"
+    "verify": "npm run typecheck && npm test && npm run test:e2e && npm run build",
+    "openteamctl": "node scripts/openteamctl.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

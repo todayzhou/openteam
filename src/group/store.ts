@@ -5,6 +5,7 @@ import {
   MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   MAX_ORCHESTRATION_MAX_ROUNDS,
 } from './types'
+import { OPENTEAM_CONTROL_DEFAULT_PORT } from '../control/protocol'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
 import { normalizeMessageHighlightColor } from './highlightColors'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
@@ -58,6 +59,8 @@ const DEFAULT_SETTINGS: OpenTeamSettings = {
   defaultChatSite: 'deepseek',
   externalModelOrder: [],
   externalModelsById: {},
+  agentControlEnabled: false,
+  agentControlPort: OPENTEAM_CONTROL_DEFAULT_PORT,
 }
 
 let storeQueue: Promise<void> = Promise.resolve()
@@ -608,7 +611,15 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     defaultChatSite: storedVersion < 6 && defaultChatSite === 'gemini' ? DEFAULT_SETTINGS.defaultChatSite : defaultChatSite,
     externalModelOrder: normalizeExternalModelOrder(raw.externalModelOrder, externalModelsById),
     externalModelsById,
+    agentControlEnabled: raw.agentControlEnabled === true,
+    agentControlPort: readAgentControlPort(raw.agentControlPort),
   }
+}
+
+function readAgentControlPort(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return DEFAULT_SETTINGS.agentControlPort
+  if (raw < 1024 || raw > 65535) return DEFAULT_SETTINGS.agentControlPort
+  return raw
 }
 
 function readSettingsChatSite(raw: unknown): OpenTeamSettings['defaultChatSite'] {

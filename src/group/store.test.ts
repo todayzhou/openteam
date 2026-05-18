@@ -72,6 +72,8 @@ describe('group store', () => {
         defaultChatSite: 'deepseek',
         externalModelOrder: [],
         externalModelsById: {},
+        agentControlEnabled: false,
+        agentControlPort: 19826,
       },
       viewState: {
         chatReadSeqById: {},
@@ -129,6 +131,8 @@ describe('group store', () => {
         defaultChatSite: 'deepseek',
         externalModelOrder: [],
         externalModelsById: {},
+        agentControlEnabled: false,
+        agentControlPort: 19826,
       },
     })
   })

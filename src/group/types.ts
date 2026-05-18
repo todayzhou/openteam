@@ -47,6 +47,8 @@ export interface OpenTeamSettings {
   defaultChatSite: ChatSite
   externalModelOrder: string[]
   externalModelsById: Record<string, ExternalModelConfig>
+  agentControlEnabled: boolean
+  agentControlPort: number
 }
 
 export interface ExternalModelConfig {
@@ -260,6 +262,7 @@ export interface GroupMessage {
   contentFormat?: 'markdown'
   roleId?: string
   roleName?: string
+  sourceMessageId?: string
   targetRoleIds?: string[]
   mentionedRoleIds?: string[]
   mentionsAll?: boolean

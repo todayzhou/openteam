@@ -55,6 +55,18 @@ describe('extension security configuration', () => {
     expect(scripts.some(script => script.world === 'MAIN')).toBe(false)
   })
 
+  it('allows extension pages to connect to the local OpenTeam control daemon', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.json'), 'utf8')) as {
+      content_security_policy?: {
+        extension_pages?: string
+      }
+    }
+
+    expect(manifest.content_security_policy?.extension_pages).toContain('connect-src')
+    expect(manifest.content_security_policy?.extension_pages).toContain('ws://127.0.0.1:*')
+    expect(manifest.content_security_policy?.extension_pages).toContain('http://127.0.0.1:*')
+  })
+
   it('limits iframe header overrides to supported AI chat subframes', () => {
     const rules = JSON.parse(readFileSync(resolve(process.cwd(), 'public/openteam-frame-rules.json'), 'utf8')) as Array<{
       condition?: {
