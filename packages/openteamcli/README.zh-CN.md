@@ -15,7 +15,7 @@ openteamcli doctor
 
 这个包也包含一个给本机智能体使用的 `openteam-control` skill。这个 skill 会告诉智能体如何启动 daemon、检查浏览器扩展连接、创建 OpenTeam 群聊、添加临时角色、发布任务、等待回复，以及处理常见的本机控制错误。
 
-OpenTeam 仓库公开后，使用标准的 skills 安装器安装：
+使用标准的 skills 安装器从 GitHub 安装：
 
 ```bash
 npx skills add afumu/openteam --skill openteam-control

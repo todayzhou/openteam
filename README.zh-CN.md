@@ -84,7 +84,7 @@ openteamcli daemon start
 openteamcli doctor
 ```
 
-skills 安装器会询问要安装到哪个 agent、使用什么范围和安装方式。在仓库公开之前，或使用本地 checkout 开发时，可以从当前目录安装 skill：
+skills 安装器会询问要安装到哪个 agent、使用什么范围和安装方式。公开仓库推荐使用上面的 GitHub 安装方式；如果你正在使用本地 checkout 或解压后的源码包开发，也可以在仓库根目录安装 skill：
 
 ```bash
 npx skills add . --skill openteam-control

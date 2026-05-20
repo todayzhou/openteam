@@ -15,7 +15,7 @@ openteamcli doctor
 
 The package also ships an `openteam-control` skill for local agents. The skill teaches an agent how to start the daemon, check the browser extension connection, create OpenTeam chats, add temporary roles, post tasks, wait for replies, and recover from common local-control errors.
 
-Use the standard skills installer after the OpenTeam repository is public:
+Install from GitHub with the standard skills installer:
 
 ```bash
 npx skills add afumu/openteam --skill openteam-control

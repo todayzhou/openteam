@@ -84,7 +84,7 @@ openteamcli daemon start
 openteamcli doctor
 ```
 
-The skills installer will ask which agent, scope, and install method to use. Before the repository is public, or when working from a local checkout, install the skill from the current directory instead:
+The skills installer will ask which agent, scope, and install method to use. Use the GitHub command above for the public repository; if you are developing from a local checkout or unzipped source package, install the skill from the repository root instead:
 
 ```bash
 npx skills add . --skill openteam-control
