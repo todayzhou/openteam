@@ -77,10 +77,10 @@ npm run build
 
 ### 方式二：安装 CLI + Agent Skill
 
-如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以在仓库根目录继续安装 CLI 和 skill。`@openteam/cli` 还没有发布到 npm，因此当前先从源码安装 CLI：
+如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以先从 npm 安装 CLI，再安装 agent skill：
 
 ```bash
-npm install -g ./packages/openteamcli
+npm install -g @afumu/openteam-cli
 npx skills add afumu/openteam --skill openteam-control
 openteamcli daemon start
 openteamcli doctor

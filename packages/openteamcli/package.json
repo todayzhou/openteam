@@ -1,5 +1,5 @@
 {
-  "name": "@openteam/cli",
+  "name": "@afumu/openteam-cli",
   "version": "0.1.0",
   "description": "OpenTeam local CLI for agent-controlled group chats",
   "license": "PolyForm-Noncommercial-1.0.0",

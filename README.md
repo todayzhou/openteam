@@ -77,10 +77,10 @@ After the build finishes, open `chrome://extensions/`, turn on Developer mode, c
 
 ### Option 2: CLI + Agent Skill
 
-Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats. `@openteam/cli` has not been published to npm yet, so install the CLI from source for now:
+Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats. Install the CLI from npm, then install the agent skill:
 
 ```bash
-npm install -g ./packages/openteamcli
+npm install -g @afumu/openteam-cli
 npx skills add afumu/openteam --skill openteam-control
 openteamcli daemon start
 openteamcli doctor

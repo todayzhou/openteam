@@ -6,12 +6,10 @@ OpenTeam CLI lets local agents control an OpenTeam browser extension through a l
 
 ## Install
 
-`@openteam/cli` has not been published to npm yet. For now, install from the OpenTeam repository root:
+Install the CLI from npm:
 
 ```bash
-git clone https://github.com/afumu/openteam.git
-cd openteam
-npm install -g ./packages/openteamcli
+npm install -g @afumu/openteam-cli
 openteamcli doctor
 ```
 
@@ -46,9 +44,7 @@ If you want an agent to install everything for you, copy this prompt into Codex,
 Please install OpenTeam local agent control for me.
 
 1. Install the CLI:
-   git clone https://github.com/afumu/openteam.git
-   cd openteam
-   npm install -g ./packages/openteamcli
+   npm install -g @afumu/openteam-cli
 
 2. Install the OpenTeam agent skill:
    npx skills add afumu/openteam --skill openteam-control
