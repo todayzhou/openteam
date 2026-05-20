@@ -60,98 +60,46 @@ OpenTeam 会通过用户自己登录的浏览器网页会话和 DOM 自动化与
 
 使用本项目产生的账号限制、服务中断、数据丢失、法律纠纷或其他后果，均由使用者自行承担。以上说明不构成法律建议。
 
-## 🚀 从源码安装
+## 🚀 安装
 
-前置要求：
+### 方式一：只安装浏览器扩展
 
-- Node.js 20+
-- npm
-- Chrome 或其他 Chromium 系浏览器
+大多数普通用户只需要安装浏览器扩展：
 
-构建扩展：
+1. 从 [GitHub Releases](https://github.com/afumu/openteam/releases/latest) 下载最新的扩展 ZIP。
+2. 解压下载的包。
+3. 打开 `chrome://extensions/`。
+4. 开启开发者模式。
+5. 点击 **加载已解压的扩展程序**，选择解压后的扩展目录。
+6. 点击 OpenTeam 扩展图标，打开团队工作台。
 
-```bash
-npm install
-npm run build
-```
+### 方式二：安装 CLI + Agent Skill
 
-在 Chrome 中加载：
-
-1. 打开 `chrome://extensions/`。
-2. 开启开发者模式。
-3. 点击 **加载已解压的扩展程序**。
-4. 选择生成的 `dist/` 目录。
-5. 点击 OpenTeam 扩展图标，打开团队工作台。
-
-如果修改了 `public/manifest.json`、`public/openteam-frame-rules.json` 或 content scripts，需要在 `chrome://extensions/` 里重新加载扩展。
-
-## 🧑‍💻 开发者使用
-
-日常开发或配合本机智能体使用时，优先从 Release 包开始：
-
-1. 从 [GitHub Releases](https://github.com/afumu/openteam/releases/latest) 下载最新的扩展 ZIP，解压后在 `chrome://extensions/` 里开启开发者模式，并加载解压后的目录。
-2. 从 npm 安装 CLI：
+如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以继续安装 CLI 和 skill：
 
 ```bash
 npm install -g @openteam/cli
-```
-
-如果 Release 里提供的是 CLI tarball，也可以直接安装本地文件：
-
-```bash
-npm install -g ./openteam-cli-*.tgz
-```
-
-3. 用标准的 skills 安装器安装内置 skill：
-
-```bash
 npx skills add afumu/openteam --skill openteam-control
+openteamcli daemon start
+openteamcli doctor
 ```
 
-如果你使用的是本地 checkout 或解压后的源码包，可以从当前目录安装：
+skills 安装器会询问要安装到哪个 agent、使用什么范围和安装方式。在仓库公开之前，或使用本地 checkout 开发时，可以从当前目录安装 skill：
 
 ```bash
 npx skills add . --skill openteam-control
 ```
 
-skills 安装器会询问要安装到哪个 agent、使用什么范围和安装方式。
+安装完成后，打开 OpenTeam 扩展页面，并在设置里开启本机智能体控制。更多 CLI 说明见 [OpenTeam CLI](packages/openteamcli/README.zh-CN.md)。
 
-4. 重新打开 Codex 或本机智能体会话，打开 OpenTeam 扩展页面，在设置里开启本机智能体控制，然后检查连接：
-
-```bash
-openteamcli daemon start
-openteamcli doctor
-```
-
-### Agent 辅助安装
-
-如果希望让 Codex、Claude Code 或其他本机代码智能体帮你安装 CLI 和 skill，可以直接复制下面这段说明给它：
-
-```text
-请帮我安装 OpenTeam 本机智能体控制能力。
-
-1. 安装 CLI：
-   npm install -g @openteam/cli
-
-2. 安装 OpenTeam agent skill：
-   npx skills add afumu/openteam --skill openteam-control
-
-   如果这个仓库还没有公开，或者你已经在本地 OpenTeam checkout 目录里，请改用：
-   npx skills add . --skill openteam-control
-
-3. 启动并检查本地连接：
-   openteamcli daemon start
-   openteamcli doctor
-
-如果 skills 安装器询问要安装到哪个 agent、使用什么范围或安装方式，请让我选择。如果 doctor 提示 extension 没有连接，请提醒我打开 OpenTeam 扩展页面，并在设置里开启本机智能体控制。
-```
-
-## 🛠️ 开发
+## 🛠️ 从源码开发
 
 ```bash
 npm install
 npm run dev
 ```
+
+构建扩展后，在 `chrome://extensions/` 里开启开发者模式，并加载生成的 `dist/` 目录。
 
 常用检查命令：
 
@@ -163,30 +111,6 @@ npm run verify
 ```
 
 `npm run verify` 会依次执行类型检查、单元测试和生产构建。
-
-## 🤖 CLI
-
-OpenTeam 包含一个本地 CLI 包，用于让智能体控制群聊。
-
-```bash
-npm run openteamcli -- doctor
-npm run openteamcli -- daemon start
-npm run openteamcli -- chat list
-```
-
-安装内置 agent skill：
-
-```bash
-npx skills add afumu/openteam --skill openteam-control
-```
-
-在仓库公开之前，或使用本地 checkout 开发时，可以从当前目录安装同一个 skill：
-
-```bash
-npx skills add . --skill openteam-control
-```
-
-Release 包使用、CLI 安装、agent skill 安装和可复制给 Agent 的安装说明见上面的开发者使用章节。更多 CLI 说明见 [packages/openteamcli/README.zh-CN.md](packages/openteamcli/README.zh-CN.md)。
 
 ## 🔐 权限与隐私
 

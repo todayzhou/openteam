@@ -60,98 +60,46 @@ Do not use OpenTeam for commercial products, hosted services, paid workflows, bu
 
 Use it at your own risk. The maintainers are not responsible for account restrictions, service interruptions, data loss, legal issues, or other consequences arising from your use. This notice is not legal advice.
 
-## 🚀 Install From Source
+## 🚀 Install
 
-Prerequisites:
+### Option 1: Extension Only
 
-- Node.js 20+
-- npm
-- Chrome or another Chromium-based browser
+Most users only need the browser extension:
 
-Build the extension:
+1. Download the latest extension ZIP from [GitHub Releases](https://github.com/afumu/openteam/releases/latest).
+2. Unzip the package.
+3. Open `chrome://extensions/`.
+4. Turn on Developer mode.
+5. Click **Load unpacked** and select the unzipped extension directory.
+6. Click the OpenTeam extension icon to open the team workspace.
 
-```bash
-npm install
-npm run build
-```
+### Option 2: CLI + Agent Skill
 
-Load it in Chrome:
-
-1. Open `chrome://extensions/`.
-2. Turn on Developer mode.
-3. Click **Load unpacked**.
-4. Select the generated `dist/` directory.
-5. Click the OpenTeam extension icon to open the team workspace.
-
-If you change `public/manifest.json`, `public/openteam-frame-rules.json`, or content scripts, reload the extension from `chrome://extensions/`.
-
-## 🧑‍💻 Developer Usage
-
-For day-to-day development or agent-assisted use, start from the release package when one is available:
-
-1. Download the latest extension ZIP from [GitHub Releases](https://github.com/afumu/openteam/releases/latest), unzip it, and load the extracted directory in `chrome://extensions/` with Developer mode enabled.
-2. Install the CLI from npm:
+Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats:
 
 ```bash
 npm install -g @openteam/cli
-```
-
-If the Release includes a CLI tarball instead, install that local file:
-
-```bash
-npm install -g ./openteam-cli-*.tgz
-```
-
-3. Install the bundled agent skill with the standard skills installer:
-
-```bash
 npx skills add afumu/openteam --skill openteam-control
+openteamcli daemon start
+openteamcli doctor
 ```
 
-For a local checkout or an unzipped source package, install from the current directory:
+The skills installer will ask which agent, scope, and install method to use. Before the repository is public, or when working from a local checkout, install the skill from the current directory instead:
 
 ```bash
 npx skills add . --skill openteam-control
 ```
 
-The skills installer will ask which agent, scope, and install method to use.
+After installation, open the OpenTeam extension page and enable local agent control in settings. See [OpenTeam CLI](packages/openteamcli/README.md) for more CLI details.
 
-4. Restart Codex or your local agent, open the OpenTeam extension page, enable local agent control in settings, then verify the bridge:
-
-```bash
-openteamcli daemon start
-openteamcli doctor
-```
-
-### Agent-Assisted Install
-
-Copy this prompt into Codex, Claude Code, or another local coding agent if you want it to install the CLI and skill for you:
-
-```text
-Please install OpenTeam local agent control for me.
-
-1. Install the CLI:
-   npm install -g @openteam/cli
-
-2. Install the OpenTeam agent skill:
-   npx skills add afumu/openteam --skill openteam-control
-
-   If this repository is not public yet, or if you are already inside a local OpenTeam checkout, use:
-   npx skills add . --skill openteam-control
-
-3. Start and verify the local bridge:
-   openteamcli daemon start
-   openteamcli doctor
-
-If the skills installer asks which agent, scope, or install method to use, let me choose. If doctor says the extension is not connected, ask me to open the OpenTeam extension page and enable local agent control in settings.
-```
-
-## 🛠️ Development
+## 🛠️ Development From Source
 
 ```bash
 npm install
 npm run dev
 ```
+
+Build the extension and load the generated `dist/` directory from `chrome://extensions/` with Developer mode enabled.
 
 Useful checks:
 
@@ -163,30 +111,6 @@ npm run verify
 ```
 
 `npm run verify` runs type checking, unit tests, and a production build.
-
-## 🤖 CLI
-
-OpenTeam includes a local CLI package for agent-controlled group chats.
-
-```bash
-npm run openteamcli -- doctor
-npm run openteamcli -- daemon start
-npm run openteamcli -- chat list
-```
-
-Install the bundled agent skill:
-
-```bash
-npx skills add afumu/openteam --skill openteam-control
-```
-
-Before the repository is public, or when working from a local checkout, install the same skill from the current directory:
-
-```bash
-npx skills add . --skill openteam-control
-```
-
-For release package setup, CLI installation, agent skill installation, and the copyable agent install prompt, see the Developer Usage section above. See [packages/openteamcli/README.md](packages/openteamcli/README.md) for more CLI notes.
 
 ## 🔐 Permissions and Privacy
 
