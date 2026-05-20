@@ -1,4 +1,5 @@
 import type { RoomMode } from './types'
+import { normalizeLanguage, type TeamLanguage } from '../shared/i18n'
 
 export type BuiltinGroupTemplateRiskLevel = 'normal' | 'sensitive' | 'professional'
 
@@ -2543,10 +2544,20 @@ export function filterBuiltinGroupTemplates(filter: BuiltinGroupTemplateFilter):
     .map(result => result.template)
 }
 
-export function buildBuiltinGroupTemplateWelcomeMessage(template: BuiltinGroupTemplate): string {
-  const moderatorName = template.roles[0]?.name ?? '主持人'
-  const riskNotice = templateRiskNotice(template)
+export function buildBuiltinGroupTemplateWelcomeMessage(template: BuiltinGroupTemplate, languageInput: TeamLanguage = 'zh-CN'): string {
+  const language = normalizeLanguage(languageInput)
+  const moderatorName = template.roles[0]?.name ?? (language === 'en' ? 'Moderator' : '主持人')
+  const riskNotice = templateRiskNotice(template, language)
   const questions = template.suggestedQuestions.map((question, index) => `${index + 1}. ${question}`).join('\n')
+  if (language === 'en') {
+    return [
+      `Welcome to "${template.name}". I am "${moderatorName}". I will first help clarify your goal, then bring in the right roles to collaborate when needed.`,
+      riskNotice,
+      'You can describe your problem directly, or start from one of these prompts:',
+      questions,
+      'To begin faster, tell me your goal, current situation, constraints, and expected output.',
+    ].filter(Boolean).join('\n\n')
+  }
   return [
     `欢迎来到「${template.name}」。我是「${moderatorName}」，我会先帮你澄清目标，再按需要召唤合适的角色一起协作。`,
     riskNotice,
@@ -2565,11 +2576,13 @@ function templateSuggestedQuestions(template: BuiltinGroupTemplateDefinition): s
   return [...COMMON_TEMPLATE_STARTER_QUESTIONS, ...specific]
 }
 
-function templateRiskNotice(template: BuiltinGroupTemplate): string | undefined {
+function templateRiskNotice(template: BuiltinGroupTemplate, language: TeamLanguage = 'zh-CN'): string | undefined {
   if (template.riskLevel === 'professional') {
+    if (language === 'en') return 'Boundary reminder: this template is for information organization and risk spotting only. It does not replace qualified professional advice. For health, safety, legal, financial, tax, engineering, or other high-stakes matters, consult a qualified professional.'
     return '边界提醒：该模板仅用于信息整理和风险提示，不能替代专业人士意见；涉及健康、安全、法律、资金、税务、工程等重大事项，请咨询具备资质的专业人士。'
   }
   if (template.riskLevel === 'sensitive') {
+    if (language === 'en') return 'Usage reminder: I can help organize plans, risks, and communication materials. For compliance, commitments, privacy, or major decisions, verify against real materials and professional judgment.'
     return '使用提醒：我可以帮助整理方案、风险和沟通材料；涉及合规、承诺、隐私或重大决策时，请结合真实资料和专业确认。'
   }
   return undefined

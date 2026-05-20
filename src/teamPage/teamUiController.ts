@@ -8,6 +8,7 @@ import {
   type BuiltinGroupTemplate,
 } from '../group/builtinGroupTemplates'
 import type { ChatSite, GroupChat, GroupRole, RoomMode } from '../group/types'
+import { localizeCategory, localizeGroupTemplate, normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 import { requireElement } from './domRefs'
 import type { RoleFrameState } from './iframeHost'
@@ -26,6 +27,7 @@ export interface TeamUiControllerDependencies {
   togglePeopleDrawerEl: HTMLButtonElement
   rolePanelEl: HTMLElement
   iframeHost: TeamUiIframeHost
+  getLanguage(): TeamLanguage
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
   getSelectedLoginSite(): ChatSite
@@ -150,20 +152,21 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     confirmGroupTemplateCreateEl.addEventListener('click', () => {
       const template = selectedGroupTemplateId ? getBuiltinGroupTemplate(selectedGroupTemplateId) : undefined
       if (!template) return
+      const localizedTemplate = localizeGroupTemplate(template, language())
       deps.newChatNameEl.value = ''
       closeGroupTemplateModal(groupTemplateModalEl, groupTemplateSearchEl, groupTemplateCategoriesEl, groupTemplateListEl, confirmGroupTemplateCreateEl)
       setChatCreatePopoverVisible(false)
       deps.runCommand('GROUP_CHAT_CREATE', {
-        name: template.defaultChatName,
-        mode: template.defaultMode,
-        roles: template.roles,
-        welcomeMessage: buildBuiltinGroupTemplateWelcomeMessage(template),
+        name: localizedTemplate.defaultChatName,
+        mode: localizedTemplate.defaultMode,
+        roles: localizedTemplate.roles,
+        welcomeMessage: buildBuiltinGroupTemplateWelcomeMessage(localizedTemplate, language()),
       }).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))
     })
 
     deps.createChatFormEl.addEventListener('submit', event => {
       event.preventDefault()
-      const name = deps.newChatNameEl.value.trim() || '新群聊'
+      const name = deps.newChatNameEl.value.trim() || ui('新群聊')
       const mode = readNewChatMode()
       deps.newChatNameEl.value = ''
       setChatCreatePopoverVisible(false)
@@ -225,10 +228,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
 
   function renderGroupTemplateList(listEl: HTMLElement, confirmButton: HTMLButtonElement): void {
     listEl.replaceChildren()
-    const templates = filterBuiltinGroupTemplates({
-      category: selectedGroupTemplateCategory,
-      query: groupTemplateSearchQuery,
-    })
+    const templates = filteredGroupTemplates()
     if (templates.length === 0) {
       listEl.append(groupTemplateEmptyState(confirmButton))
       return
@@ -249,7 +249,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
       const button = document.createElement('button')
       button.type = 'button'
       button.className = `group-template-category-filter${selectedGroupTemplateCategory === category ? ' active' : ''}`
-      button.textContent = category
+      button.textContent = localizeCategory(category, language()) ?? category
       button.setAttribute('aria-pressed', String(selectedGroupTemplateCategory === category))
       button.addEventListener('click', () => {
         selectedGroupTemplateCategory = category
@@ -266,9 +266,10 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     listEl: HTMLElement,
     confirmButton: HTMLButtonElement,
   ): HTMLButtonElement {
+    const displayTemplate = localizeGroupTemplate(template, language())
     const button = document.createElement('button')
     button.type = 'button'
-    const hasLongSummary = template.summary.length > GROUP_TEMPLATE_INLINE_SUMMARY_LIMIT
+    const hasLongSummary = displayTemplate.summary.length > GROUP_TEMPLATE_INLINE_SUMMARY_LIMIT
     button.className = [
       'group-template-option',
       selectedGroupTemplateId === template.id ? 'active' : '',
@@ -290,31 +291,31 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     const titleRow = document.createElement('span')
     titleRow.className = 'group-template-title-row'
     const name = document.createElement('strong')
-    name.textContent = template.name
+    name.textContent = displayTemplate.name
     titleRow.append(name)
     const risk = groupTemplateRiskLabel(template)
     if (risk) titleRow.append(risk)
     const count = document.createElement('span')
     count.className = 'group-template-role-count'
-    count.textContent = `${template.roles.length} 个角色`
+    count.textContent = ui(`${template.roles.length} 个角色`)
     heading.append(titleRow, count)
     const category = document.createElement('span')
     category.className = 'group-template-category'
-    category.textContent = template.category
+    category.textContent = displayTemplate.category
     top.append(heading, category)
 
     const summary = document.createElement('span')
     summary.className = 'group-template-summary'
-    summary.textContent = template.summary
-    if (hasLongSummary) summary.title = template.summary
+    summary.textContent = displayTemplate.summary
+    if (hasLongSummary) summary.title = displayTemplate.summary
 
     const meta = document.createElement('span')
     meta.className = 'group-template-meta'
-    meta.textContent = `适用：${template.userTypes.slice(0, 3).join('、')}`
+    meta.textContent = ui(`适用：${displayTemplate.userTypes.slice(0, 3).join(language() === 'en' ? ', ' : '、')}`)
 
     const roles = document.createElement('span')
     roles.className = 'group-template-roles'
-    for (const role of template.roles) {
+    for (const role of displayTemplate.roles) {
       const chip = document.createElement('span')
       chip.textContent = role.name
       roles.append(chip)
@@ -330,16 +331,16 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     empty.className = 'group-template-empty'
 
     const title = document.createElement('strong')
-    title.textContent = '没有找到匹配的小组'
+    title.textContent = ui('没有找到匹配的小组')
     const description = document.createElement('p')
-    description.textContent = '可以试试换个说法，例如搜索「写论文」「合同」「面试」「投放」「装修」。'
+    description.textContent = ui('可以试试换个说法，例如搜索「写论文」「合同」「面试」「投放」「装修」。')
     const actions = document.createElement('div')
     actions.className = 'group-template-empty-actions'
 
     const clearSearch = document.createElement('button')
     clearSearch.type = 'button'
     clearSearch.className = 'btn btn-ghost'
-    clearSearch.textContent = '清空搜索'
+    clearSearch.textContent = ui('清空搜索')
     clearSearch.addEventListener('click', () => {
       const searchEl = requireElement<HTMLInputElement>('#group-template-search')
       groupTemplateSearchQuery = ''
@@ -352,7 +353,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     const showAll = document.createElement('button')
     showAll.type = 'button'
     showAll.className = 'btn btn-ghost'
-    showAll.textContent = '查看全部模板'
+    showAll.textContent = ui('查看全部模板')
     showAll.addEventListener('click', () => {
       const searchEl = requireElement<HTMLInputElement>('#group-template-search')
       const categoriesEl = requireElement<HTMLElement>('#group-template-categories')
@@ -375,7 +376,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
     if (template.riskLevel === 'normal') return undefined
     const label = document.createElement('span')
     label.className = `group-template-risk group-template-risk-${template.riskLevel}`
-    label.textContent = template.riskLevel === 'professional' ? '专业边界' : '需谨慎'
+    label.textContent = ui(template.riskLevel === 'professional' ? '专业边界' : '需谨慎')
     return label
   }
 
@@ -384,10 +385,7 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
       updateGroupTemplateConfirmButton(confirmButton)
       return
     }
-    const visible = filterBuiltinGroupTemplates({
-      category: selectedGroupTemplateCategory,
-      query: groupTemplateSearchQuery,
-    }).some(template => template.id === selectedGroupTemplateId)
+    const visible = filteredGroupTemplates().some(template => template.id === selectedGroupTemplateId)
     if (!visible) selectedGroupTemplateId = undefined
     updateGroupTemplateConfirmButton(confirmButton)
   }
@@ -395,7 +393,38 @@ export function createTeamUiController(deps: TeamUiControllerDependencies): Team
   function updateGroupTemplateConfirmButton(confirmButton: HTMLButtonElement): void {
     const template = selectedGroupTemplateId ? getBuiltinGroupTemplate(selectedGroupTemplateId) : undefined
     confirmButton.disabled = !template
-    confirmButton.textContent = template?.riskLevel === 'professional' ? '了解限制并创建' : '确认创建'
+    confirmButton.textContent = ui(template?.riskLevel === 'professional' ? '了解限制并创建' : '确认创建')
+  }
+
+  function filteredGroupTemplates(): BuiltinGroupTemplate[] {
+    const query = groupTemplateSearchQuery.trim().toLowerCase()
+    const byCategory = filterBuiltinGroupTemplates({ category: selectedGroupTemplateCategory })
+    if (!query) return byCategory
+    const rawMatches = new Set(filterBuiltinGroupTemplates({
+      category: selectedGroupTemplateCategory,
+      query: groupTemplateSearchQuery,
+    }).map(template => template.id))
+    return byCategory.filter(template => rawMatches.has(template.id) || localizedGroupSearchText(template).includes(query))
+  }
+
+  function localizedGroupSearchText(template: BuiltinGroupTemplate): string {
+    const displayTemplate = localizeGroupTemplate(template, language())
+    return [
+      displayTemplate.name,
+      displayTemplate.category,
+      displayTemplate.summary,
+      ...displayTemplate.userTypes,
+      ...displayTemplate.aliases,
+      ...displayTemplate.roles.flatMap(role => [role.name, role.description, role.systemPrompt]),
+    ].join('\n').toLowerCase()
+  }
+
+  function language(): TeamLanguage {
+    return normalizeLanguage(deps.getLanguage())
+  }
+
+  function ui(source: string): string {
+    return translateUi(source, language())
   }
 
   function readNewChatMode(): RoomMode {

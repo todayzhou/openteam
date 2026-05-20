@@ -64,6 +64,13 @@
         <div class="rail-bottom">
           <button id="settings-button" class="rail-btn" type="button" aria-label="设置" aria-expanded="false" aria-controls="settings-menu">⚙</button>
           <div id="settings-menu" class="settings-menu" hidden>
+            <div class="settings-section">
+              <div class="settings-label">语言</div>
+              <div class="settings-segment" role="group" aria-label="语言">
+                <button id="language-en" class="settings-segment-option" type="button" aria-pressed="true">English</button>
+                <button id="language-zh" class="settings-segment-option" type="button" aria-pressed="false">中文</button>
+              </div>
+            </div>
             <button id="agent-control-toggle" class="btn settings-toggle" type="button" aria-pressed="false">本机智能体控制：关闭</button>
             <p id="agent-control-status" class="tiny settings-hint">端口 19826，仅允许本机连接。</p>
           </div>

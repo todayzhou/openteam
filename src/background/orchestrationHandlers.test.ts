@@ -279,7 +279,7 @@ describe('orchestration background handlers', () => {
     const externalCalls = harness.externalComplete.mock.calls as unknown as Array<[{ prompt: string }]>
     const prompt = externalCalls[0]?.[0].prompt ?? ''
     expect(prompt).toContain('把写手人设改得更像财经编辑')
-    expect(prompt).toContain('当前编排草稿')
+    expect(prompt).toContain('currentFlow')
     expect(prompt).toContain('已生成写作节点')
     expect(generated.createdRoleIds).toEqual([])
     expect(generated.reusedRoleIds).toEqual(['role-auto'])
@@ -304,7 +304,7 @@ function makeStore(roleIds: string[] = ['role-1']): OpenTeamStore {
     orchestrationFlowOrderByChatId: {},
     orchestrationRunsById: {},
     activeOrchestrationRunIdByChatId: {},
-    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826 },
+    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826, language: 'en' },
   }
 }
 

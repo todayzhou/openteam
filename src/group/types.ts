@@ -3,6 +3,7 @@ import type { MessageHighlightColor } from './highlightColors'
 
 export type RoomMode = 'independent' | 'collaborative'
 export type ChatSite = 'gemini' | 'chatgpt' | 'claude' | 'deepseek'
+export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
 export type ExternalModelFormat = 'openai' | 'anthropic'
 
@@ -49,6 +50,7 @@ export interface OpenTeamSettings {
   externalModelsById: Record<string, ExternalModelConfig>
   agentControlEnabled: boolean
   agentControlPort: number
+  language: OpenTeamLanguage
 }
 
 export interface ExternalModelConfig {

@@ -467,12 +467,27 @@ describe('prompt builder', () => {
     const userMessage = makeMessage('msg-1', 1, 'user', '你怎么看？')
     userMessage.references = [{ messageId: 'msg-ref', roleName: '产品经理', contentSnapshot: '需要两周上线' }]
 
-    const prompt = buildPrompt({ chat, role, userMessage, roles: [role] })
+    const prompt = buildPrompt({ chat, role, userMessage, roles: [role], language: 'zh-CN' })
 
     expect(prompt).toContain('你是「工程师」')
     expect(prompt).toContain('用户引用了「产品经理」的观点')
     expect(prompt).toContain('你怎么看？')
     expect(prompt).not.toContain('群聊成员')
+  })
+
+  it('can build English internal prompts from the centralized language setting', () => {
+    const chat = makeChat('chat-1')
+    const role = makeRole('role-a', 'Engineer')
+    role.description = 'Focus on technical risks'
+    const userMessage = makeMessage('msg-1', 1, 'user', 'What do you think?')
+
+    const prompt = buildPrompt({ chat, role, userMessage, roles: [role], language: 'en' })
+
+    expect(prompt).toContain('You are "Engineer".')
+    expect(prompt).toContain('Your responsibility:')
+    expect(prompt).toContain('User message:')
+    expect(prompt).toContain('Respond in English unless the user explicitly asks for another language.')
+    expect(prompt).not.toContain('请以')
   })
 
   it('skips persona in ordinary prompts when requested', () => {
@@ -482,7 +497,7 @@ describe('prompt builder', () => {
     role.systemPrompt = '这是完整人设'
     const userMessage = makeMessage('msg-1', 1, 'user', '你怎么看？')
 
-    const prompt = buildPrompt({ chat, role, userMessage, roles: [role], includePersona: false })
+    const prompt = buildPrompt({ chat, role, userMessage, roles: [role], includePersona: false, language: 'zh-CN' })
 
     expect(prompt).toContain('你是「工程师」')
     expect(prompt).toContain('你的职责')
@@ -497,7 +512,7 @@ describe('prompt builder', () => {
     const userMessage = makeMessage('msg-3', 3, 'user', '继续讨论')
     const unsyncedMessages = [{ ...makeMessage('msg-2', 2, 'assistant', '很长的上下文内容'), roleId: 'role-b', roleName: '产品经理' }]
 
-    expect(buildInitPrompt(chat, roleA, [roleA, roleB])).toContain('群聊成员')
+    expect(buildInitPrompt(chat, roleA, [roleA, roleB], true, 'zh-CN')).toContain('群聊成员')
 
     const prompt = buildPrompt({
       chat,
@@ -506,6 +521,7 @@ describe('prompt builder', () => {
       roles: [roleA, roleB],
       unsyncedMessages,
       maxContextChars: 4,
+      language: 'zh-CN',
     })
     expect(prompt).toContain('群聊成员')
     expect(prompt).toContain('[部分早期上下文已省略]')

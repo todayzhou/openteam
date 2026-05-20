@@ -36,7 +36,8 @@ function makeChat(id: string): GroupChat {
   }
 }
 
-function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: RoleTemplate[]; currentChat?: GroupChat }) {
+function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: RoleTemplate[]; currentChat?: GroupChat; language?: OpenTeamStore['settings']['language'] }) {
+  options.store.settings.language = options.language ?? 'zh-CN'
   const state = createTeamPageState()
   const addLibraryPeopleListEl = document.createElement('div')
   const addLibraryPeopleFormEl = document.createElement('form')
@@ -465,6 +466,41 @@ describe('team page people library view boundary', () => {
     expect(peopleLibraryListEl.textContent).not.toContain('人员1')
     expect(peopleLibraryBuiltinTabEl.className).toContain('active')
     expect(peopleLibraryListEl.querySelector('.template-delete')).toBeNull()
+  })
+
+  it('renders built-in people library content in English mode', () => {
+    const builtinTemplate: RoleTemplate = {
+      id: 'builtin-frankl',
+      type: 'builtin',
+      name: '弗兰克尔',
+      category: '思想风格顾问',
+      description: '意义疗法、责任、苦难中的尊严与行动方向',
+      defaultChatSite: 'gemini',
+      systemPrompt: '你是「弗兰克尔式意义顾问」。',
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const customTemplate = makeTemplate(1)
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      roleTemplateOrder: [customTemplate.id],
+      roleTemplatesById: { [customTemplate.id]: customTemplate },
+    }
+    const { view, peopleLibraryListEl, peopleLibraryBuiltinTabEl } = setupPeopleLibraryView({
+      store,
+      templates: [builtinTemplate, customTemplate],
+      language: 'en',
+    })
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    peopleLibraryBuiltinTabEl.click()
+
+    expect(peopleLibraryListEl.textContent).toContain('ViktorFrankl')
+    expect(peopleLibraryListEl.textContent).toContain('Built-in')
+    expect(peopleLibraryListEl.textContent).toContain('Thought-style advisors')
+    expect(peopleLibraryListEl.textContent).not.toContain('弗兰克尔')
+    expect(peopleLibraryListEl.textContent).not.toContain('内置')
   })
 
   it('searches people library entries by name, description, and persona text', () => {

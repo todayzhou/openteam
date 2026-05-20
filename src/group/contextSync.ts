@@ -1,4 +1,5 @@
-import type { GroupChat, GroupMessage, GroupRole } from './types'
+import { normalizeLanguage } from '../shared/i18n'
+import type { GroupChat, GroupMessage, GroupRole, OpenTeamLanguage } from './types'
 
 export interface UnsyncedContextResult {
   messages: GroupMessage[]
@@ -28,9 +29,10 @@ export function buildUnsyncedContext(
   messages: GroupMessage[],
   userMessage: GroupMessage,
   maxContextChars = 6000,
+  languageInput?: OpenTeamLanguage,
 ): UnsyncedContextResult {
   const unsyncedMessages = getUnsyncedMessagesForRole(chat, role, messages, userMessage)
-  const formatted = unsyncedMessages.map(formatContextMessage).join('\n\n')
+  const formatted = unsyncedMessages.map(message => formatContextMessage(message, languageInput)).join('\n\n')
   const truncated = truncateLatest(formatted, maxContextChars)
 
   return {
@@ -53,13 +55,14 @@ export function getContextCursorAfterAck(chat: GroupChat, messages?: GroupMessag
   return messages ? getLatestMessageSeq(chat, messages) : chat.nextMessageSeq - 1
 }
 
-export function formatContextMessage(message: GroupMessage): string {
+export function formatContextMessage(message: GroupMessage, languageInput?: OpenTeamLanguage): string {
+  const language = normalizeLanguage(languageInput)
   const speaker = message.type === 'assistant'
-    ? message.roleName ?? '人员'
+    ? message.roleName ?? (language === 'en' ? 'Person' : '人员')
     : message.type === 'user'
-      ? '用户'
-      : '系统'
-  return `${speaker}：${message.content}`
+      ? (language === 'en' ? 'User' : '用户')
+      : (language === 'en' ? 'System' : '系统')
+  return `${speaker}${language === 'en' ? ': ' : '：'}${message.content}`
 }
 
 function isMessageVisibleToRole(message: GroupMessage, roleId: string): boolean {

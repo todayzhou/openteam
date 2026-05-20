@@ -2,6 +2,7 @@
   "name": "@openteam/cli",
   "version": "0.1.0",
   "description": "OpenTeam local CLI for agent-controlled group chats",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "private": false,
   "bin": {

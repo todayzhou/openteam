@@ -84,6 +84,10 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
     if (typeof message.agentControlPort === 'number' && Number.isInteger(message.agentControlPort) && message.agentControlPort >= 1024 && message.agentControlPort <= 65535) {
       store.settings.agentControlPort = message.agentControlPort
     }
+    const language = readOptionalString(message.language)
+    if (language === 'en' || language === 'zh-CN') {
+      store.settings.language = language
+    }
   })
   await broadcastStoreUpdated(store)
   syncControlClient().catch(error => log.warn('control-client:settings-sync-failed', { error: errorReason(error) }))

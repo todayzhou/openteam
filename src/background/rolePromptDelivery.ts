@@ -42,7 +42,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
   const roleHistoryCount = countLocalRoleHistory(input.messages, input.role, input.userMessage.id)
   const includesPersona = shouldIncludePersonaForPrompt(input.role, roleHistoryCount)
   const replyAttemptId = input.newId('attempt')
-  const responseInstruction = responseInstructionForMessage(input.userMessage)
+  const responseInstruction = responseInstructionForMessage(input.userMessage, input.store.settings.language)
   const maxContextChars = contextCharBudgetForRole(input.store, input.role)
 
   if (isExternalModelRole(input.role)) {
@@ -66,7 +66,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
 
   const binding = input.runtimeFrames.getByRole(input.chat.id, input.role.id)
   if (!binding?.ready) throw new Error('人员 iframe 尚未就绪，请先恢复人员')
-  const unsyncedContext = buildUnsyncedContext(input.chat, input.role, input.messages, input.userMessage, maxContextChars)
+  const unsyncedContext = buildUnsyncedContext(input.chat, input.role, input.messages, input.userMessage, maxContextChars, input.store.settings.language)
   const content = buildPrompt({
     chat: input.chat,
     role: input.role,
@@ -76,6 +76,7 @@ export function prepareRolePromptDelivery(input: PrepareRolePromptDeliveryInput)
     reference: input.reference,
     includePersona: includesPersona,
     responseInstruction,
+    language: input.store.settings.language,
   })
 
   return {
@@ -150,8 +151,8 @@ function isRoleHistoryMessage(message: GroupMessage, roleId: string): boolean {
   return deliveryStatus === 'sent' || deliveryStatus === 'received'
 }
 
-function responseInstructionForMessage(message: GroupMessage): string | undefined {
+function responseInstructionForMessage(message: GroupMessage, language: OpenTeamStore['settings']['language']): string | undefined {
   return message.orchestrationKind === 'review'
-    ? buildOrchestrationReviewResponseInstruction()
+    ? buildOrchestrationReviewResponseInstruction(language)
     : undefined
 }

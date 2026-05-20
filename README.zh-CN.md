@@ -1,0 +1,162 @@
+# OpenTeam
+
+**语言:** [English](README.md) | 简体中文
+
+> 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek 组织成一个本地优先的 AI 专家团。
+
+OpenTeam 是一个 Manifest V3 Chrome 扩展。它不要求你配置模型 API Key，也不额外消耗 OpenAI、Claude、Gemini 或 DeepSeek 的 API token；它会复用你已经在浏览器里打开的 AI 网页会话，把任务发送给不同人员和不同模型，再把回复汇总到同一个群聊工作台。
+
+它适合处理需要多视角判断的问题：产品评审、技术方案审查、内容创作、个人决策、多模型对比，以及需要多个 AI 角色协作完成的连续任务。
+
+![OpenTeam 群聊预览](docs/assets/group-chat-ui-concept.png)
+
+## 核心亮点
+
+- **0 API token 工作流**：复用 AI 网站网页会话，而不是直接调用模型 API。
+- **多模型讨论**：在同一个群聊里调度 Gemini、ChatGPT、Claude、DeepSeek 等网页端模型。
+- **内置顾问库**：内置 38 个专家 / 思想风格顾问模板，也支持自定义人员。
+- **基于 @ 的消息路由**：用 `@人员` 定向提问，或用 `@所有人` 同时分发给整个团队。
+- **独立与协作两种模式**：先收集彼此独立的视角，再让成员参考、补充或反驳其他观点。
+- **本地优先存储**：群聊、人员、消息、笔记、高亮和设置都保存在浏览器本地存储中。
+- **智能体控制 CLI**：可选的 `openteamcli` 可以让本机智能体创建群聊、添加角色、发布任务并等待回复。
+
+## 工作原理
+
+OpenTeam 会把每个群聊成员绑定到一个 AI 网页会话。用户发送消息后，扩展会根据群聊模式、人员人设、引用消息和共享上下文构建 prompt，然后投递到该成员对应的 iframe AI 页面里，并监听网页回复。
+
+```text
+team.html
+  -> background service worker
+  -> AI site iframe
+  -> content script
+  -> AI webpage reply
+  -> OpenTeam message stream
+```
+
+当前支持的网页站点类型：
+
+| 站点 | 常见适用方向 |
+| --- | --- |
+| Gemini | 长上下文、研究、多模态材料 |
+| ChatGPT | 综合执行、工具化工作流、快速迭代 |
+| Claude | 长文档、审查、结构化写作、谨慎推理 |
+| DeepSeek | 代码、推理、中文任务和成本敏感场景 |
+
+这些只是常见使用方向，不代表固定排名。实际效果取决于模型版本、账号权益、任务类型和输入材料。
+
+## 从源码安装
+
+前置要求：
+
+- Node.js 20+
+- npm
+- Chrome 或其他 Chromium 系浏览器
+
+构建扩展：
+
+```bash
+npm install
+npm run build
+```
+
+在 Chrome 中加载：
+
+1. 打开 `chrome://extensions/`。
+2. 开启开发者模式。
+3. 点击 **加载已解压的扩展程序**。
+4. 选择生成的 `dist/` 目录。
+5. 点击 OpenTeam 扩展图标，打开团队工作台。
+
+如果修改了 `public/manifest.json`、`public/openteam-frame-rules.json` 或 content scripts，需要在 `chrome://extensions/` 里重新加载扩展。
+
+## 开发
+
+```bash
+npm install
+npm run dev
+```
+
+常用检查命令：
+
+```bash
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm run verify
+```
+
+`npm run verify` 会依次执行类型检查、单元测试、E2E harness 测试和生产构建。
+
+## CLI
+
+OpenTeam 包含一个本地 CLI 包，用于让智能体控制群聊。
+
+```bash
+npm run openteamcli -- doctor
+npm run openteamcli -- daemon start
+npm run openteamcli -- chat list
+```
+
+CLI 安装和发布说明见 [packages/openteamcli/README.md](packages/openteamcli/README.md)。
+
+## 权限与隐私
+
+OpenTeam 是本地优先的扩展，但安装前仍然值得了解它需要的浏览器权限：
+
+- `storage`：保存群聊、人员、笔记、设置和本地状态。
+- `tabs`：定位并和扩展页、AI 网站 tab / frame 通信。
+- `alarms`：调度运行时维护任务。
+- `declarativeNetRequest`：调整响应头，让支持的 AI 网站可以嵌入扩展的 iframe 工作区。
+- `clipboardRead` / `clipboardWrite`：支持复制和剪贴板相关交互。
+- Host permissions：允许 OpenTeam 访问支持的 AI 网站和嵌入式网页会话。
+
+OpenTeam 不提供云端同步。你的 AI 对话仍然会由你使用的 AI 网站处理，并受对应网站的账号规则、额度限制、隐私政策和服务条款约束。
+
+## 当前限制
+
+- OpenTeam 当前优先支持 Chrome / Chromium 系浏览器。
+- AI 站点适配依赖网页 DOM，目标网站改版可能导致 prompt 发送或回复监听失效。
+- iframe 工作区依赖 `declarativeNetRequest` 调整响应头，因此权限面比普通 popup 扩展更重。
+- 内置名人风格顾问是基于公开思想整理的提示词模板，不是真人参与，也不应被表述为真人参与。
+- 医疗、法律、金融等高风险输出仍需要用户自行判断，并咨询合格专业人士。
+
+## 目录结构
+
+```text
+public/                 Chrome 扩展 manifest、团队页、样式、DNR 规则
+src/background/         service worker、命令处理、运行时路由
+src/content/            AI 站点 content scripts、适配器、回复监听
+src/group/              群聊数据模型、存储、人员、prompt、@ 解析
+src/teamPage/           OpenTeam 工作台 UI
+packages/openteamcli/   本地 CLI 和智能体控制 daemon
+docs/                   产品笔记、技术设计和素材
+```
+
+## 参与贡献
+
+欢迎提交 issue 和 pull request。比较适合作为起点的方向包括：
+
+- AI 网站改版后的适配器修复。
+- 权限和隐私加固。
+- 群聊路由、prompt 构建、存储和 UI 流程的测试覆盖。
+- 文档、示例和上手体验改进。
+- 边界清晰的新顾问模板或编排模式。
+
+提交 pull request 前，请运行：
+
+```bash
+npm run verify
+```
+
+## 文档
+
+- [技术设计](docs/technical/)
+- [产品笔记](docs/prd/)
+- [OpenTeam CLI](packages/openteamcli/README.md)
+
+## 许可证
+
+OpenTeam 使用 [GNU Affero General Public License v3.0](LICENSE) 发布，SPDX 标识符为 `AGPL-3.0-only`。
+
+你可以使用、学习、修改和再分发本项目，也可以用于商业场景，但必须遵守 AGPL。如果你分发修改版，或把修改版作为网络服务提供给他人使用，你必须以相同许可证开放对应源码。

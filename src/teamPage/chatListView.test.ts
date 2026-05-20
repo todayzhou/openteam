@@ -14,7 +14,7 @@ describe('team page chat list view boundary', () => {
     expect(viewSource).toContain('function closeChatFrames(chatId: string)')
     expect(viewSource).toContain('function exportChatRecord(chat: GroupChat): void')
     expect(viewSource).toContain('function deleteChat(chatId: string)')
-    expect(viewSource).toContain("exportRecord.textContent = '导出记录'")
+    expect(viewSource).toContain("exportRecord.textContent = ui('导出记录')")
     expect(viewSource).toContain("runCommand('GROUP_CHAT_UPDATE'")
     expect(viewSource).toContain('formatChatExportMarkdown')
     expect(viewSource).toContain('safeChatExportFilename')

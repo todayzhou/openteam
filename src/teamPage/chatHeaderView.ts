@@ -1,4 +1,5 @@
 import type { GroupChat, GroupMessage, GroupRole, RoomMode } from '../group/types'
+import { normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 
 export interface ChatHeaderViewDependencies {
@@ -8,6 +9,7 @@ export interface ChatHeaderViewDependencies {
   chatStatusEl: HTMLElement
   togglePeopleDrawerEl: HTMLButtonElement
   openOrchestrationEl: HTMLButtonElement
+  getLanguage(): TeamLanguage
   getCurrentChat(): GroupChat | undefined
   getCurrentRoles(): GroupRole[]
   getCurrentMessages(): GroupMessage[]
@@ -23,25 +25,29 @@ export function createChatHeaderView(deps: ChatHeaderViewDependencies): ChatHead
     const roles = deps.getCurrentRoles()
     const messages = deps.getCurrentMessages()
     if (!chat) {
-      deps.chatTitleEl.textContent = '未选择群聊'
-      deps.chatSubtitleEl.textContent = '创建或选择一个群聊开始协作'
+      deps.chatTitleEl.textContent = ui('未选择群聊')
+      deps.chatSubtitleEl.textContent = ui('创建或选择一个群聊开始协作')
       deps.chatStatusEl.className = 'status-pill'
-      deps.chatStatusEl.textContent = '空'
-      deps.togglePeopleDrawerEl.textContent = '成员 0'
+      deps.chatStatusEl.textContent = ui('空')
+      deps.togglePeopleDrawerEl.textContent = ui('成员 0')
       deps.togglePeopleDrawerEl.disabled = true
       deps.openOrchestrationEl.hidden = true
       return
     }
 
     deps.chatTitleEl.textContent = chat.name
-    deps.chatSubtitleEl.textContent = roles.length ? `${modeLabel(chat.mode)} · ${roles.length} 位成员 · ${messages.length} 条消息` : '暂无成员'
+    deps.chatSubtitleEl.textContent = roles.length ? ui(`${modeLabel(chat.mode)} · ${roles.length} 位成员 · ${messages.length} 条消息`) : ui('暂无成员')
     deps.chatStatusEl.className = `status-pill status-${chat.status}`
-    deps.chatStatusEl.textContent = chatStatusLabel(chat.status)
+    deps.chatStatusEl.textContent = ui(chatStatusLabel(chat.status))
     deps.togglePeopleDrawerEl.disabled = false
-    deps.togglePeopleDrawerEl.textContent = `成员 ${roles.length}`
-    deps.togglePeopleDrawerEl.setAttribute('aria-label', deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板')
+    deps.togglePeopleDrawerEl.textContent = ui(`成员 ${roles.length}`)
+    deps.togglePeopleDrawerEl.setAttribute('aria-label', ui(deps.state.peopleDrawerOpen ? '收起成员面板' : '打开成员面板'))
     deps.togglePeopleDrawerEl.setAttribute('aria-expanded', String(deps.state.peopleDrawerOpen))
     deps.openOrchestrationEl.hidden = chat.mode !== 'collaborative'
+  }
+
+  function ui(source: string): string {
+    return translateUi(source, normalizeLanguage(deps.getLanguage()))
   }
 
   return { renderChatHeader }

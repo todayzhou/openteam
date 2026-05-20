@@ -52,11 +52,11 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       const modelId = readOptionalString(message.modelId) ?? store.settings.externalModelOrder[0]
       const model = modelId ? store.settings.externalModelsById[modelId] : undefined
       if (!model) throw new Error('请先配置外部模型后再使用 AI 生成人设')
-      return { model }
+      return { model, language: store.settings.language }
     })
     if (!deps.externalModelClient) throw new Error('AI 生成人设客户端不可用')
 
-    const prompt = buildRoleTemplatePersonaPrompt({ description })
+    const prompt = buildRoleTemplatePersonaPrompt({ description, language: result.language })
     const completion = await deps.externalModelClient.complete({ model: result.model, prompt })
     const persona = parseGeneratedPersonDraft(completion.content)
     deps.log.info('role-template-persona:generate', {

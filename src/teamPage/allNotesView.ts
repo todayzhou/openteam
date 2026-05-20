@@ -1,4 +1,5 @@
 import type { OpenTeamStore, RichNoteDocument } from '../group/types'
+import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { NoteEditorAdapter, NoteEditorFactory, NoteScope, NoteToolbarCommand } from './notesView'
 
 export interface AllNotesViewDependencies {
@@ -52,7 +53,7 @@ export function createAllNotesView(deps: AllNotesViewDependencies): AllNotesView
     if (items.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'all-notes-empty'
-      empty.textContent = '还没有笔记'
+      empty.textContent = ui('还没有笔记')
       deps.allNotesListEl.append(empty)
       return
     }
@@ -106,10 +107,10 @@ export function createAllNotesView(deps: AllNotesViewDependencies): AllNotesView
     button.setAttribute('aria-pressed', String(activeTarget?.id === item.id))
     const title = document.createElement('span')
     title.className = 'all-note-target-title'
-    title.textContent = item.title
+    title.textContent = ui(item.title)
     const meta = document.createElement('span')
     meta.className = 'all-note-target-meta'
-    meta.textContent = item.meta
+    meta.textContent = ui(item.meta)
     button.append(title, meta)
     button.addEventListener('click', () => {
       saveActiveNote()
@@ -124,8 +125,8 @@ export function createAllNotesView(deps: AllNotesViewDependencies): AllNotesView
 
   function renderActiveTarget(forceContent = false): void {
     if (!activeTarget) return
-    deps.allNotesActiveTitleEl.textContent = activeTarget.title
-    deps.allNotesActiveMetaEl.textContent = activeTarget.meta
+    deps.allNotesActiveTitleEl.textContent = ui(activeTarget.title)
+    deps.allNotesActiveMetaEl.textContent = ui(activeTarget.meta)
     if (forceContent || loadedTargetId !== activeTarget.id) {
       loadedTargetId = activeTarget.id
       editor?.setContent(activeTarget.content)
@@ -168,6 +169,10 @@ export function createAllNotesView(deps: AllNotesViewDependencies): AllNotesView
       return
     }
     editorLoadPromise?.then(createdEditor => createdEditor.focus()).catch(() => undefined)
+  }
+
+  function ui(source: string): string {
+    return translateUi(source, normalizeLanguage(deps.getStore().settings.language))
   }
 
   function scheduleSaveActiveNote(): void {

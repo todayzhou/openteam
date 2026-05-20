@@ -1,50 +1,66 @@
-import type { OrchestrationReviewResult, OrchestrationStage } from './types'
+import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
+import type { OpenTeamLanguage, OrchestrationReviewResult, OrchestrationStage } from './types'
 
 export interface BuildOrchestrationRoleMessageContentInput {
   userTask: string
   currentStage: OrchestrationStage
   previousReviewResult?: OrchestrationReviewResult
+  language?: OpenTeamLanguage
 }
 
 export interface BuildOrchestrationReviewMessageContentInput {
   userTask: string
   currentStage: OrchestrationStage
   reviewCriteria?: string
+  language?: OpenTeamLanguage
 }
 
 export function buildOrchestrationRoleMessageContent(input: BuildOrchestrationRoleMessageContentInput): string {
+  const language = normalizeLanguage(input.language)
   const previousInstruction = input.previousReviewResult?.nextRoundInstruction?.trim()
   return joinSections([
-    `当前任务：\n${input.userTask}`,
-    input.currentStage.description ? `当前节点任务：\n${input.currentStage.description}` : undefined,
-    previousInstruction ? `上次审核未通过要求：\n${previousInstruction}` : undefined,
+    `${language === 'en' ? 'Current task:' : '当前任务：'}\n${input.userTask}`,
+    input.currentStage.description ? `${language === 'en' ? 'Current node task:' : '当前节点任务：'}\n${input.currentStage.description}` : undefined,
+    previousInstruction ? `${language === 'en' ? 'Previous review failed with this requirement:' : '上次审核未通过要求：'}\n${previousInstruction}` : undefined,
   ])
 }
 
 export function buildOrchestrationReviewMessageContent(input: BuildOrchestrationReviewMessageContentInput): string {
+  const language = normalizeLanguage(input.language)
   return joinSections([
-    `当前任务：\n${input.userTask}`,
-    input.currentStage.description ? `当前审核节点任务：\n${input.currentStage.description}` : undefined,
-    `审核标准：\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || '判断当前结果是否满足任务要求。'}`,
-    buildOrchestrationReviewResponseInstruction(),
+    `${language === 'en' ? 'Current task:' : '当前任务：'}\n${input.userTask}`,
+    input.currentStage.description ? `${language === 'en' ? 'Current review node task:' : '当前审核节点任务：'}\n${input.currentStage.description}` : undefined,
+    `${language === 'en' ? 'Review criteria:' : '审核标准：'}\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || (language === 'en' ? 'Decide whether the current result satisfies the task requirements.' : '判断当前结果是否满足任务要求。')}`,
+    buildOrchestrationReviewResponseInstruction(language),
   ])
 }
 
-export function buildOrchestrationReviewResponseInstruction(): string {
+export function buildOrchestrationReviewResponseInstruction(languageInput?: OpenTeamLanguage): string {
+  const language = normalizeLanguage(languageInput)
   return joinSections([
-    '你必须只返回合法 JSON，不要 Markdown，不要解释文字，不要代码块。',
-    `JSON 格式必须匹配：\n${reviewSchema()}`,
-    'decision 只能是 pass 或 fail。不通过时使用 fail，并在 nextRoundInstruction 写清楚下一次重试要改什么。',
+    PROMPT_I18N[language].jsonOnly,
+    `${language === 'en' ? 'The JSON format must match:' : 'JSON 格式必须匹配：'}\n${reviewSchema(language)}`,
+    language === 'en'
+      ? 'decision must be pass or fail. Use fail when the review does not pass, and write exactly what to improve in nextRoundInstruction.'
+      : 'decision 只能是 pass 或 fail。不通过时使用 fail，并在 nextRoundInstruction 写清楚下一次重试要改什么。',
   ])
 }
 
-function reviewSchema(): string {
-  return JSON.stringify({
-    decision: 'pass | fail',
-    reason: '审核说明',
-    failedCriteria: ['未满足的标准'],
-    nextRoundInstruction: 'decision 为 fail 时必填，否则为空字符串',
-  }, null, 2)
+function reviewSchema(language: OpenTeamLanguage): string {
+  const schema = language === 'en'
+    ? {
+        decision: 'pass | fail',
+        reason: 'Review explanation',
+        failedCriteria: ['Criteria that were not met'],
+        nextRoundInstruction: 'Required when decision is fail; otherwise an empty string',
+      }
+    : {
+        decision: 'pass | fail',
+        reason: '审核说明',
+        failedCriteria: ['未满足的标准'],
+        nextRoundInstruction: 'decision 为 fail 时必填，否则为空字符串',
+      }
+  return JSON.stringify(schema, null, 2)
 }
 
 function joinSections(sections: Array<string | undefined>): string {

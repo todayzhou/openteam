@@ -6,6 +6,7 @@ import {
   MAX_ORCHESTRATION_MAX_ROUNDS,
 } from './types'
 import { OPENTEAM_CONTROL_DEFAULT_PORT } from '../control/protocol'
+import { defaultLanguageForEnvironment, normalizeLanguage } from '../shared/i18n'
 import type { ExternalModelConfig, GroupChat, GroupMessage, GroupRole, MessageHighlight, OpenTeamSettings, OpenTeamStore, OpenTeamViewState, OrchestrationFlow, OrchestrationRun, RichNoteDocument, RoleTemplate } from './types'
 import { normalizeMessageHighlightColor } from './highlightColors'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
@@ -61,6 +62,7 @@ const DEFAULT_SETTINGS: OpenTeamSettings = {
   externalModelsById: {},
   agentControlEnabled: false,
   agentControlPort: OPENTEAM_CONTROL_DEFAULT_PORT,
+  language: defaultLanguageForEnvironment(),
 }
 
 let storeQueue: Promise<void> = Promise.resolve()
@@ -83,7 +85,7 @@ export function createDefaultStore(): OpenTeamStore {
     messageHighlightsById: {},
     externalRoleMemoriesById: {},
     externalChatMemoriesById: {},
-    settings: { ...DEFAULT_SETTINGS },
+    settings: defaultSettings(),
     viewState: {
       chatReadSeqById: {},
       chatHasNewMessageById: {},
@@ -571,6 +573,10 @@ function defaultCustomRoleTemplatesById(): Record<string, RoleTemplate> {
   return Object.fromEntries(DEFAULT_CUSTOM_ROLE_TEMPLATES.map(template => [template.id, { ...template }]))
 }
 
+function defaultSettings(): OpenTeamSettings {
+  return { ...DEFAULT_SETTINGS, language: defaultLanguageForEnvironment() }
+}
+
 function customRoleTemplateOrder(store: OpenTeamStore): string[] {
   const customIds = new Set(Object.entries(store.roleTemplatesById)
     .filter(([, template]) => template.type !== 'builtin')
@@ -600,7 +606,7 @@ export function messageChunkStorageKey(chatId: string, chunkId: string): string 
 
 function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION): OpenTeamSettings {
   if (!isRecord(raw)) {
-    return { ...DEFAULT_SETTINGS }
+    return defaultSettings()
   }
 
   const externalModelsById = normalizeExternalModelRecord(raw.externalModelsById)
@@ -613,7 +619,13 @@ function normalizeSettings(raw: unknown, storedVersion = CURRENT_STORE_VERSION):
     externalModelsById,
     agentControlEnabled: raw.agentControlEnabled === true,
     agentControlPort: readAgentControlPort(raw.agentControlPort),
+    language: readSettingsLanguage(raw.language),
   }
+}
+
+function readSettingsLanguage(raw: unknown): OpenTeamSettings['language'] {
+  if (typeof raw === 'undefined' || raw === null) return defaultLanguageForEnvironment()
+  return normalizeLanguage(raw)
 }
 
 function readAgentControlPort(raw: unknown): number {

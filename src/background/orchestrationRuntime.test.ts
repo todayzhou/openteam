@@ -97,7 +97,7 @@ describe('orchestration runtime', () => {
     expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
     const initialStore = await harness.getStore()
     const rolePromptMessage = latestUserMessage(initialStore, 'chat-1')
-    expect(rolePromptMessage.content).toContain('当前任务：\nShip the plan')
+    expect(rolePromptMessage.content).toContain('Current task:\nShip the plan')
     expect(rolePromptMessage.content).not.toContain('Round')
     expect(rolePromptMessage.content).not.toContain('Orchestration step')
     expect(rolePromptMessage.mentionedRoleIds).toEqual(['role-1', 'role-2'])
@@ -142,11 +142,11 @@ describe('orchestration runtime', () => {
     const started = await harness.invoke({ type: 'GROUP_ORCHESTRATION_RUN', chatId: 'chat-1', flowId: 'flow-1', task: '产品经理出需求，工程师判断需求是否合理' }) as { run: { id: string } }
 
     const prompt = promptCalls(harness.tabsSendMessage)[0][1].content
-    expect(prompt).toContain('你正在一个 AI 群聊中。')
-    expect(prompt).toContain('群聊成员')
-    expect(prompt).toContain('你上次之后，群聊里有这些新内容：')
-    expect(prompt).toContain('产品经理：已有群聊背景')
-    expect(prompt).toContain('用户最新消息：\n当前任务：\n产品经理出需求，工程师判断需求是否合理')
+    expect(prompt).toContain('You are in an AI group chat.')
+    expect(prompt).toContain('Group chat members')
+    expect(prompt).toContain('Since your last turn, the group chat has these new items:')
+    expect(prompt).toContain('产品经理: 已有群聊背景')
+    expect(prompt).toContain('User latest message:\nCurrent task:\n产品经理出需求，工程师判断需求是否合理')
     const stored = await harness.getStore()
     expect(stored.orchestrationRunsById[started.run.id].status).toBe('running')
   })
@@ -533,7 +533,7 @@ describe('orchestration runtime', () => {
     expect(promptCalls(harness.tabsSendMessage)[2][0]).toBe(103)
     expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('a done')
     expect(promptCalls(harness.tabsSendMessage)[2][1].content).not.toContain('b done')
-    expect(promptCalls(harness.tabsSendMessage)[2][1].content).toContain('你必须只返回合法 JSON')
+    expect(promptCalls(harness.tabsSendMessage)[2][1].content).toContain('Return valid JSON only')
     expect(promptCalls(harness.tabsSendMessage)[2][1].content.trim()).toContain('"decision": "pass | fail"')
 
     await harness.invoke({
@@ -855,7 +855,7 @@ function makeStore(roleIds: string[]): OpenTeamStore {
     orchestrationFlowOrderByChatId: { 'chat-1': ['flow-1'] },
     orchestrationRunsById: {},
     activeOrchestrationRunIdByChatId: {},
-    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826 },
+    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826, language: 'en' },
   }
 }
 

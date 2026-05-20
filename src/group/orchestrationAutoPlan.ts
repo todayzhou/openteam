@@ -1,3 +1,4 @@
+import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import type { ChatSite, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow } from './types'
 
 export type AutoOrchestrationNodeKind = 'execute' | 'review'
@@ -56,6 +57,9 @@ const MAX_AUTO_NODES = 8
 const DEFAULT_AUTO_MAX_NODE_EXECUTIONS = 30
 
 export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput): string {
+  const language = normalizeLanguage(input.store.settings.language)
+  if (language === 'en') return buildEnglishAutoOrchestrationPrompt(input)
+
   return [
     '你是 OpenTeam 的 AI 群聊流程编排规划器。',
     '你只能返回 JSON，不能返回 Markdown，不能解释，不能使用代码块。',
@@ -80,6 +84,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     `13. 节点数不能超过 ${MAX_AUTO_NODES} 个。`,
     '14. maxNodeExecutions 根据流程复杂度设置，默认 30。',
     '15. 自动编排生成的人员可以根据本次指令更新 description 和 systemPrompt；复用普通现有人员时不要改写其人设。',
+    `16. ${PROMPT_I18N['zh-CN'].personaLanguageInstruction}`,
     '',
     '可用站点：',
     JSON.stringify([
@@ -148,6 +153,101 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
   ].join('\n')
 }
 
+function buildEnglishAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput): string {
+  return [
+    'You are the OpenTeam AI group-chat workflow planner.',
+    PROMPT_I18N.en.jsonOnly,
+    '',
+    'Goal: based on the run task and this orchestration instruction, generate or modify an executable, editable AI group-chat workflow.',
+    'The run task is the business goal to accomplish when the workflow runs. This orchestration instruction only describes how to generate or modify the workflow. Do not confuse them.',
+    'If currentFlow exists, modify it incrementally and preserve people, nodes, and edges that the instruction does not ask you to change.',
+    '',
+    'Hard constraints:',
+    '1. Prefer reusing existingRoles when existingRoles is not empty. When reusing a role, roles[].reuseRoleId must be an id from existingRoles.',
+    '2. Only create new people when existing people cannot cover a necessary responsibility.',
+    '3. If existingRoles is empty, create 2-5 new people.',
+    '4. Each roles[].preferredSite must be "chatgpt", "gemini", "claude", or "deepseek"; if the user explicitly requests ChatGPT, Gemini, Claude, or DeepSeek, assign the relevant people to that site.',
+    '5. Do not create kind=parallel nodes. Express parallelism by connecting one node to multiple downstream nodes.',
+    '6. Multiple upstream nodes connecting to one node means a join; that node waits for all upstream nodes to finish.',
+    '7. The same roleKey cannot appear in nodes that may run in parallel. If the same person must do multiple things, make them serial.',
+    '8. Use kind "execute" for execution nodes and kind "review" for review nodes.',
+    '9. Each node must have exactly one roleKey.',
+    '10. Review nodes must include review.criteria, review.maxAttempts, and review.onMaxAttempts.',
+    '11. A review fail branch may go back to an upstream revision node; a pass branch may be omitted, which means the workflow ends after passing.',
+    '12. Do not generate isolated or unreachable nodes.',
+    `13. The workflow cannot exceed ${MAX_AUTO_NODES} nodes.`,
+    '14. Set maxNodeExecutions based on workflow complexity; default to 30.',
+    '15. Auto-generated people may update description and systemPrompt based on this instruction; do not rewrite personas for ordinary reused existing people.',
+    `16. ${PROMPT_I18N.en.personaLanguageInstruction}`,
+    '17. Write generated role names, descriptions, systemPrompt, node titles, instructions, and review criteria in English unless the user explicitly asks for another language.',
+    '',
+    'Available sites:',
+    JSON.stringify([
+      { value: 'chatgpt', label: 'ChatGPT' },
+      { value: 'gemini', label: 'Gemini' },
+      { value: 'claude', label: 'Claude' },
+      { value: 'deepseek', label: 'DeepSeek' },
+    ], null, 2),
+    `Default site: ${input.store.settings.defaultChatSite}`,
+    '',
+    'Return JSON schema:',
+    JSON.stringify({
+      flowName: 'Workflow name',
+      maxNodeExecutions: 30,
+      roles: [
+        {
+          key: 'pm',
+          reuseRoleId: 'Fill when reusing an existing person; otherwise omit',
+          name: 'Product Manager',
+          description: 'Person responsibility',
+          systemPrompt: 'Persona prompt',
+          preferredSite: 'chatgpt',
+        },
+      ],
+      nodes: [
+        {
+          id: 'n1',
+          kind: 'execute',
+          roleKeys: ['pm'],
+          title: 'Requirements breakdown',
+          instruction: 'Specific task for this node',
+        },
+        {
+          id: 'review',
+          kind: 'review',
+          roleKeys: ['reviewer'],
+          title: 'Final review',
+          instruction: 'Decide whether the result is deliverable',
+          review: {
+            criteria: 'Review criteria',
+            maxAttempts: 3,
+            onMaxAttempts: 'stop',
+          },
+        },
+      ],
+      edges: [
+        { from: 'n1', to: 'review' },
+        { from: 'review', to: 'n1', branch: 'fail' },
+      ],
+    }, null, 2),
+    '',
+    'Run task:',
+    input.task,
+    '',
+    'This orchestration instruction:',
+    input.instruction?.trim() || input.task,
+    '',
+    'existingRoles:',
+    JSON.stringify(input.existingRoles.map(role => summarizeExistingRole(role, input.store)), null, 2),
+    '',
+    'currentFlow:',
+    input.currentFlow ? JSON.stringify(summarizeCurrentFlow(input.currentFlow), null, 2) : 'none',
+    '',
+    'Auto orchestration history:',
+    JSON.stringify(summarizeHistory(input.history ?? input.currentFlow?.autoPlanHistory ?? []), null, 2),
+  ].join('\n')
+}
+
 export function buildAutoOrchestrationRepairPrompt(input: {
   task: string
   instruction?: string
@@ -158,13 +258,14 @@ export function buildAutoOrchestrationRepairPrompt(input: {
   invalidOutput: string
   error: string
 }): string {
+  const language = normalizeLanguage(input.store.settings.language)
   return [
     buildAutoOrchestrationPrompt(input),
     '',
-    '上一次输出无效。请只修复 JSON，不要解释。',
-    `错误：${input.error}`,
+    language === 'en' ? 'The previous output was invalid. Fix only the JSON. Do not explain.' : '上一次输出无效。请只修复 JSON，不要解释。',
+    `${language === 'en' ? 'Error' : '错误'}：${input.error}`,
     '',
-    '上一次输出：',
+    language === 'en' ? 'Previous output:' : '上一次输出：',
     input.invalidOutput.slice(0, 12000),
   ].join('\n')
 }

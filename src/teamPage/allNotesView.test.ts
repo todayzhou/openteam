@@ -53,6 +53,18 @@ describe('all notes view', () => {
     expect(editor.setContent).toHaveBeenLastCalledWith(note('当前群笔记'))
   })
 
+  it('renders global note labels in English mode', () => {
+    const store = createDefaultStore()
+    const { view } = setupAllNotesView(store, undefined, undefined, 'en')
+
+    view.registerAllNotesEvents()
+    document.querySelector<HTMLButtonElement>('#open-all-notes')?.click()
+
+    expect(document.querySelector<HTMLElement>('#all-notes-active-title')?.textContent).toBe('Global notes')
+    expect(document.querySelector<HTMLElement>('#all-notes-active-meta')?.textContent).toBe('Manual note')
+    expect(document.querySelector<HTMLElement>('#all-notes-list')?.textContent).not.toContain('全局笔记')
+  })
+
   it('switches note targets and saves rich text edits to the selected chat note', () => {
     vi.useFakeTimers()
     const chat = makeChat('chat-1', '群聊')
@@ -105,7 +117,9 @@ function setupAllNotesView(
   store: OpenTeamStore,
   getCurrentChat: () => GroupChat | undefined = () => undefined,
   runCommand = vi.fn(async () => undefined),
+  language: OpenTeamStore['settings']['language'] = 'zh-CN',
 ): { view: ReturnType<typeof createAllNotesView>; editor: NoteEditorAdapter; updateEditor: () => void } {
+  store.settings.language = language
   document.body.innerHTML = `
     <button id="open-all-notes"></button>
     <div id="all-notes-modal" hidden>

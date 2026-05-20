@@ -127,6 +127,19 @@ describe('orchestration auto plan', () => {
     expect(prompt).toContain('"id": "role-1"')
   })
 
+  it('builds an English planner prompt when English mode is selected', () => {
+    const store = createDefaultStore()
+    store.settings.language = 'en'
+    const role: GroupRole = { id: 'role-1', chatId: 'chat-1', name: 'Product Manager', chatSite: 'chatgpt', description: 'Plans product work', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }
+    const prompt = buildAutoOrchestrationPrompt({ task: 'Create a plan', existingRoles: [role], store })
+
+    expect(prompt).toContain('OpenTeam AI group-chat workflow planner')
+    expect(prompt).toContain('Prefer reusing existingRoles')
+    expect(prompt).toContain('Run task:')
+    expect(prompt).toContain('Write generated role names, descriptions, systemPrompt, node titles, instructions, and review criteria in English')
+    expect(prompt).not.toContain('优先复用 existingRoles')
+  })
+
   it('builds a modification prompt with task, instruction, current flow and planner history separated', () => {
     const store = createDefaultStore()
     const role: GroupRole = { id: 'role-1', chatId: 'chat-1', name: '写手', createdBy: 'orchestration-auto', chatSite: 'deepseek', systemPrompt: '写作人设', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 }

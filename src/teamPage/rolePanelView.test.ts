@@ -31,7 +31,7 @@ describe('team page role panel view boundary', () => {
     expect(viewSource).toContain('button.dataset.roleDelete = role.id')
     expect(viewSource).toContain("ready: '在线'")
     expect(viewSource).not.toContain("ready: '就绪'")
-    expect(viewSource).toContain('function roleContextProgress(role: GroupRole): HTMLElement')
+    expect(viewSource).toContain('function roleContextProgress(role: GroupRole, ui: (source: string) => string): HTMLElement')
     expect(viewSource).toContain("`已读 ${role.contextCursor} 条`")
     expect(viewSource).toContain("'连接 API'")
     expect(viewSource).toContain("'网页已连接'")
@@ -194,6 +194,7 @@ describe('team page role panel view boundary', () => {
 
 function makeStoreWithRole(): OpenTeamStore {
   const store = createDefaultStore()
+  store.settings.language = 'zh-CN'
   const chat: GroupChat = {
     id: 'chat-1',
     name: '产品会',

@@ -1,6 +1,7 @@
 import { normalizeChatGptGptsUrl } from './conversationUrl'
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
+import { localizeRoleTemplate } from '../shared/i18n'
 
 export const ROLE_NAME_MAX_CHARACTERS = 50
 
@@ -204,7 +205,7 @@ export function createGroupRole(
   const chat = store.chatsById[input.chatId]
   if (!chat) throw new Error(`找不到群聊：${input.chatId}`)
 
-  const template = input.templateId ? getRoleTemplateById(store, input.templateId) : undefined
+  const template = input.templateId ? getLocalizedRoleTemplateById(store, input.templateId) : undefined
   if (input.templateId && !template) throw new Error(`找不到人员库人员：${input.templateId}`)
 
   const name = assertValidRoleName(input.name ?? template?.name ?? '', [])
@@ -365,16 +366,17 @@ function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index
   if (item.source === 'library') {
     const template = getRoleTemplateById(store, item.roleTemplateId)
     if (!template) throw new Error(`找不到人员库人员：${item.roleTemplateId}`)
+    const localizedTemplate = localizeRoleTemplate(template, store.settings.language)
     return {
       templateId: item.roleTemplateId,
       modelSource: item.modelSource,
-      chatSite: item.chatSite ?? template.defaultChatSite ?? store.settings.defaultChatSite,
-      externalModelId: item.externalModelId ?? template.defaultExternalModelId,
-      name: assertValidRoleName(template.name, []),
-      description: template.description,
-      systemPrompt: normalizeSystemPrompt(template.systemPrompt),
+      chatSite: item.chatSite ?? localizedTemplate.defaultChatSite ?? store.settings.defaultChatSite,
+      externalModelId: item.externalModelId ?? localizedTemplate.defaultExternalModelId,
+      name: assertValidRoleName(localizedTemplate.name, []),
+      description: localizedTemplate.description,
+      systemPrompt: normalizeSystemPrompt(localizedTemplate.systemPrompt),
       avatarColor: item.avatarColor,
-      chatGptGptsUrl: template.chatGptGptsUrl,
+      chatGptGptsUrl: localizedTemplate.chatGptGptsUrl,
     }
   }
 
@@ -392,6 +394,11 @@ function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index
   }
 
   throw new Error(`第 ${index + 1} 个添加项无效`)
+}
+
+function getLocalizedRoleTemplateById(store: OpenTeamStore, templateId: string): RoleTemplate | undefined {
+  const template = getRoleTemplateById(store, templateId)
+  return template ? localizeRoleTemplate(template, store.settings.language) : undefined
 }
 
 function assertUniqueRoleModelIdentity(

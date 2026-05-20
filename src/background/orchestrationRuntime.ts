@@ -395,7 +395,7 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     }
 
     removePendingStageRun(run, stageIndex)
-    const promptMessage = createStagePromptMessage(deps, chat, run, stage, stageIndex, taskMessage.content, timestamp)
+    const promptMessage = createStagePromptMessage(deps, store, chat, run, stage, stageIndex, taskMessage.content, timestamp)
     promptMessage.targetRoleIds = targetRoleIds
     promptMessage.mentionedRoleIds = targetRoleIds
     promptMessage.mentionsAll = false
@@ -610,10 +610,10 @@ async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDepende
   }
 }
 
-function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, chat: GroupChat, run: OrchestrationRun, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
+function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
   const content = stage.kind === 'review'
-    ? buildOrchestrationReviewMessageContent({ userTask, currentStage: stage })
-    : buildOrchestrationRoleMessageContent({ userTask, currentStage: stage, previousReviewResult: lastReviewResult(run) })
+    ? buildOrchestrationReviewMessageContent({ userTask, currentStage: stage, language: store.settings.language })
+    : buildOrchestrationRoleMessageContent({ userTask, currentStage: stage, previousReviewResult: lastReviewResult(run), language: store.settings.language })
 
   return {
     id: deps.newId('msg'),

@@ -164,6 +164,7 @@ describe('background group chat experience handlers', () => {
 
   it('creates chat roles from built-in templates through the background batch command', async () => {
     const store = makeStore()
+    store.settings.language = 'zh-CN'
     store.chatsById['chat-1'] = makeChat('chat-1')
     store.chatOrder = ['chat-1']
     const harness = await setupBackground(store)
@@ -185,6 +186,31 @@ describe('background group chat experience handlers', () => {
     })
     expect(accepted.store.roleTemplateOrder).toEqual(defaultCustomTemplateIds)
     expect(accepted.store.roleTemplatesById).toEqual(Object.fromEntries(DEFAULT_CUSTOM_ROLE_TEMPLATES.map(template => [template.id, template])))
+  })
+
+  it('creates localized built-in chat roles when the store language is English', async () => {
+    const store = makeStore()
+    store.settings.language = 'en'
+    store.chatsById['chat-1'] = makeChat('chat-1')
+    store.chatOrder = ['chat-1']
+    const harness = await setupBackground(store)
+
+    const accepted = await harness.invoke({
+      type: 'GROUP_ROLES_CREATE_BATCH',
+      chatId: 'chat-1',
+      items: [
+        { source: 'library', roleTemplateId: 'builtin-frankl', chatSite: 'claude' },
+      ],
+    }) as { ok: boolean; roles: GroupRole[] }
+
+    expect(accepted.ok).toBe(true)
+    expect(accepted.roles[0]).toMatchObject({
+      templateId: 'builtin-frankl',
+      name: 'ViktorFrankl',
+      chatSite: 'claude',
+      systemPrompt: expect.stringContaining('Respond in English'),
+    })
+    expect(accepted.roles[0]?.systemPrompt).not.toContain('弗兰克尔')
   })
 
   it('saves rich note documents for global and chat scopes', async () => {
@@ -267,9 +293,9 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls).toHaveLength(1)
     const prompt = promptCalls[0][1]
     expect(prompt.includesPersona).toBe(true)
-    expect(prompt.content).toContain('你是「调查记者」。')
-    expect(prompt.content).toContain('你的职责：\n调查记者')
-    expect(prompt.content).toContain('用户消息：\n你好')
+    expect(prompt.content).toContain('You are "调查记者".')
+    expect(prompt.content).toContain('Your responsibility:\n调查记者')
+    expect(prompt.content).toContain('User message:\n你好')
   })
 
   it('includes persona on the first user message even after the frame reports Gemini home', async () => {
@@ -1297,7 +1323,7 @@ function makeStore(): OpenTeamStore {
     globalNote: undefined,
     chatNotesById: {},
     messageHighlightsById: {},
-    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826 },
+    settings: { defaultMode: 'independent', maxContextChars: 6000, defaultChatSite: 'gemini', externalModelOrder: [], externalModelsById: {}, agentControlEnabled: false, agentControlPort: 19826, language: 'en' },
     viewState: { chatReadSeqById: {}, chatHasNewMessageById: {} },
   }
 }

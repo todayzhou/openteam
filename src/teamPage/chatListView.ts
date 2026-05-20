@@ -1,5 +1,6 @@
 import { createDefaultStore, loadStore, saveStore } from '../group/store'
 import type { GroupChat, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
+import { normalizeLanguage, translateUi } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 import { formatChatExportMarkdown, safeChatExportFilename } from './chatExport'
 import { formatChatListTime } from './chatExperience'
@@ -41,11 +42,11 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
   function renderChatList() {
     const store = deps.getStore()
     const chats = store.chatOrder.map(chatId => store.chatsById[chatId]).filter((chat): chat is GroupChat => Boolean(chat))
-    deps.storeSummaryEl.textContent = `${chats.length} 个群聊 · ${deps.getTemplates().length} 个人员库人员`
+    deps.storeSummaryEl.textContent = ui(`${chats.length} 个群聊 · ${deps.getTemplates().length} 个人员库人员`)
     deps.chatListEl.replaceChildren()
 
     if (chats.length === 0) {
-      deps.chatListEl.append(deps.emptyCard('还没有群聊', '在上方创建一个群聊，然后从人员库添加人员。'))
+      deps.chatListEl.append(deps.emptyCard(ui('还没有群聊'), ui('在上方创建一个群聊，然后从人员库添加人员。')))
       return
     }
 
@@ -55,7 +56,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       item.className = `chat-item${chat.id === deps.state.selectedChatId ? ' active' : ''}${hasActivity ? ' has-activity' : ''}`
       item.tabIndex = 0
       item.setAttribute('role', 'button')
-      item.setAttribute('aria-label', `切换到 ${chat.name}`)
+      item.setAttribute('aria-label', language() === 'en' ? `Switch to ${chat.name}` : `切换到 ${chat.name}`)
       item.addEventListener('click', () => switchChat(chat.id))
       item.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return
@@ -79,7 +80,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
       const menuButton = document.createElement('button')
       menuButton.type = 'button'
       menuButton.className = 'icon-btn chat-menu-btn'
-      menuButton.setAttribute('aria-label', `打开 ${chat.name} 的群聊菜单`)
+      menuButton.setAttribute('aria-label', language() === 'en' ? `Open chat menu for ${chat.name}` : `打开 ${chat.name} 的群聊菜单`)
       menuButton.textContent = '⋯'
       menuButton.addEventListener('click', event => {
         event.stopPropagation()
@@ -138,9 +139,9 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const rename = document.createElement('button')
     rename.type = 'button'
     rename.className = 'btn btn-ghost'
-    rename.textContent = '编辑名称'
+    rename.textContent = ui('编辑名称')
     rename.addEventListener('click', () => {
-      const nextName = window.prompt('编辑群聊名称', chat.name)?.trim()
+      const nextName = window.prompt(ui('编辑名称'), chat.name)?.trim()
       deps.state.chatMenuChatId = undefined
       if (!nextName) {
         renderChatList()
@@ -151,7 +152,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const duplicate = document.createElement('button')
     duplicate.type = 'button'
     duplicate.className = 'btn btn-ghost'
-    duplicate.textContent = '复制群聊'
+    duplicate.textContent = ui('复制群聊')
     duplicate.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
@@ -160,7 +161,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const exportRecord = document.createElement('button')
     exportRecord.type = 'button'
     exportRecord.className = 'btn btn-ghost'
-    exportRecord.textContent = '导出记录'
+    exportRecord.textContent = ui('导出记录')
     exportRecord.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
@@ -169,7 +170,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const clearMessages = document.createElement('button')
     clearMessages.type = 'button'
     clearMessages.className = 'btn btn-ghost'
-    clearMessages.textContent = '清空消息'
+    clearMessages.textContent = ui('清空消息')
     clearMessages.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
@@ -179,7 +180,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const closeFrames = document.createElement('button')
     closeFrames.type = 'button'
     closeFrames.className = 'btn btn-ghost'
-    closeFrames.textContent = '关闭群聊'
+    closeFrames.textContent = ui('关闭群聊')
     closeFrames.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
@@ -188,7 +189,7 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'btn btn-ghost btn-danger'
-    remove.textContent = '删除群聊'
+    remove.textContent = ui('删除群聊')
     remove.addEventListener('click', () => {
       deps.state.chatMenuChatId = undefined
       renderChatList()
@@ -197,6 +198,14 @@ export function createChatListView(deps: ChatListViewDependencies): ChatListView
     })
     menu.append(rename, duplicate, exportRecord, clearMessages, closeFrames, remove)
     return menu
+  }
+
+  function language() {
+    return normalizeLanguage(deps.getStore().settings.language)
+  }
+
+  function ui(source: string): string {
+    return translateUi(source, language())
   }
 
   function exportChatRecord(chat: GroupChat): void {

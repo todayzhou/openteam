@@ -8,6 +8,7 @@ describe('orchestration message content builders', () => {
       userTask: 'Create a launch plan.',
       currentStage: makeRoleStage(),
       previousReviewResult: makeReviewResult(),
+      language: 'zh-CN',
     })
 
     expect(content).toContain('当前任务：\nCreate a launch plan.')
@@ -23,6 +24,7 @@ describe('orchestration message content builders', () => {
       userTask: 'Create a launch plan.',
       currentStage: makeReviewStage(),
       reviewCriteria: 'Plan must include risks and owner.',
+      language: 'zh-CN',
     })
 
     expect(content).toContain('审核标准：\nPlan must include risks and owner.')
@@ -31,6 +33,21 @@ describe('orchestration message content builders', () => {
     expect(content).toContain('"nextRoundInstruction": "decision 为 fail 时必填，否则为空字符串"')
     expect(content).not.toContain('群聊成员')
     expect(content).not.toContain('你上次之后')
+  })
+
+  it('builds English orchestration instructions when English mode is selected', () => {
+    const content = buildOrchestrationReviewMessageContent({
+      userTask: 'Create a launch plan.',
+      currentStage: makeReviewStage(),
+      reviewCriteria: 'Plan must include risks and owner.',
+      language: 'en',
+    })
+
+    expect(content).toContain('Current task:\nCreate a launch plan.')
+    expect(content).toContain('Review criteria:\nPlan must include risks and owner.')
+    expect(content).toContain('Return valid JSON only')
+    expect(content).toContain('"reason": "Review explanation"')
+    expect(content).not.toContain('审核标准')
   })
 })
 

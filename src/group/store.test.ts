@@ -13,6 +13,7 @@ import {
 } from './store'
 import { BUILTIN_ROLE_TEMPLATES } from './builtinRoleTemplates'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
+import { defaultLanguageForEnvironment } from '../shared/i18n'
 import type { GroupMessage, OpenTeamStore } from './types'
 
 describe('group store', () => {
@@ -74,6 +75,7 @@ describe('group store', () => {
         externalModelsById: {},
         agentControlEnabled: false,
         agentControlPort: 19826,
+        language: defaultLanguageForEnvironment(),
       },
       viewState: {
         chatReadSeqById: {},
@@ -133,8 +135,58 @@ describe('group store', () => {
         externalModelsById: {},
         agentControlEnabled: false,
         agentControlPort: 19826,
+        language: defaultLanguageForEnvironment(),
       },
     })
+  })
+
+  it('normalizes the saved interface language', async () => {
+    stored[STORE_KEY] = {
+      settings: {
+        language: 'zh-CN',
+      },
+    }
+
+    await expect(loadStore()).resolves.toMatchObject({
+      settings: {
+        language: 'zh-CN',
+      },
+    })
+
+    stored = {
+      [STORE_KEY]: {
+        settings: {
+          language: 'fr',
+        },
+      },
+    }
+
+    await expect(loadStore()).resolves.toMatchObject({
+      settings: {
+        language: 'en',
+      },
+    })
+  })
+
+  it('uses the browser language as the default for stores without a saved language', async () => {
+    const originalNavigator = globalThis.navigator
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { language: 'zh-CN', languages: ['zh-CN', 'en-US'] },
+    })
+
+    try {
+      await expect(loadStore()).resolves.toMatchObject({
+        settings: {
+          language: 'zh-CN',
+        },
+      })
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: originalNavigator,
+      })
+    }
   })
 
   it('seeds existing empty stores with default custom role templates once', async () => {

@@ -37,6 +37,7 @@ describe('createTeamUiController', () => {
       togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
       rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
       iframeHost: { restoreChat },
+      getLanguage: () => 'zh-CN',
       getCurrentChat: () => chat,
       getCurrentRoles: () => roles,
       getSelectedLoginSite: () => 'gemini',
@@ -73,6 +74,7 @@ describe('createTeamUiController', () => {
       togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
       rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
       iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
       getCurrentChat: () => undefined,
       getCurrentRoles: () => [],
       getSelectedLoginSite: () => 'gemini',
@@ -107,6 +109,53 @@ describe('createTeamUiController', () => {
     expect(document.querySelector<HTMLFormElement>('#create-chat-form')!.hidden).toBe(true)
   })
 
+  it('renders and creates group templates in English mode', () => {
+    const runCommand = vi.fn(async () => undefined)
+
+    createTeamUiController({
+      state: createTeamPageState(),
+      settingsButtonEl: document.querySelector<HTMLButtonElement>('#settings-button')!,
+      settingsMenuEl: document.querySelector<HTMLElement>('#settings-menu')!,
+      quickCreateChatEl: document.querySelector<HTMLButtonElement>('#quick-create-chat')!,
+      createChatFormEl: document.querySelector<HTMLFormElement>('#create-chat-form')!,
+      newChatNameEl: document.querySelector<HTMLInputElement>('#new-chat-name')!,
+      togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
+      rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
+      iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'en',
+      getCurrentChat: () => undefined,
+      getCurrentRoles: () => [],
+      getSelectedLoginSite: () => 'gemini',
+      render: vi.fn(),
+      renderChatList: vi.fn(),
+      renderRolePanel: vi.fn(),
+      renderAddPersonDialog: vi.fn(),
+      closePeopleModals: vi.fn(),
+      closeExternalModels: vi.fn(),
+      registerComposerEvents: vi.fn(),
+      registerPeopleLibraryEvents: vi.fn(),
+      registerExternalModelsEvents: vi.fn(),
+      runCommand,
+      showError: vi.fn(),
+      log: { debug: vi.fn(), info: vi.fn() },
+    }).registerUi()
+
+    document.querySelector<HTMLButtonElement>('#open-group-template-create')!.click()
+    const firstTemplateButton = document.querySelector<HTMLButtonElement>('.group-template-option')!
+    expect(firstTemplateButton.textContent).toContain('Study Master Group')
+    expect(firstTemplateButton.textContent).toContain('StudyPlanner')
+    expect(firstTemplateButton.textContent).not.toContain('学霸学习群')
+
+    firstTemplateButton.click()
+    document.querySelector<HTMLButtonElement>('#confirm-group-template-create')!.click()
+
+    expect(runCommand).toHaveBeenCalledWith('GROUP_CHAT_CREATE', expect.objectContaining({
+      name: 'Study Master Group',
+      roles: expect.arrayContaining([expect.objectContaining({ name: 'StudyPlanner' })]),
+      welcomeMessage: expect.stringContaining('Welcome to "Study Master Group"'),
+    }))
+  })
+
   it('filters group templates by category and search in the picker', () => {
     createTeamUiController({
       state: createTeamPageState(),
@@ -118,6 +167,7 @@ describe('createTeamUiController', () => {
       togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
       rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
       iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
       getCurrentChat: () => undefined,
       getCurrentRoles: () => [],
       getSelectedLoginSite: () => 'gemini',
@@ -169,6 +219,7 @@ describe('createTeamUiController', () => {
       togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
       rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
       iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
       getCurrentChat: () => undefined,
       getCurrentRoles: () => [],
       getSelectedLoginSite: () => 'gemini',
@@ -208,6 +259,7 @@ describe('createTeamUiController', () => {
       togglePeopleDrawerEl: document.querySelector<HTMLButtonElement>('#toggle-people-drawer')!,
       rolePanelEl: document.querySelector<HTMLElement>('#role-panel')!,
       iframeHost: { restoreChat: vi.fn(() => []) },
+      getLanguage: () => 'zh-CN',
       getCurrentChat: () => undefined,
       getCurrentRoles: () => [],
       getSelectedLoginSite: () => 'gemini',

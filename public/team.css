@@ -722,6 +722,44 @@ h3 {
   justify-content: flex-start;
 }
 
+.settings-section {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.settings-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border: 1px solid rgba(132, 153, 171, 0.18);
+  border-radius: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-menu .settings-segment-option {
+  justify-content: center;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-menu .settings-segment-option[aria-pressed="true"] {
+  background: rgba(47, 216, 204, 0.16);
+  color: var(--text);
+}
+
 .settings-toggle {
   min-height: 34px;
   padding-inline: 10px;

@@ -1,4 +1,6 @@
 import { ROLE_NAME_MAX_CHARACTERS } from './roleTemplates'
+import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
+import type { OpenTeamLanguage } from './types'
 
 export interface GeneratedPersonDraft {
   name: string
@@ -8,12 +10,39 @@ export interface GeneratedPersonDraft {
 
 export interface RoleTemplatePersonaPromptInput {
   description: string
+  language?: OpenTeamLanguage
 }
 
 export function buildRoleTemplatePersonaPrompt(input: RoleTemplatePersonaPromptInput): string {
+  const language = normalizeLanguage(input.language)
+  if (language === 'en') {
+    return [
+      'You are the OpenTeam people-library persona generator.',
+      PROMPT_I18N.en.jsonOnly,
+      '',
+      'Goal: based on a short user description, generate a reusable person suitable for an AI group chat.',
+      '',
+      'Hard requirements:',
+      `1. name is a short person name, at most ${ROLE_NAME_MAX_CHARACTERS} characters.`,
+      '2. description is a one-sentence responsibility summary.',
+      '3. systemPrompt is a persona prompt that can be sent directly to a model. It must clearly describe identity, working style, output habits, and boundaries.',
+      `4. ${PROMPT_I18N.en.personaLanguageInstruction}`,
+      '',
+      'Return JSON schema:',
+      JSON.stringify({
+        name: 'Growth Advisor',
+        description: 'Advises from acquisition, conversion, and review perspectives.',
+        systemPrompt: 'You are a growth advisor. First identify the goal and constraints, then give actionable recommendations.',
+      }, null, 2),
+      '',
+      'User description:',
+      input.description.trim(),
+    ].join('\n')
+  }
+
   return [
     '你是 OpenTeam 的人员库人设生成器。',
-    '只能返回 JSON，不能返回 Markdown，不能解释，不能使用代码块。',
+    PROMPT_I18N['zh-CN'].jsonOnly,
     '',
     '目标：根据用户的一段描述，生成一个适合加入 AI 群聊的可复用人员。',
     '',
@@ -21,7 +50,7 @@ export function buildRoleTemplatePersonaPrompt(input: RoleTemplatePersonaPromptI
     `1. name 是简短人员名称，最多 ${ROLE_NAME_MAX_CHARACTERS} 个字。`,
     '2. description 是一句话职责摘要。',
     '3. systemPrompt 是可直接发给模型的人设提示词，要写清楚身份、工作方式、输出习惯和边界。',
-    '4. systemPrompt 使用中文，避免空泛口号，尽量可执行。',
+    `4. ${PROMPT_I18N['zh-CN'].personaLanguageInstruction}`,
     '',
     '返回 JSON schema：',
     JSON.stringify({

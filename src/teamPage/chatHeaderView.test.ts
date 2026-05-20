@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import type { GroupChat, RoomMode } from '../group/types'
+import type { GroupChat, GroupMessage, GroupRole, RoomMode } from '../group/types'
 import { createTeamPageState } from './appState'
 import { createChatHeaderView } from './chatHeaderView'
 
@@ -18,9 +18,21 @@ describe('chat header view', () => {
 
     expect(harness.openOrchestrationEl.hidden).toBe(true)
   })
+
+  it('renders chat status and member counts in English mode', () => {
+    const harness = createHarness('collaborative', 'en')
+    harness.roles.push({ id: 'role-1', chatId: harness.chat.id, name: 'Engineer', status: 'ready', contextCursor: 0, createdAt: 1, updatedAt: 1 })
+    harness.messages.push({ id: 'msg-1', chatId: harness.chat.id, seq: 1, type: 'user', content: 'Hello', createdAt: 1, status: 'received' })
+
+    harness.view.renderChatHeader()
+
+    expect(harness.chatStatusEl.textContent).toBe('Active')
+    expect(harness.chatSubtitleEl.textContent).toBe('Collaborative mode · 1 members · 1 messages')
+    expect(harness.togglePeopleDrawerEl.textContent).toBe('Members 1')
+  })
 })
 
-function createHarness(mode: RoomMode) {
+function createHarness(mode: RoomMode, language: 'zh-CN' | 'en' = 'zh-CN') {
   const chat: GroupChat = {
     id: 'chat-1',
     name: '群聊',
@@ -37,6 +49,8 @@ function createHarness(mode: RoomMode) {
   const chatStatusEl = document.createElement('span')
   const togglePeopleDrawerEl = document.createElement('button')
   const openOrchestrationEl = document.createElement('button')
+  const roles: GroupRole[] = []
+  const messages: GroupMessage[] = []
   const view = createChatHeaderView({
     state: createTeamPageState(),
     chatTitleEl,
@@ -44,9 +58,10 @@ function createHarness(mode: RoomMode) {
     chatStatusEl,
     togglePeopleDrawerEl,
     openOrchestrationEl,
+    getLanguage: () => language,
     getCurrentChat: () => chat,
-    getCurrentRoles: () => [],
-    getCurrentMessages: () => [],
+    getCurrentRoles: () => roles,
+    getCurrentMessages: () => messages,
   })
-  return { chat, openOrchestrationEl, view }
+  return { chat, roles, messages, chatStatusEl, chatSubtitleEl, togglePeopleDrawerEl, openOrchestrationEl, view }
 }

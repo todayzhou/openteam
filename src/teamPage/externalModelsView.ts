@@ -1,4 +1,5 @@
 import type { ExternalModelConfig, ExternalModelFormat, OpenTeamStore } from '../group/types'
+import { normalizeLanguage, translateUi } from '../shared/i18n'
 
 export interface ExternalModelsViewDependencies {
   getStore(): OpenTeamStore
@@ -45,7 +46,7 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     if (models.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'empty-card'
-      empty.textContent = '暂无外部模型'
+      empty.textContent = ui('暂无外部模型')
       deps.externalModelsListEl.append(empty)
       return
     }
@@ -74,17 +75,17 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
     const edit = document.createElement('button')
     edit.type = 'button'
     edit.className = 'btn btn-ghost'
-    edit.textContent = '编辑'
+    edit.textContent = ui('编辑')
     edit.addEventListener('click', () => fillForm(model))
     const test = document.createElement('button')
     test.type = 'button'
     test.className = 'btn btn-ghost'
-    test.textContent = '测试'
+    test.textContent = ui('测试')
     test.addEventListener('click', () => testModel(model, test))
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'btn btn-danger'
-    remove.textContent = '删除'
+    remove.textContent = ui('删除')
     remove.addEventListener('click', () => deleteModel(model))
     actions.append(test, edit, remove)
     card.append(body, actions)
@@ -106,7 +107,8 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   }
 
   function deleteModel(model: ExternalModelConfig): void {
-    if (!window.confirm(`确定删除外部模型「${model.name}」吗？`)) return
+    const message = language() === 'en' ? `Delete external model "${model.name}"?` : `确定删除外部模型「${model.name}」吗？`
+    if (!window.confirm(message)) return
     deps.runCommand('EXTERNAL_MODEL_DELETE', { modelId: model.id })
       .then(() => {
         resetForm()
@@ -116,12 +118,12 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
   }
 
   async function testModel(model: ExternalModelConfig, button: HTMLButtonElement): Promise<void> {
-    const originalText = button.textContent ?? '测试'
+    const originalText = button.textContent ?? ui('测试')
     button.disabled = true
-    button.textContent = '测试中'
+    button.textContent = ui('测试中')
     try {
       await deps.testExternalModel(model.id)
-      button.textContent = '测试通过'
+      button.textContent = ui('测试通过')
     } catch (error) {
       button.textContent = originalText
       deps.showError(error instanceof Error ? error.message : String(error))
@@ -173,6 +175,14 @@ export function createExternalModelsView(deps: ExternalModelsViewDependencies): 
 
   function readFormat(): ExternalModelFormat {
     return deps.externalModelFormatEl.value === 'anthropic' ? 'anthropic' : 'openai'
+  }
+
+  function language() {
+    return normalizeLanguage(deps.getStore().settings.language)
+  }
+
+  function ui(source: string): string {
+    return translateUi(source, language())
   }
 
   return { openExternalModels, closeExternalModels, registerExternalModelsEvents, renderExternalModels }
