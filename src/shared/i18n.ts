@@ -6,9 +6,6 @@ export type TeamLanguage = OpenTeamLanguage
 export const DEFAULT_LANGUAGE: TeamLanguage = 'en'
 
 const UI_TRANSLATIONS: Record<string, string> = {
-  '输入内测码后可使用 30 天': 'Enter a beta code to use OpenTeam for 30 days',
-  '内测码': 'Beta code',
-  '激活': 'Activate',
   '缩小窗口': 'Minimize window',
   '全屏窗口': 'Fullscreen window',
   '调整窗口大小': 'Resize window',

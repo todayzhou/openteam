@@ -173,9 +173,8 @@ flowchart LR
 - [src/group/conversationUrl.ts](../src/group/conversationUrl.ts)：支持的会话 URL 和默认站点 URL 处理。
 - [src/group/highlightColors.ts](../src/group/highlightColors.ts)：消息高亮颜色规范化。
 
-### Access 与 Shared 工具
+### Shared 工具
 
-- [src/access/inviteGate.ts](../src/access/inviteGate.ts)、[src/access/inviteCode.ts](../src/access/inviteCode.ts)、[src/access/inviteCodeHashes.json](../src/access/inviteCodeHashes.json)：本地内测码门禁和激活持久化。
 - [src/shared/i18n.ts](../src/shared/i18n.ts)：UI 翻译、人员/模板本地化、prompt 语言规则和语言规范化。
 - [src/shared/logger.ts](../src/shared/logger.ts)：运行时模块使用的小型 scoped logger。
 

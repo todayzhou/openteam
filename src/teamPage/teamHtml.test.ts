@@ -18,17 +18,15 @@ const REMOVED_SITE_IDS = ['ki' + 'mi', 'q' + 'wen']
 const removedSiteLabel = (siteId: string): string => siteId === REMOVED_SITE_IDS[0] ? 'K' + 'imi' : '千' + '问'
 
 describe('team.html chat creation UI', () => {
-  it('starts behind a local invite-code activation gate', () => {
+  it('starts unlocked without a local invite-code activation gate', () => {
     const html = readTeamDocument()
 
-    expect(html).toContain('<body class="access-locked">')
-    expect(html).toContain('id="invite-gate"')
-    expect(html).toContain('id="invite-code-form"')
-    expect(html).toContain('id="invite-code-input"')
-    expect(html).toContain('id="invite-code-status"')
-    expect(html).toContain('id="activate-invite-code"')
-    expect(html).toMatch(/body\.access-locked #app\s*{[^}]*display:\s*none;/s)
-    expect(html).toMatch(/body:not\(\.access-locked\) #invite-gate\s*{[^}]*display:\s*none;/s)
+    expect(html).toContain('<body>')
+    expect(html).toContain('<div id="app" class="app-shell">')
+    expect(html).not.toContain('access-locked')
+    expect(html).not.toContain('invite-gate')
+    expect(html).not.toContain('invite-code')
+    expect(html).not.toMatch(/\binvite[-\w]*/i)
   })
 
   it('loads team styles from an external stylesheet', () => {
@@ -85,7 +83,6 @@ describe('team.html chat creation UI', () => {
     expect(html).not.toMatch(/:root\[data-theme="light"\] body\s*{[^}]*gradient/s)
 
     for (const selector of [
-      '.invite-gate',
       '.app-shell',
       '.rail',
       '.sidebar',

@@ -1,5 +1,4 @@
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoleTemplate } from '../group/types'
-import { ensureInviteGate } from '../access/inviteGate'
 import type { GeneratedPersonDraft } from '../group/personaGeneration'
 import { createDefaultStore } from '../group/store'
 import { getAllRoleTemplates } from '../group/roleTemplates'
@@ -631,7 +630,6 @@ function handleRoleRecoveryRequest(message: Extract<StorePushMessage, { type: 'G
 }
 
 async function boot(): Promise<void> {
-  await ensureInviteGate()
   await resolveHostTabId()
   await primaryCoordinator.start()
   window.addEventListener('pagehide', () => primaryCoordinator.dispose(), { once: true })

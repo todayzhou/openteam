@@ -6,25 +6,8 @@
     <title>OpenTeam</title>
     <link rel="stylesheet" href="team.css" />
   </head>
-  <body class="access-locked">
-    <section id="invite-gate" class="invite-gate" aria-labelledby="invite-gate-title">
-      <form id="invite-code-form" class="invite-card">
-        <div class="brand-mark">
-          <div class="logo-dot" aria-hidden="true"></div>
-          <div>
-            <h1 id="invite-gate-title">OpenTeam</h1>
-            <p>输入内测码后可使用 30 天</p>
-          </div>
-        </div>
-        <div class="field">
-          <label for="invite-code-input">内测码</label>
-          <input id="invite-code-input" type="text" placeholder="OT-XXXX-XXXX-XXXX" autocomplete="one-time-code" spellcheck="false" />
-        </div>
-        <button id="activate-invite-code" class="btn btn-primary" type="submit">激活</button>
-        <p id="invite-code-status" class="invite-status" aria-live="polite"></p>
-      </form>
-    </section>
-    <div id="app" class="app-shell" hidden>
+  <body>
+    <div id="app" class="app-shell">
       <div id="floating-toolbar" class="floating-toolbar">
         <button id="close-window" class="icon-btn window-dot window-dot-close" type="button" aria-label="缩小窗口" title="缩小窗口">×</button>
         <button id="toggle-window-size" class="icon-btn window-dot window-dot-minimize" type="button" aria-expanded="true" aria-label="缩小窗口" title="缩小窗口">−</button>

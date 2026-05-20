@@ -173,9 +173,8 @@ The `src/group` directory is the pure domain layer shared by background and UI c
 - [src/group/conversationUrl.ts](../src/group/conversationUrl.ts): supported conversation URL and default site URL handling.
 - [src/group/highlightColors.ts](../src/group/highlightColors.ts): message highlight color normalization.
 
-### Access and Shared Utilities
+### Shared Utilities
 
-- [src/access/inviteGate.ts](../src/access/inviteGate.ts), [src/access/inviteCode.ts](../src/access/inviteCode.ts), [src/access/inviteCodeHashes.json](../src/access/inviteCodeHashes.json): local beta-code gate and activation persistence.
 - [src/shared/i18n.ts](../src/shared/i18n.ts): UI translations, role/template localization, prompt language rules, and language normalization.
 - [src/shared/logger.ts](../src/shared/logger.ts): small scoped logger used by runtime modules.
 
