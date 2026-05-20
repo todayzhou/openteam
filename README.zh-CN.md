@@ -62,23 +62,25 @@ OpenTeam 会通过用户自己登录的浏览器网页会话和 DOM 自动化与
 
 ## 🚀 安装
 
-### 方式一：只安装浏览器扩展
+### 方式一：从源码安装浏览器扩展
 
 大多数普通用户只需要安装浏览器扩展：
 
-1. 从 [GitHub Releases](https://github.com/afumu/openteam/releases/latest) 下载最新的扩展 ZIP。
-2. 解压下载的包。
-3. 打开 `chrome://extensions/`。
-4. 开启开发者模式。
-5. 点击 **加载已解压的扩展程序**，选择解压后的扩展目录。
-6. 点击 OpenTeam 扩展图标，打开团队工作台。
+```bash
+git clone https://github.com/afumu/openteam.git
+cd openteam
+npm install
+npm run build
+```
+
+构建完成后，打开 `chrome://extensions/`，开启开发者模式，点击 **加载已解压的扩展程序**，选择生成的 `dist/` 目录，然后点击 OpenTeam 扩展图标打开团队工作台。
 
 ### 方式二：安装 CLI + Agent Skill
 
-如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以继续安装 CLI 和 skill：
+如果你希望 Codex、Claude Code 或其他本机智能体控制 OpenTeam 群聊，可以在仓库根目录继续安装 CLI 和 skill。`@openteam/cli` 还没有发布到 npm，因此当前先从源码安装 CLI：
 
 ```bash
-npm install -g @openteam/cli
+npm install -g ./packages/openteamcli
 npx skills add afumu/openteam --skill openteam-control
 openteamcli daemon start
 openteamcli doctor

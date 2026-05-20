@@ -24,7 +24,7 @@ describe('openteamcli install configuration', () => {
       type: 'module',
       private: false,
       bin: {
-        openteamcli: './openteamcli.mjs',
+        openteamcli: 'openteamcli.mjs',
       },
       engines: {
         node: '>=18',
@@ -41,7 +41,7 @@ describe('openteamcli install configuration', () => {
   })
 
   it('documents the installed openteamcli command in the skill', () => {
-    const skill = readFileSync(resolve(packageRoot, 'skills/SKILL.md'), 'utf8')
+    const skill = readFileSync(resolve(packageRoot, 'skills/openteam-control/SKILL.md'), 'utf8')
 
     expect(skill).toContain('openteamcli daemon start')
     expect(skill).toContain('openteamcli doctor')

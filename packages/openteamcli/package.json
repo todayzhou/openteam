@@ -6,7 +6,7 @@
   "type": "module",
   "private": false,
   "bin": {
-    "openteamcli": "./openteamcli.mjs"
+    "openteamcli": "openteamcli.mjs"
   },
   "files": [
     "README.zh-CN.md",

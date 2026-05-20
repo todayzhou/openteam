@@ -187,7 +187,7 @@ flowchart LR
 - [src/background/controlHandlers.ts](../src/background/controlHandlers.ts)：`chat.*`、`roles.batchAdd`、`task.*`、`run.createAndPost` 的命令执行器。
 - [packages/openteamcli/openteam-daemon.mjs](../packages/openteamcli/openteam-daemon.mjs)：运行在 `127.0.0.1` 的本地 HTTP/WebSocket daemon。
 - [packages/openteamcli/openteamcli.mjs](../packages/openteamcli/openteamcli.mjs)：命令行入口，必要时启动 daemon，并发送带认证的命令。
-- [packages/openteamcli/skills/SKILL.md](../packages/openteamcli/skills/SKILL.md)：供本地智能体控制 OpenTeam 的 skill 说明。
+- [packages/openteamcli/skills/openteam-control/SKILL.md](../packages/openteamcli/skills/openteam-control/SKILL.md)：供本地智能体控制 OpenTeam 的 skill 说明。
 
 daemon 会把认证 token 存在 `~/.openteam/control-token`，并提供 `/status`、`/logs`、`/command` 和 `/shutdown`，再把命令转发给已连接的扩展 profile。
 

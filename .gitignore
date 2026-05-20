@@ -1,8 +1,12 @@
 node_modules
 dist
+release/
 .worktrees/
 .private/
 .superpowers/
+.agents/
+skills-lock.json
+*.tgz
 *.log
 .DS_Store
 .idea/

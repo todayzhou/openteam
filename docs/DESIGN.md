@@ -187,7 +187,7 @@ The local control path is optional and disabled unless the user enables it in se
 - [src/background/controlHandlers.ts](../src/background/controlHandlers.ts): command executor for `chat.*`, `roles.batchAdd`, `task.*`, and `run.createAndPost`.
 - [packages/openteamcli/openteam-daemon.mjs](../packages/openteamcli/openteam-daemon.mjs): local HTTP/WebSocket daemon on `127.0.0.1`.
 - [packages/openteamcli/openteamcli.mjs](../packages/openteamcli/openteamcli.mjs): command-line wrapper that starts the daemon when needed and sends authenticated commands.
-- [packages/openteamcli/skills/SKILL.md](../packages/openteamcli/skills/SKILL.md): local agent skill instructions for controlling OpenTeam.
+- [packages/openteamcli/skills/openteam-control/SKILL.md](../packages/openteamcli/skills/openteam-control/SKILL.md): local agent skill instructions for controlling OpenTeam.
 
 The daemon stores an auth token at `~/.openteam/control-token`, exposes `/status`, `/logs`, `/command`, and `/shutdown`, and forwards commands to the connected extension profile.
 

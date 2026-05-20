@@ -62,23 +62,25 @@ Use it at your own risk. The maintainers are not responsible for account restric
 
 ## 🚀 Install
 
-### Option 1: Extension Only
+### Option 1: Build the Extension From Source
 
 Most users only need the browser extension:
 
-1. Download the latest extension ZIP from [GitHub Releases](https://github.com/afumu/openteam/releases/latest).
-2. Unzip the package.
-3. Open `chrome://extensions/`.
-4. Turn on Developer mode.
-5. Click **Load unpacked** and select the unzipped extension directory.
-6. Click the OpenTeam extension icon to open the team workspace.
+```bash
+git clone https://github.com/afumu/openteam.git
+cd openteam
+npm install
+npm run build
+```
+
+After the build finishes, open `chrome://extensions/`, turn on Developer mode, click **Load unpacked**, select the generated `dist/` directory, and then click the OpenTeam extension icon to open the team workspace.
 
 ### Option 2: CLI + Agent Skill
 
-Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats:
+Use this path if you want Codex, Claude Code, or another local agent to control OpenTeam chats. `@openteam/cli` has not been published to npm yet, so install the CLI from source for now:
 
 ```bash
-npm install -g @openteam/cli
+npm install -g ./packages/openteamcli
 npx skills add afumu/openteam --skill openteam-control
 openteamcli daemon start
 openteamcli doctor

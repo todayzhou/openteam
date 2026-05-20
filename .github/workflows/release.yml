@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run verify
+      - run: sudo apt-get install -y zip
+      - run: mkdir -p release && cd dist && zip -r ../release/openteam-extension-${GITHUB_REF_NAME}.zip .
+      - run: npm pack ./packages/openteamcli --pack-destination release
+      - run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            release/openteam-extension-${GITHUB_REF_NAME}.zip \
+            release/openteam-cli-*.tgz \
+            --title "OpenTeam ${GITHUB_REF_NAME}" \
+            --notes "Chrome extension ZIP and OpenTeam CLI npm tarball for ${GITHUB_REF_NAME}."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
