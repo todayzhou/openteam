@@ -82,7 +82,6 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       deps.showError('请选择群聊后再编排任务')
       return
     }
-    if (!ensureExternalApiConfigured()) return
     loadDraft(chat)
     deps.orchestrationModalEl.hidden = false
     deps.openOrchestrationTemplateEl.textContent = '模板'

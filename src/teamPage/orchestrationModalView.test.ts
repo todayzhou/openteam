@@ -210,7 +210,7 @@ describe('orchestration modal view', () => {
     expect(runPayload.flow?.graph?.edges).toEqual([])
   })
 
-  it('prompts users to configure an external API before opening orchestration', () => {
+  it('opens orchestration setup without redirecting to external model setup', () => {
     const harness = createHarness()
     harness.store.settings.externalModelOrder = []
     harness.store.settings.externalModelsById = {}
@@ -219,9 +219,9 @@ describe('orchestration modal view', () => {
 
     harness.refs.openOrchestrationEl.click()
 
-    expect(harness.errors).toContain('编排依赖外部模型 API，请先配置一个外部模型。')
-    expect(harness.openExternalModels).toHaveBeenCalledTimes(1)
-    expect(harness.refs.orchestrationModalEl.hidden).toBe(true)
+    expect(harness.errors).not.toContain('编排依赖外部模型 API，请先配置一个外部模型。')
+    expect(harness.openExternalModels).not.toHaveBeenCalled()
+    expect(harness.refs.orchestrationModalEl.hidden).toBe(false)
   })
 
   it('prompts users to configure an external API before running an already-open draft', async () => {
