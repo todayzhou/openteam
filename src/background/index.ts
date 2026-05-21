@@ -76,7 +76,7 @@ async function handleStoreGet(message: RuntimeMessage, sender: chrome.runtime.Me
 async function handleSettingsUpdate(message: RuntimeMessage) {
   const { store } = await mutateStore(store => {
     const defaultChatSite = readOptionalString(message.defaultChatSite)
-    if (defaultChatSite === 'chatgpt' || defaultChatSite === 'gemini' || defaultChatSite === 'claude' || defaultChatSite === 'deepseek') {
+    if (defaultChatSite === 'chatgpt' || defaultChatSite === 'gemini' || defaultChatSite === 'claude' || defaultChatSite === 'deepseek' || defaultChatSite === 'grok') {
       store.settings.defaultChatSite = defaultChatSite
     }
     if (typeof message.agentControlEnabled === 'boolean') {

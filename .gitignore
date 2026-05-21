@@ -1,5 +1,8 @@
 node_modules
 dist
+.npm-cache/
+.conda-pkgs/
+.conda-openteam/
 release/
 .worktrees/
 .private/

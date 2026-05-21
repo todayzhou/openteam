@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { MessageHighlightColor } from './highlightColors'
 
 export type RoomMode = 'independent' | 'collaborative'
-export type ChatSite = 'gemini' | 'chatgpt' | 'claude' | 'deepseek'
+export type ChatSite = 'gemini' | 'chatgpt' | 'claude' | 'deepseek' | 'grok'
 export type OpenTeamLanguage = 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
 export type ExternalModelFormat = 'openai' | 'anthropic'
@@ -226,6 +226,7 @@ export interface RoleTemplate {
   sourceTemplateId?: string
   sourceTemplateName?: string
   chatGptGptsUrl?: string
+  grokProjectUrl?: string
   systemPrompt: string
   createdAt: number
   updatedAt: number
@@ -248,6 +249,7 @@ export interface GroupRole {
   geminiConversationId?: string
   geminiConversationUrl?: string
   chatGptGptsUrl?: string
+  grokProjectUrl?: string
   lastPromptMessageId?: string
   replyAttemptId?: string
   lastReplyAt?: number

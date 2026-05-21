@@ -72,7 +72,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '1. 如果 existingRoles 非空，优先复用 existingRoles，复用时 roles[].reuseRoleId 必须填 existingRoles 里的 id。',
     '2. 只有现有人员无法覆盖必要职责时，才创建新人员。',
     '3. 如果 existingRoles 为空，必须创建 2-5 个新人员。',
-    '4. 每个 roles[].preferredSite 必须使用 "chatgpt"、"gemini"、"claude" 或 "deepseek"；如果用户明确要求 ChatGPT、Gemini、Claude 或 DeepSeek 站点，相关人员必须使用对应站点。',
+    '4. 每个 roles[].preferredSite 必须使用 "chatgpt"、"gemini"、"claude"、"deepseek" 或 "grok"；如果用户明确要求 ChatGPT、Gemini、Claude、DeepSeek 或 Grok 站点，相关人员必须使用对应站点。',
     '5. 不要创建 kind=parallel 的节点；并行通过一个节点连接多个后继节点表达。',
     '6. 多个上游节点连接到同一个节点表示汇合，该节点要等所有上游完成。',
     '7. 同一个 roleKey 不能出现在同一批可并行执行的节点中；同一人员要做多件事时必须串行。',
@@ -92,6 +92,7 @@ export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
       { value: 'gemini', label: 'Gemini' },
       { value: 'claude', label: 'Claude' },
       { value: 'deepseek', label: 'DeepSeek' },
+      { value: 'grok', label: 'Grok' },
     ], null, 2),
     `默认站点：${input.store.settings.defaultChatSite}`,
     '',
@@ -166,7 +167,7 @@ function buildEnglishAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
     '1. Prefer reusing existingRoles when existingRoles is not empty. When reusing a role, roles[].reuseRoleId must be an id from existingRoles.',
     '2. Only create new people when existing people cannot cover a necessary responsibility.',
     '3. If existingRoles is empty, create 2-5 new people.',
-    '4. Each roles[].preferredSite must be "chatgpt", "gemini", "claude", or "deepseek"; if the user explicitly requests ChatGPT, Gemini, Claude, or DeepSeek, assign the relevant people to that site.',
+    '4. Each roles[].preferredSite must be "chatgpt", "gemini", "claude", "deepseek", or "grok"; if the user explicitly requests ChatGPT, Gemini, Claude, DeepSeek, or Grok, assign the relevant people to that site.',
     '5. Do not create kind=parallel nodes. Express parallelism by connecting one node to multiple downstream nodes.',
     '6. Multiple upstream nodes connecting to one node means a join; that node waits for all upstream nodes to finish.',
     '7. The same roleKey cannot appear in nodes that may run in parallel. If the same person must do multiple things, make them serial.',
@@ -187,6 +188,7 @@ function buildEnglishAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput
       { value: 'gemini', label: 'Gemini' },
       { value: 'claude', label: 'Claude' },
       { value: 'deepseek', label: 'DeepSeek' },
+      { value: 'grok', label: 'Grok' },
     ], null, 2),
     `Default site: ${input.store.settings.defaultChatSite}`,
     '',
@@ -507,6 +509,7 @@ function readChatSite(value: unknown): ChatSite | undefined {
   if (normalized.includes('claude') || normalized === 'anthropic') return 'claude'
   if (normalized.includes('gemini') || normalized === 'google') return 'gemini'
   if (normalized.includes('deepseek')) return 'deepseek'
+  if (normalized.includes('grok') || normalized.includes('xai')) return 'grok'
   return undefined
 }
 

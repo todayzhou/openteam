@@ -5,7 +5,7 @@ export const FRAME_ASSIGN_MESSAGE = 'OPENTEAM_ASSIGN_FRAME_ROLE'
 export const CHAT_IFRAME_ALLOW = 'clipboard-read; clipboard-write; microphone; camera; geolocation; autoplay; fullscreen; picture-in-picture; storage-access; web-share'
 
 export type IframeHostChat = Pick<GroupChat, 'id' | 'name' | 'roleIds'>
-export type IframeHostRole = Pick<GroupRole, 'id' | 'chatId' | 'name' | 'chatSite' | 'geminiConversationUrl' | 'chatGptGptsUrl'>
+export type IframeHostRole = Pick<GroupRole, 'id' | 'chatId' | 'name' | 'chatSite' | 'geminiConversationUrl' | 'chatGptGptsUrl' | 'grokProjectUrl'>
 
 export interface FrameAssignmentMessage {
   type: typeof FRAME_ASSIGN_MESSAGE
@@ -537,7 +537,7 @@ function chatActivationSignature(chat: IframeHostChat, roles: IframeHostRole[]):
   const roleIds = new Set(chat.roleIds)
   const roleSignature = roles
     .filter(role => role.chatId === chat.id && roleIds.has(role.id))
-    .map(role => `${role.id}:${role.name}:${role.chatSite ?? ''}:${role.geminiConversationUrl ?? ''}:${role.chatGptGptsUrl ?? ''}`)
+    .map(role => `${role.id}:${role.name}:${role.chatSite ?? ''}:${role.geminiConversationUrl ?? ''}:${role.chatGptGptsUrl ?? ''}:${role.grokProjectUrl ?? ''}`)
     .sort()
     .join('|')
   return `${chat.id}:${chat.name}:${chat.roleIds.join(',')}:${roleSignature}`
@@ -547,6 +547,7 @@ function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
+  if (site === 'grok') return 'Grok'
   return 'Gemini'
 }
 

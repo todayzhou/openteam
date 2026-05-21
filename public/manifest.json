@@ -8,7 +8,14 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["storage", "tabs", "alarms", "declarativeNetRequest", "clipboardRead", "clipboardWrite"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "declarativeNetRequest",
+    "clipboardRead",
+    "clipboardWrite"
+  ],
   "host_permissions": [
     "https://gemini.google.com/*",
     "https://*.gemini.google.com/*",
@@ -17,19 +24,33 @@
     "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://chat.deepseek.com/*",
+    "https://grok.com/*",
+    "https://*.grok.com/*",
     "https://*/*",
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://* http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai https://chat.deepseek.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://* http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://gemini.google.com https://*.gemini.google.com https://chatgpt.com https://*.chatgpt.com https://chat.openai.com https://claude.ai https://chat.deepseek.com https://grok.com https://*.grok.com;"
   },
   "action": {
     "default_title": "OpenTeam"
   },
   "content_scripts": [
     {
-      "matches": ["*://gemini.google.com/*", "*://*.gemini.google.com/*", "*://chatgpt.com/*", "*://*.chatgpt.com/*", "*://chat.openai.com/*", "*://claude.ai/*", "*://chat.deepseek.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "*://gemini.google.com/*",
+        "*://*.gemini.google.com/*",
+        "*://chatgpt.com/*",
+        "*://*.chatgpt.com/*",
+        "*://chat.openai.com/*",
+        "*://claude.ai/*",
+        "*://chat.deepseek.com/*",
+        "*://grok.com/*",
+        "*://*.grok.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }

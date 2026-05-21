@@ -64,17 +64,19 @@ describe('orchestration auto plan', () => {
         { key: 'gemini', name: 'Gemini 分析师', preferredSite: 'Gemini' },
         { key: 'claude', name: 'Claude 审核员', preferredSite: 'Claude' },
         { key: 'deepseek', name: 'DeepSeek 助手', preferredSite: 'DeepSeek' },
+        { key: 'grok', name: 'Grok 研究员', preferredSite: 'Grok' },
       ],
       nodes: [
         { id: 'n1', kind: 'execute', roleKeys: ['chatgpt'], title: '写作', instruction: '写作' },
         { id: 'n2', kind: 'execute', roleKeys: ['gemini'], title: '分析', instruction: '分析' },
         { id: 'n3', kind: 'execute', roleKeys: ['claude'], title: '审核', instruction: '审核' },
         { id: 'n4', kind: 'execute', roleKeys: ['deepseek'], title: '整理', instruction: '整理' },
+        { id: 'n5', kind: 'execute', roleKeys: ['grok'], title: '研究', instruction: '研究' },
       ],
       edges: [],
     }, new Set())
 
-    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude', 'deepseek'])
+    expect(plan.roles.map(role => role.preferredSite)).toEqual(['chatgpt', 'gemini', 'claude', 'deepseek', 'grok'])
   })
 
   it('accepts common planner site field aliases', () => {
@@ -119,11 +121,12 @@ describe('orchestration auto plan', () => {
     const prompt = buildAutoOrchestrationPrompt({ task: '做一个方案', existingRoles: [role], store })
 
     expect(prompt).toContain('优先复用 existingRoles')
-    expect(prompt).toContain('preferredSite 必须使用 "chatgpt"、"gemini"、"claude" 或 "deepseek"')
+    expect(prompt).toContain('preferredSite 必须使用 "chatgpt"、"gemini"、"claude"、"deepseek" 或 "grok"')
     expect(prompt).toContain('ChatGPT')
     expect(prompt).toContain('Gemini')
     expect(prompt).toContain('Claude')
     expect(prompt).toContain('DeepSeek')
+    expect(prompt).toContain('Grok')
     expect(prompt).toContain('不要创建 kind=parallel')
     expect(prompt).toContain('"id": "role-1"')
   })

@@ -137,11 +137,14 @@ export interface TeamPageDomRefs {
   templateSiteChatGptEl: HTMLInputElement
   templateSiteClaudeEl: HTMLInputElement
   templateSiteDeepSeekEl: HTMLInputElement
+  templateSiteGrokEl: HTMLInputElement
   templateSiteExternalEl: HTMLInputElement
   templateExternalModelFieldEl: HTMLElement
   templateExternalModelSelectEl: HTMLSelectElement
   templateChatGptGptsFieldEl: HTMLElement
   templateChatGptGptsUrlEl: HTMLInputElement
+  templateGrokProjectFieldEl: HTMLElement
+  templateGrokProjectUrlEl: HTMLInputElement
   temporaryPersonNameEl: HTMLInputElement
   temporaryPersonDescriptionEl: HTMLTextAreaElement
   temporaryPersonPromptEl: HTMLTextAreaElement
@@ -298,11 +301,14 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateSiteChatGptEl: requireElement<HTMLInputElement>('#template-site-chatgpt'),
     templateSiteClaudeEl: requireElement<HTMLInputElement>('#template-site-claude'),
     templateSiteDeepSeekEl: requireElement<HTMLInputElement>('#template-site-deepseek'),
+    templateSiteGrokEl: requireElement<HTMLInputElement>('#template-site-grok'),
     templateSiteExternalEl: requireElement<HTMLInputElement>('#template-site-external'),
     templateExternalModelFieldEl: requireElement<HTMLElement>('#template-external-model-field'),
     templateExternalModelSelectEl: requireElement<HTMLSelectElement>('#template-external-model-select'),
     templateChatGptGptsFieldEl: requireElement<HTMLElement>('#template-chatgpt-gpts-field'),
     templateChatGptGptsUrlEl: requireElement<HTMLInputElement>('#template-chatgpt-gpts-url'),
+    templateGrokProjectFieldEl: requireElement<HTMLElement>('#template-grok-project-field'),
+    templateGrokProjectUrlEl: requireElement<HTMLInputElement>('#template-grok-project-url'),
     temporaryPersonNameEl: requireElement<HTMLInputElement>('#temporary-person-name'),
     temporaryPersonDescriptionEl: requireElement<HTMLTextAreaElement>('#temporary-person-description'),
     temporaryPersonPromptEl: requireElement<HTMLTextAreaElement>('#temporary-person-prompt'),

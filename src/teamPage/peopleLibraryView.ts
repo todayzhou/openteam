@@ -4,14 +4,14 @@ import type { ChatSite, ExternalModelConfig, GroupChat, OpenTeamStore, RoleModel
 import { localizeCategory, localizeRoleTemplate, normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 import type { TeamPageState } from './appState'
 
-type TemplateDraft = Pick<RoleTemplate, 'name' | 'description' | 'systemPrompt' | 'defaultModelSource' | 'defaultChatSite' | 'defaultExternalModelId' | 'chatGptGptsUrl'>
+type TemplateDraft = Pick<RoleTemplate, 'name' | 'description' | 'systemPrompt' | 'defaultModelSource' | 'defaultChatSite' | 'defaultExternalModelId' | 'chatGptGptsUrl' | 'grokProjectUrl'>
 type AddPersonItem =
   | { key: string; source: 'library'; type: RoleTemplate['type']; roleTemplateId: string; name: string; category?: string; sourceTemplateId?: string; sourceTemplateName?: string; description?: string; systemPrompt: string; chatSites: string[]; disabledSites: Set<string> }
   | { key: string; source: 'temporary'; type: 'custom'; draftId: string; name: string; category?: string; sourceTemplateName?: string; description?: string; systemPrompt: string; chatSites: string[]; disabledSites: Set<string> }
 
 const TEMPLATE_CATEGORY_ALL = '全部'
 const PEOPLE_LIBRARY_PAGE_SIZE = 5
-const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek'] as const
+const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'] as const
 
 export interface PeopleLibraryViewDependencies {
   state: TeamPageState
@@ -54,11 +54,14 @@ export interface PeopleLibraryViewDependencies {
   templateSiteChatGptEl: HTMLInputElement
   templateSiteClaudeEl: HTMLInputElement
   templateSiteDeepSeekEl: HTMLInputElement
+  templateSiteGrokEl: HTMLInputElement
   templateSiteExternalEl: HTMLInputElement
   templateExternalModelFieldEl: HTMLElement
   templateExternalModelSelectEl: HTMLSelectElement
   templateChatGptGptsFieldEl: HTMLElement
   templateChatGptGptsUrlEl: HTMLInputElement
+  templateGrokProjectFieldEl: HTMLElement
+  templateGrokProjectUrlEl: HTMLInputElement
   temporaryPersonNameEl: HTMLInputElement
   temporaryPersonDescriptionEl: HTMLTextAreaElement
   temporaryPersonPromptEl: HTMLTextAreaElement
@@ -140,9 +143,11 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl.checked = !externalSelected && defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = !externalSelected && defaultChatSite === 'claude'
       deps.templateSiteDeepSeekEl.checked = !externalSelected && defaultChatSite === 'deepseek'
+      deps.templateSiteGrokEl.checked = !externalSelected && defaultChatSite === 'grok'
       deps.templateSiteExternalEl.checked = externalSelected
       deps.templateExternalModelSelectEl.value = selectedTemplate.defaultExternalModelId ?? firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = selectedTemplate.chatGptGptsUrl ?? ''
+      deps.templateGrokProjectUrlEl.value = selectedTemplate.grokProjectUrl ?? ''
       syncTemplateModelFields()
     } else {
       deps.templateNameEl.value = ''
@@ -153,9 +158,11 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl.checked = defaultChatSite === 'chatgpt'
       deps.templateSiteClaudeEl.checked = defaultChatSite === 'claude'
       deps.templateSiteDeepSeekEl.checked = defaultChatSite === 'deepseek'
+      deps.templateSiteGrokEl.checked = defaultChatSite === 'grok'
       deps.templateSiteExternalEl.checked = false
       deps.templateExternalModelSelectEl.value = firstExternalModelId() ?? ''
       deps.templateChatGptGptsUrlEl.value = ''
+      deps.templateGrokProjectUrlEl.value = ''
       syncTemplateModelFields()
     }
   }
@@ -363,7 +370,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     const site = document.createElement('div')
     site.className = 'template-description'
     const defaultChatSite = visibleChatSite(template.defaultChatSite ?? store.settings.defaultChatSite)
-    site.textContent = ui(`默认模型：${templateModelLabel(template, store)}${defaultChatSite === 'chatgpt' && template.chatGptGptsUrl ? ' · GPTs' : ''}`)
+    site.textContent = ui(`默认模型：${templateModelLabel(template, store)}${defaultChatSite === 'chatgpt' && template.chatGptGptsUrl ? ' · GPTs' : defaultChatSite === 'grok' && template.grokProjectUrl ? ' · Project' : ''}`)
     const meta = document.createElement('div')
     meta.className = 'template-description template-meta'
     meta.textContent = templateMetaText(displayTemplate, language())
@@ -752,6 +759,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       defaultChatSite: deps.templateSiteExternalEl.checked ? undefined : readTemplateChatSite(),
       defaultExternalModelId: deps.templateSiteExternalEl.checked ? deps.templateExternalModelSelectEl.value : undefined,
       chatGptGptsUrl: deps.templateSiteChatGptEl.checked ? deps.templateChatGptGptsUrlEl.value.trim() : undefined,
+      grokProjectUrl: deps.templateSiteGrokEl.checked ? deps.templateGrokProjectUrlEl.value.trim() : undefined,
     }
   }
 
@@ -810,6 +818,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
     if (deps.templateSiteChatGptEl.checked) return 'chatgpt'
     if (deps.templateSiteClaudeEl.checked) return 'claude'
     if (deps.templateSiteDeepSeekEl.checked) return 'deepseek'
+    if (deps.templateSiteGrokEl.checked) return 'grok'
     return 'gemini'
   }
 
@@ -818,10 +827,14 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
   }
 
   function syncTemplateModelFields(): void {
-    const visible = deps.templateSiteChatGptEl.checked
-    deps.templateChatGptGptsFieldEl.hidden = !visible
-    deps.templateChatGptGptsFieldEl.style.display = visible ? '' : 'none'
-    if (!visible) deps.templateChatGptGptsUrlEl.value = ''
+    const chatGptVisible = deps.templateSiteChatGptEl.checked
+    deps.templateChatGptGptsFieldEl.hidden = !chatGptVisible
+    deps.templateChatGptGptsFieldEl.style.display = chatGptVisible ? '' : 'none'
+    if (!chatGptVisible) deps.templateChatGptGptsUrlEl.value = ''
+    const grokVisible = deps.templateSiteGrokEl.checked
+    deps.templateGrokProjectFieldEl.hidden = !grokVisible
+    deps.templateGrokProjectFieldEl.style.display = grokVisible ? '' : 'none'
+    if (!grokVisible) deps.templateGrokProjectUrlEl.value = ''
     const externalVisible = deps.templateSiteExternalEl.checked
     deps.templateExternalModelFieldEl.hidden = !externalVisible
     deps.templateExternalModelFieldEl.style.display = externalVisible ? '' : 'none'
@@ -833,6 +846,7 @@ export function createPeopleLibraryView(deps: PeopleLibraryViewDependencies): Pe
       deps.templateSiteChatGptEl,
       deps.templateSiteClaudeEl,
       deps.templateSiteDeepSeekEl,
+      deps.templateSiteGrokEl,
       deps.templateSiteExternalEl,
     ]
   }
@@ -939,6 +953,7 @@ function siteLabel(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
+  if (site === 'grok') return 'Grok'
   return 'Gemini'
 }
 

@@ -53,11 +53,14 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
   const peopleLibraryPaginationEl = document.createElement('div')
   const templateListEl = document.createElement('div')
   const templateSiteChatGptEl = document.createElement('input')
+  const templateSiteGrokEl = document.createElement('input')
   const templateSiteExternalEl = document.createElement('input')
   const templateExternalModelFieldEl = Object.assign(document.createElement('div'), { hidden: true })
   const templateExternalModelSelectEl = document.createElement('select')
   const templateChatGptGptsFieldEl = Object.assign(document.createElement('div'), { hidden: true })
   const templateChatGptGptsUrlEl = document.createElement('input')
+  const templateGrokProjectFieldEl = Object.assign(document.createElement('div'), { hidden: true })
+  const templateGrokProjectUrlEl = document.createElement('input')
   const templateNameEl = document.createElement('input')
   const templateDescriptionEl = document.createElement('textarea')
   const templatePromptEl = document.createElement('textarea')
@@ -118,11 +121,14 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     templateSiteChatGptEl,
     templateSiteClaudeEl: document.createElement('input'),
     templateSiteDeepSeekEl: document.createElement('input'),
+    templateSiteGrokEl,
     templateSiteExternalEl,
     templateExternalModelFieldEl,
     templateExternalModelSelectEl,
     templateChatGptGptsFieldEl,
     templateChatGptGptsUrlEl,
+    templateGrokProjectFieldEl,
+    templateGrokProjectUrlEl,
     temporaryPersonNameEl: document.createElement('input'),
     temporaryPersonDescriptionEl: document.createElement('textarea'),
     temporaryPersonPromptEl: document.createElement('textarea'),
@@ -177,8 +183,11 @@ function setupPeopleLibraryView(options: { store: OpenTeamStore; templates: Role
     templatePersonaGenerationStatusEl,
     generatePersona,
     templateSiteChatGptEl,
+    templateSiteGrokEl,
     templateChatGptGptsFieldEl,
     templateChatGptGptsUrlEl,
+    templateGrokProjectFieldEl,
+    templateGrokProjectUrlEl,
     peopleLibraryFormEl,
     showError,
   }
@@ -309,6 +318,7 @@ describe('team page people library view boundary', () => {
       defaultChatSite: 'chatgpt',
       defaultExternalModelId: undefined,
       chatGptGptsUrl: 'https://chatgpt.com/g/g-LrdzaEiqT-fei-fei-jiao-lian/c/69f7fabe-9878-83a8-a867-88ebb36967d4',
+      grokProjectUrl: undefined,
     })
   })
 
@@ -330,6 +340,63 @@ describe('team page people library view boundary', () => {
     expect(templateChatGptGptsFieldEl.hidden).toBe(true)
     expect(templateChatGptGptsFieldEl.style.display).toBe('none')
     expect(templateChatGptGptsUrlEl.value).toBe('')
+  })
+
+  it('submits a Grok project URL when creating a library person', async () => {
+    const store = createDefaultStore()
+    const {
+      view,
+      runCommand,
+      templateNameEl,
+      templatePromptEl,
+      templateSiteGrokEl,
+      templateGrokProjectFieldEl,
+      templateGrokProjectUrlEl,
+      peopleLibraryFormEl,
+    } = setupPeopleLibraryView({ store, templates: [] })
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    templateNameEl.value = '项目顾问'
+    templatePromptEl.value = '在项目上下文中回应'
+    templateSiteGrokEl.checked = true
+    templateSiteGrokEl.dispatchEvent(new Event('change', { bubbles: true }))
+    templateGrokProjectUrlEl.value = 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81?source=share'
+    peopleLibraryFormEl.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(templateGrokProjectFieldEl.hidden).toBe(false)
+    expect(templateGrokProjectFieldEl.style.display).toBe('')
+    expect(runCommand).toHaveBeenCalledWith('ROLE_TEMPLATE_CREATE', {
+      name: '项目顾问',
+      description: '',
+      systemPrompt: '在项目上下文中回应',
+      defaultModelSource: 'site',
+      defaultChatSite: 'grok',
+      defaultExternalModelId: undefined,
+      chatGptGptsUrl: undefined,
+      grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81?source=share',
+    })
+  })
+
+  it('hides the Grok project field when another site is selected', () => {
+    const store = createDefaultStore()
+    const {
+      view,
+      templateSiteGrokEl,
+      templateGrokProjectFieldEl,
+      templateGrokProjectUrlEl,
+    } = setupPeopleLibraryView({ store, templates: [] })
+
+    view.registerPeopleLibraryEvents()
+    view.renderTemplates()
+    templateSiteGrokEl.checked = false
+    templateGrokProjectUrlEl.value = 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81'
+    templateSiteGrokEl.dispatchEvent(new Event('change', { bubbles: true }))
+
+    expect(templateGrokProjectFieldEl.hidden).toBe(true)
+    expect(templateGrokProjectFieldEl.style.display).toBe('none')
+    expect(templateGrokProjectUrlEl.value).toBe('')
   })
 
   it('submits library people with an empty persona', async () => {
@@ -357,6 +424,7 @@ describe('team page people library view boundary', () => {
       defaultChatSite: 'gemini',
       defaultExternalModelId: undefined,
       chatGptGptsUrl: undefined,
+      grokProjectUrl: undefined,
     })
   })
 

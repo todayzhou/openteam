@@ -155,6 +155,8 @@ const UI_TRANSLATIONS: Record<string, string> = {
   '默认站点': 'Default site',
   'GPTs 链接前缀': 'GPTs link prefix',
   '选填。保存后，该人员使用 ChatGPT 时会优先打开这个 GPTs。': 'Optional. After saving, this person opens this GPT first when using ChatGPT.',
+  'Grok 项目链接': 'Grok project URL',
+  '选填。保存后，该人员使用 Grok 时会优先打开这个项目。': 'Optional. After saving, this person opens this project first when using Grok.',
   '保存人员': 'Save person',
   '系统内置人员': 'System built-in person',
   '关闭内置人员详情': 'Close built-in person details',

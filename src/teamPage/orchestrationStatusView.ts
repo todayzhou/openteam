@@ -554,6 +554,7 @@ function siteLabel(site: ChatSite): string {
   if (site === 'chatgpt') return 'ChatGPT'
   if (site === 'claude') return 'Claude'
   if (site === 'deepseek') return 'DeepSeek'
+  if (site === 'grok') return 'Grok'
   return 'Gemini'
 }
 

@@ -6,7 +6,7 @@
 
 ## 产品形态
 
-OpenTeam 是一个 Manifest V3 Chrome 扩展，用来把已有的 AI 网页会话组织成多人 AI 工作台。它不会通过模型 API 调用 ChatGPT、Claude、Gemini 或 DeepSeek 的网页模型，而是嵌入支持的 AI 网站页面，通过 content script 发送 prompt、监听回复，并把团队讨论结果持久化到本地。
+OpenTeam 是一个 Manifest V3 Chrome 扩展，用来把已有的 AI 网页会话组织成多人 AI 工作台。它不会通过模型 API 调用 ChatGPT、Claude、Gemini、DeepSeek 或 Grok 的网页模型，而是嵌入支持的 AI 网站页面，通过 content script 发送 prompt、监听回复，并把团队讨论结果持久化到本地。
 
 系统有三个核心界面/运行面：
 
@@ -27,7 +27,7 @@ flowchart LR
   Background --> Frames["Runtime frame registry"]
   Frames --> Iframes["AI 网站 iframes"]
   Background --> Content["Content script\nsrc/content"]
-  Content --> Adapter["站点适配器\nGemini / ChatGPT / Claude / DeepSeek"]
+  Content --> Adapter["站点适配器\nGemini / ChatGPT / Claude / DeepSeek / Grok"]
   Adapter --> AIPage["AI 网页会话"]
   AIPage --> Adapter
   Adapter --> Content

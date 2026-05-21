@@ -10,10 +10,13 @@ const CLAUDE_ORIGIN = 'https://claude.ai'
 const CLAUDE_HOME_URL = 'https://claude.ai/new'
 const DEEPSEEK_ORIGIN = 'https://chat.deepseek.com'
 const DEEPSEEK_HOME_URL = `${DEEPSEEK_ORIGIN}/`
+const GROK_ORIGIN = 'https://grok.com'
+const GROK_HOME_URL = `${GROK_ORIGIN}/`
 
 interface ChatSiteStartUrlRole {
   chatSite?: ChatSite
   chatGptGptsUrl?: string
+  grokProjectUrl?: string
 }
 
 export function isSafeGeminiUrl(value: string | undefined): value is string {
@@ -36,7 +39,7 @@ export function getSafeGeminiIframeSrc(value: string | undefined): string {
 }
 
 export function isSafeSupportedChatUrl(value: string | undefined): value is string {
-  return isSafeGeminiUrl(value) || isSafeChatGptUrl(value) || isSafeClaudeUrl(value) || isSafeDeepSeekUrl(value)
+  return isSafeGeminiUrl(value) || isSafeChatGptUrl(value) || isSafeClaudeUrl(value) || isSafeDeepSeekUrl(value) || isSafeGrokUrl(value)
 }
 
 export function getSafeSupportedChatUrl(value: string | undefined): string {
@@ -51,12 +54,14 @@ export function getDefaultChatSiteUrl(site: ChatSite | undefined): string {
   if (site === 'chatgpt') return CHATGPT_HOME_URL
   if (site === 'claude') return CLAUDE_HOME_URL
   if (site === 'deepseek') return DEEPSEEK_HOME_URL
+  if (site === 'grok') return GROK_HOME_URL
   return GEMINI_HOME_URL
 }
 
 export function getDefaultChatSiteUrlForRole(role: ChatSiteStartUrlRole, fallbackSite?: ChatSite): string {
   const site = role.chatSite ?? fallbackSite
   if (site === 'chatgpt') return normalizeChatGptGptsUrl(role.chatGptGptsUrl) ?? CHATGPT_HOME_URL
+  if (site === 'grok') return normalizeGrokProjectUrl(role.grokProjectUrl) ?? GROK_HOME_URL
   return getDefaultChatSiteUrl(site)
 }
 
@@ -81,12 +86,21 @@ export function normalizeChatGptGptsUrl(value: string | undefined): string | und
   return gptsSlug ? `${url.origin}/g/${gptsSlug}` : undefined
 }
 
+export function normalizeGrokProjectUrl(value: string | undefined): string | undefined {
+  const url = parseSafeGrokUrl(value)
+  if (!url) return undefined
+
+  const projectId = url.pathname.match(/^\/project\/([^/]+)/)?.[1]
+  return projectId ? `${url.origin}/project/${projectId}` : undefined
+}
+
 export function extractSupportedConversationId(value: string | undefined): string | undefined {
   return (
     extractGeminiConversationId(value) ??
     extractChatGptConversationId(value) ??
     extractClaudeConversationId(value) ??
-    extractDeepSeekConversationId(value)
+    extractDeepSeekConversationId(value) ??
+    extractGrokConversationId(value)
   )
 }
 
@@ -100,6 +114,7 @@ export function getSupportedChatOriginForSite(value: string | undefined, site: C
   if (site === 'chatgpt') return CHATGPT_ORIGIN
   if (site === 'claude') return CLAUDE_ORIGIN
   if (site === 'deepseek') return DEEPSEEK_ORIGIN
+  if (site === 'grok') return GROK_ORIGIN
   return GEMINI_ORIGIN
 }
 
@@ -179,6 +194,31 @@ function extractDeepSeekConversationId(value: string | undefined): string | unde
 
   const url = new URL(value)
   const match = url.pathname.match(/^\/a\/chat\/s\/([^/]+)/)
+  const conversationId = match?.[1]
+  return conversationId ? decodeURIComponent(conversationId) : undefined
+}
+
+
+function isSafeGrokUrl(value: string | undefined): value is string {
+  return Boolean(parseSafeGrokUrl(value))
+}
+
+function parseSafeGrokUrl(value: string | undefined): URL | undefined {
+  if (!value || !value.startsWith(GROK_HOME_URL)) return undefined
+
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'grok.com' ? url : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function extractGrokConversationId(value: string | undefined): string | undefined {
+  if (!isSafeGrokUrl(value)) return undefined
+
+  const url = new URL(value)
+  const match = url.pathname.match(/^\/(?:chat|c)\/([^/]+)/)
   const conversationId = match?.[1]
   return conversationId ? decodeURIComponent(conversationId) : undefined
 }

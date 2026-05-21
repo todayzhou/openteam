@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractGeminiConversationId, extractSupportedConversationId, getSafeGeminiUrl, getSafeSupportedChatUrl, isSafeGeminiUrl, isSafeSupportedChatUrl, normalizeChatGptGptsUrl } from './conversationUrl'
+import { extractGeminiConversationId, extractSupportedConversationId, getSafeGeminiUrl, getSafeSupportedChatUrl, isSafeGeminiUrl, isSafeSupportedChatUrl, normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversationUrl'
 import { buildUnsyncedContext, getContextCursorAfterAck, getUnsyncedMessagesForRole } from './contextSync'
 import { parseGroupMentions, roleMentionLabel } from './mentionParser'
 import { buildInitPrompt, buildPrompt } from './promptBuilder'
@@ -116,6 +116,26 @@ describe('role template utilities', () => {
     expect(role).toMatchObject({
       chatSite: 'chatgpt',
       chatGptGptsUrl: 'https://chatgpt.com/g/g-LrdzaEiqT-fei-fei-jiao-lian',
+    })
+  })
+
+  it('inherits a Grok project start URL from library people', () => {
+    const store = createDefaultStore()
+    store.settings.defaultChatSite = 'gemini'
+    store.chatsById['chat-1'] = makeChat('chat-1')
+    const template = createRoleTemplate(store, {
+      name: '项目顾问',
+      systemPrompt: '在项目上下文中回应',
+      defaultChatSite: 'grok',
+      grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81?ref=abc',
+    }, 'template-1', 1)
+
+    const role = createGroupRole(store, { chatId: 'chat-1', templateId: template.id }, 'role-1', 2)
+
+    expect(template.grokProjectUrl).toBe('https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81')
+    expect(role).toMatchObject({
+      chatSite: 'grok',
+      grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81',
     })
   })
 
@@ -569,6 +589,13 @@ describe('Gemini conversation URL utilities', () => {
     expect(normalizeChatGptGptsUrl('https://chatgpt.com/g/g-LrdzaEiqT-fei-fei-jiao-lian?model=gpt-5')).toBe('https://chatgpt.com/g/g-LrdzaEiqT-fei-fei-jiao-lian')
     expect(normalizeChatGptGptsUrl('https://chatgpt.com/g/')).toBeUndefined()
     expect(normalizeChatGptGptsUrl('https://chatgpt.com.evil.example/g/g-LrdzaEiqT-fei-fei-jiao-lian')).toBeUndefined()
+  })
+
+  it('normalizes Grok project start URLs and rejects unsafe origins', () => {
+    expect(normalizeGrokProjectUrl('https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81?source=share')).toBe('https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81')
+    expect(normalizeGrokProjectUrl('https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81/')).toBe('https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81')
+    expect(normalizeGrokProjectUrl('https://grok.com/project/')).toBeUndefined()
+    expect(normalizeGrokProjectUrl('https://grok.com.evil.example/project/a9e415eb-149b-42b8-811a-63b12477ed81')).toBeUndefined()
   })
 })
 

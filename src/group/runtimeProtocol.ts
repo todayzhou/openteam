@@ -99,5 +99,5 @@ export function mapRuntimeRoleStatus(value: unknown): RoleStatus | undefined {
 }
 
 export function isRuntimeChatSite(value: unknown): value is ChatSite {
-  return value === 'gemini' || value === 'chatgpt' || value === 'claude' || value === 'deepseek'
+  return value === 'gemini' || value === 'chatgpt' || value === 'claude' || value === 'deepseek' || value === 'grok'
 }

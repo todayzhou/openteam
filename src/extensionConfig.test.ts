@@ -35,6 +35,8 @@ describe('extension security configuration', () => {
       'https://chat.openai.com/*',
       'https://claude.ai/*',
       'https://chat.deepseek.com/*',
+      'https://grok.com/*',
+      'https://*.grok.com/*',
       'https://*/*',
       'http://*/*',
     ])
@@ -83,13 +85,14 @@ describe('extension security configuration', () => {
       }
     }>
 
-    expect(rules).toHaveLength(5)
+    expect(rules).toHaveLength(6)
     expect(rules.map(rule => rule.condition?.urlFilter)).toEqual([
       '||gemini.google.com/',
       '||chatgpt.com/',
       '||chat.openai.com/',
       '||claude.ai/',
       '||chat.deepseek.com/',
+      '||grok.com/',
     ])
 
     for (const rule of rules) {

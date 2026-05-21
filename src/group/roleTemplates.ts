@@ -1,4 +1,4 @@
-import { normalizeChatGptGptsUrl } from './conversationUrl'
+import { normalizeChatGptGptsUrl, normalizeGrokProjectUrl } from './conversationUrl'
 import { BUILTIN_ROLE_TEMPLATES, getBuiltinRoleTemplate, isBuiltinRoleTemplateId } from './builtinRoleTemplates'
 import type { ChatSite, GroupChat, GroupRole, OpenTeamStore, RoleModelSource, RoleTemplate } from './types'
 import { localizeRoleTemplate } from '../shared/i18n'
@@ -13,6 +13,7 @@ export interface RoleTemplateInput {
   defaultChatSite?: ChatSite
   defaultExternalModelId?: string
   chatGptGptsUrl?: string
+  grokProjectUrl?: string
 }
 
 export interface GroupRoleInput {
@@ -27,6 +28,7 @@ export interface GroupRoleInput {
   systemPrompt?: string
   avatarColor?: string
   chatGptGptsUrl?: string
+  grokProjectUrl?: string
 }
 
 export type GroupRoleBatchInput =
@@ -111,6 +113,8 @@ export function createRoleTemplate(
   if (defaultModelSource === 'external') template.defaultExternalModelId = requireExternalModelId(store, input.defaultExternalModelId)
   const chatGptGptsUrl = defaultChatSite === 'chatgpt' ? normalizeOptionalChatGptGptsUrl(input.chatGptGptsUrl) : undefined
   if (chatGptGptsUrl) template.chatGptGptsUrl = chatGptGptsUrl
+  const grokProjectUrl = defaultChatSite === 'grok' ? normalizeOptionalGrokProjectUrl(input.grokProjectUrl) : undefined
+  if (grokProjectUrl) template.grokProjectUrl = grokProjectUrl
 
   const description = input.description?.trim()
   if (description) template.description = description
@@ -160,6 +164,12 @@ export function updateRoleTemplate(
     template.chatGptGptsUrl = chatGptGptsUrl
   } else {
     delete template.chatGptGptsUrl
+  }
+  const grokProjectUrl = template.defaultModelSource !== 'external' && template.defaultChatSite === 'grok' ? normalizeOptionalGrokProjectUrl(patch.grokProjectUrl) : undefined
+  if (grokProjectUrl) {
+    template.grokProjectUrl = grokProjectUrl
+  } else {
+    delete template.grokProjectUrl
   }
 
   const description = patch.description?.trim()
@@ -231,6 +241,8 @@ export function createGroupRole(
 
   const chatGptGptsUrl = modelSource !== 'external' && chatSite === 'chatgpt' ? normalizeOptionalChatGptGptsUrl(input.chatGptGptsUrl ?? template?.chatGptGptsUrl) : undefined
   if (chatGptGptsUrl) role.chatGptGptsUrl = chatGptGptsUrl
+  const grokProjectUrl = modelSource !== 'external' && chatSite === 'grok' ? normalizeOptionalGrokProjectUrl(input.grokProjectUrl ?? template?.grokProjectUrl) : undefined
+  if (grokProjectUrl) role.grokProjectUrl = grokProjectUrl
 
   const description = (input.description ?? template?.description)?.trim()
   if (description) role.description = description
@@ -301,6 +313,7 @@ export function updateGroupRole(
     delete role.geminiConversationId
     delete role.geminiConversationUrl
     if (nextChatSite !== 'chatgpt') delete role.chatGptGptsUrl
+    if (nextChatSite !== 'grok') delete role.grokProjectUrl
     delete role.lastPromptMessageId
     delete role.lastReplyAt
   }
@@ -310,6 +323,14 @@ export function updateGroupRole(
       role.chatGptGptsUrl = chatGptGptsUrl
     } else {
       delete role.chatGptGptsUrl
+    }
+  }
+  if (patch.grokProjectUrl !== undefined) {
+    const grokProjectUrl = normalizeOptionalGrokProjectUrl(patch.grokProjectUrl)
+    if (nextModelSource !== 'external' && nextChatSite === 'grok' && grokProjectUrl) {
+      role.grokProjectUrl = grokProjectUrl
+    } else {
+      delete role.grokProjectUrl
     }
   }
   if (patch.avatarColor !== undefined) {
@@ -377,6 +398,7 @@ function prepareBatchItem(store: OpenTeamStore, item: GroupRoleBatchInput, index
       systemPrompt: normalizeSystemPrompt(localizedTemplate.systemPrompt),
       avatarColor: item.avatarColor,
       chatGptGptsUrl: localizedTemplate.chatGptGptsUrl,
+      grokProjectUrl: localizedTemplate.grokProjectUrl,
     }
   }
 
@@ -450,6 +472,14 @@ function normalizeOptionalChatGptGptsUrl(value: string | undefined): string | un
   if (!trimmed) return undefined
   const normalized = normalizeChatGptGptsUrl(trimmed)
   if (!normalized) throw new Error('GPTs 链接必须是 chatgpt.com/g/... 格式')
+  return normalized
+}
+
+function normalizeOptionalGrokProjectUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  const normalized = normalizeGrokProjectUrl(trimmed)
+  if (!normalized) throw new Error('Grok 项目链接必须是 grok.com/project/... 格式')
   return normalized
 }
 

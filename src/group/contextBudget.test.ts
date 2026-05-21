@@ -11,6 +11,7 @@ describe('context budget', () => {
     expect(contextCharBudgetForRole(store, makeRole('chatgpt'))).toBe(CONTEXT_CHAR_BUDGET_BY_SITE.chatgpt)
     expect(contextCharBudgetForRole(store, makeRole('claude'))).toBe(CONTEXT_CHAR_BUDGET_BY_SITE.claude)
     expect(contextCharBudgetForRole(store, makeRole('deepseek'))).toBe(CONTEXT_CHAR_BUDGET_BY_SITE.deepseek)
+    expect(contextCharBudgetForRole(store, makeRole('grok'))).toBe(CONTEXT_CHAR_BUDGET_BY_SITE.grok)
   })
 
   it('keeps a larger user configured budget', () => {

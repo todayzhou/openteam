@@ -6,7 +6,7 @@ This document is the technical map for OpenTeam. It explains the runtime archite
 
 ## Product Shape
 
-OpenTeam is a Manifest V3 Chrome extension that turns existing AI website sessions into a multi-person AI workspace. The extension does not call ChatGPT, Claude, Gemini, or DeepSeek web models through their model APIs. Instead, it embeds supported AI web pages, sends prompts through content scripts, observes the generated replies, and persists the resulting team conversation locally.
+OpenTeam is a Manifest V3 Chrome extension that turns existing AI website sessions into a multi-person AI workspace. The extension does not call ChatGPT, Claude, Gemini, DeepSeek, or Grok web models through their model APIs. Instead, it embeds supported AI web pages, sends prompts through content scripts, observes the generated replies, and persists the resulting team conversation locally.
 
 The system has three first-class surfaces:
 
@@ -27,7 +27,7 @@ flowchart LR
   Background --> Frames["Runtime frame registry"]
   Frames --> Iframes["AI website iframes"]
   Background --> Content["Content script\nsrc/content"]
-  Content --> Adapter["Site adapter\nGemini / ChatGPT / Claude / DeepSeek"]
+  Content --> Adapter["Site adapter\nGemini / ChatGPT / Claude / DeepSeek / Grok"]
   Adapter --> AIPage["AI website session"]
   AIPage --> Adapter
   Adapter --> Content

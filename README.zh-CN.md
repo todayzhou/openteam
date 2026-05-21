@@ -2,9 +2,9 @@
 
 **🌐 语言:** [English](README.md) | 简体中文
 
-> 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek 组织成一个本地优先的 AI 专家团。
+> 复用你已经登录的 AI 网页账号，把 ChatGPT、Claude、Gemini、DeepSeek、Grok 组织成一个本地优先的 AI 专家团。
 
-OpenTeam 是一个 Manifest V3 Chrome 扩展。它不要求你配置模型 API Key，也不额外消耗 OpenAI、Claude、Gemini 或 DeepSeek 的 API token；它会复用你已经在浏览器里打开的 AI 网页会话，把任务发送给不同人员和不同模型，再把回复汇总到同一个群聊工作台。
+OpenTeam 是一个 Manifest V3 Chrome 扩展。它不要求你配置模型 API Key，也不额外消耗 OpenAI、Claude、Gemini、DeepSeek 或 Grok 的 API token；它会复用你已经在浏览器里打开的 AI 网页会话，把任务发送给不同人员和不同模型，再把回复汇总到同一个群聊工作台。
 
 它适合用于学习、研究和个人非商用实验，处理需要多视角判断的问题：产品评审、技术方案审查、内容创作、个人决策、多模型对比，以及需要多个 AI 角色协作完成的连续任务。
 
@@ -27,7 +27,7 @@ OpenTeam 可以看作 [OpenLink](https://github.com/afumu/openlink) 的姊妹篇
 ## ✨ 核心亮点
 
 - 🚫 **0 API token 工作流**：复用 AI 网站网页会话，而不是直接调用模型 API。
-- 🧩 **多模型讨论**：在同一个群聊里调度 Gemini、ChatGPT、Claude、DeepSeek 等网页端模型。
+- 🧩 **多模型讨论**：在同一个群聊里调度 Gemini、ChatGPT、Claude、DeepSeek、Grok 等网页端模型。
 - 🧑‍🏫 **内置顾问库**：内置 38 个专家 / 思想风格顾问模板，也支持自定义人员。
 - 📣 **基于 @ 的消息路由**：用 `@人员` 定向提问，或用 `@所有人` 同时分发给整个团队。
 - 🔄 **独立与协作两种模式**：先收集彼此独立的视角，再让成员参考、补充或反驳其他观点。
@@ -55,12 +55,13 @@ team.html
 | ChatGPT | 综合执行、工具化工作流、快速迭代 |
 | Claude | 长文档、审查、结构化写作、谨慎推理 |
 | DeepSeek | 代码、推理、中文任务和成本敏感场景 |
+| Grok | 时事研究、替代表述、X/Grok 网页会员会话工作流 |
 
 这些只是常见使用方向，不代表固定排名。实际效果取决于模型版本、账号权益、任务类型和输入材料。
 
 ## ⚠️ 风险提示
 
-OpenTeam 是一个非官方项目，仅供学习、研究和个人非商用用途。它不隶属于 OpenAI、Anthropic、Google、DeepSeek 或任何受支持的 AI 网站，也未获得这些平台背书或支持。
+OpenTeam 是一个非官方项目，仅供学习、研究和个人非商用用途。它不隶属于 OpenAI、Anthropic、Google、DeepSeek、xAI 或任何受支持的 AI 网站，也未获得这些平台背书或支持。
 
 OpenTeam 会通过用户自己登录的浏览器网页会话和 DOM 自动化与 AI 网站交互。目标网站改版、账号规则、限流、反滥用机制或服务条款都可能影响它是否可用。使用者需要自行了解并遵守相关网站规则、政策、法律法规和服务条款。
 

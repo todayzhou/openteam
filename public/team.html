@@ -404,6 +404,10 @@
                 <input id="template-site-deepseek" type="radio" name="template-chat-site" value="deepseek" checked />
                 <span>DeepSeek</span>
               </label>
+              <label class="site-segment" for="template-site-grok">
+                <input id="template-site-grok" type="radio" name="template-chat-site" value="grok" />
+                <span>Grok</span>
+              </label>
               <label class="site-segment" for="template-site-external">
                 <input id="template-site-external" type="radio" name="template-chat-site" value="external" />
                 <span>外部模型</span>
@@ -414,6 +418,11 @@
             <label for="template-chatgpt-gpts-url">GPTs 链接前缀</label>
             <input id="template-chatgpt-gpts-url" type="url" autocomplete="off" placeholder="https://chatgpt.com/g/..." />
             <p class="tiny">选填。保存后，该人员使用 ChatGPT 时会优先打开这个 GPTs。</p>
+          </div>
+          <div id="template-grok-project-field" class="field" hidden>
+            <label for="template-grok-project-url">Grok 项目链接</label>
+            <input id="template-grok-project-url" type="url" autocomplete="off" placeholder="https://grok.com/project/..." />
+            <p class="tiny">选填。保存后，该人员使用 Grok 时会优先打开这个项目。</p>
           </div>
           <div id="template-external-model-field" class="field" hidden>
             <label for="template-external-model-select">外部模型</label>

@@ -73,6 +73,58 @@ describe('background role handlers', () => {
     }))
   })
 
+  it('stores a Grok project URL when creating a Grok template through the route', async () => {
+    vi.resetModules()
+    let draftStore: OpenTeamStore | undefined
+    vi.doMock('./storeAccess', async importOriginal => {
+      const actual = await importOriginal<typeof import('./storeAccess')>()
+      return {
+        ...actual,
+        mutateStore: vi.fn(async (mutator: (store: OpenTeamStore) => unknown) => {
+          const store = createDefaultStore()
+          const result = await mutator(store)
+          draftStore = store
+          return { store, result }
+        }),
+      }
+    })
+
+    const { createRoleHandlers } = await import('./roleHandlers')
+    const routes = createRoleHandlers({
+      broadcastStoreUpdated: vi.fn(),
+      log: { info: vi.fn(), warn: vi.fn() },
+      newId: vi.fn((prefix: string) => `${prefix}-1`),
+      now: vi.fn(() => 100),
+      runtimeFrames: {
+        getByRole: vi.fn(),
+        removeRole: vi.fn(),
+      },
+      sendPrompt: vi.fn(),
+    })
+
+    const createTemplateRoute = routes.find(route => route.type === 'ROLE_TEMPLATE_CREATE')
+    const response = await createTemplateRoute?.handler({
+      type: 'ROLE_TEMPLATE_CREATE',
+      name: '项目顾问',
+      systemPrompt: '在项目上下文中回应',
+      defaultChatSite: 'grok',
+      grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81?source=share',
+    }, {})
+
+    expect(response).toMatchObject({
+      ok: true,
+      template: {
+        id: 'template-1',
+        name: '项目顾问',
+        defaultChatSite: 'grok',
+        grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81',
+      },
+    })
+    expect(draftStore?.roleTemplatesById['template-1']).toMatchObject({
+      grokProjectUrl: 'https://grok.com/project/a9e415eb-149b-42b8-811a-63b12477ed81',
+    })
+  })
+
   it('skips the OpenTeam persona when reinitializing a ChatGPT GPTs role', async () => {
     vi.resetModules()
     const startingStore = createDefaultStore()

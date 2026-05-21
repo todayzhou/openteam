@@ -168,6 +168,7 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="template-site-chatgpt"')
     expect(html).toContain('id="template-site-claude"')
     expect(html).toContain('id="template-site-deepseek"')
+    expect(html).toContain('id="template-site-grok"')
     expect(html).not.toMatch(/id="template-site-gemini"[^>]*checked/)
     expect(html).toMatch(/id="template-site-deepseek"[^>]*checked/)
     for (const site of REMOVED_SITE_IDS) {
@@ -199,6 +200,8 @@ describe('team.html chat creation UI', () => {
     expect(html).toContain('id="chat-note-tab"')
     expect(html).toContain('id="template-chatgpt-gpts-field"')
     expect(html).toContain('id="template-chatgpt-gpts-url"')
+    expect(html).toContain('id="template-grok-project-field"')
+    expect(html).toContain('id="template-grok-project-url"')
     expect(html).toMatch(/\.field\[hidden\]\s*{[^}]*display:\s*none;/s)
     expect(html).toMatch(/\.template-prompt-preview\s*{[^}]*white-space:\s*pre-wrap;/s)
     expect(html).toMatch(/\.template-category-filter\s*{[^}]*flex-wrap:\s*wrap;/s)
@@ -381,7 +384,8 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain("source: 'temporary'")
     expect(source).toContain("if (deps.templateSiteClaudeEl.checked) return 'claude'")
     expect(source).toContain("if (deps.templateSiteDeepSeekEl.checked) return 'deepseek'")
-    expect(source).toContain("const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek'] as const")
+    expect(source).toContain("if (deps.templateSiteGrokEl.checked) return 'grok'")
+    expect(source).toContain("const VISIBLE_CHAT_SITES = ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok'] as const")
     for (const site of REMOVED_SITE_IDS) expect(source).not.toContain(`return '${site}'`)
     expect(source).not.toContain('templateSite' + 'K' + 'imiEl')
     expect(source).not.toContain('templateSite' + 'Q' + 'wenEl')
@@ -403,6 +407,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain('defaultExternalModelId: deps.templateSiteExternalEl.checked ? deps.templateExternalModelSelectEl.value : undefined')
     expect(source).toContain('template.defaultChatSite ?? store.settings.defaultChatSite')
     expect(source).toContain('chatGptGptsUrl: deps.templateSiteChatGptEl.checked ? deps.templateChatGptGptsUrlEl.value.trim() : undefined')
+    expect(source).toContain('grokProjectUrl: deps.templateSiteGrokEl.checked ? deps.templateGrokProjectUrlEl.value.trim() : undefined')
     expect(source).toContain('function syncTemplateModelFields(): void')
     expect(html).not.toContain('默认站点：Gemini')
     expect(html).not.toContain('默认站点：ChatGPT')
@@ -469,7 +474,7 @@ describe('team.html chat creation UI', () => {
   it('normalizes light theme site pills so model badges do not leak dark brand colors', () => {
     const html = readTeamDocument()
 
-    for (const siteClass of ['gemini', 'chatgpt', 'claude', 'deepseek', 'external']) {
+    for (const siteClass of ['gemini', 'chatgpt', 'claude', 'deepseek', 'grok', 'external']) {
       expect(html).toMatch(new RegExp(`:root\\[data-theme="light"\\] \\.site-pill-${siteClass}\\s*{[^}]*background:\\s*#f6f7f8;[^}]*color:\\s*#4b5563;`, 's'))
     }
     expect(html).toMatch(/:root\[data-theme="light"\] #iframe-host \.role-frame-site\s*{[^}]*background:\s*#f6f7f8;[^}]*color:\s*#4b5563;/s)

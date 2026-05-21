@@ -76,6 +76,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       defaultChatSite: readChatSite(message.defaultChatSite),
       defaultExternalModelId: readOptionalString(message.defaultExternalModelId),
       chatGptGptsUrl: readOptionalString(message.chatGptGptsUrl),
+      grokProjectUrl: readOptionalString(message.grokProjectUrl),
     }, deps.newId('template'), deps.now()))
     deps.log.info('role-template:create', { templateId: result.id, nameLength: result.name.length, personaLength: result.systemPrompt.length })
     await deps.broadcastStoreUpdated(store)
@@ -92,6 +93,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       defaultChatSite: readChatSite(patch.defaultChatSite),
       defaultExternalModelId: readOptionalString(patch.defaultExternalModelId),
       chatGptGptsUrl: readOptionalString(patch.chatGptGptsUrl),
+      grokProjectUrl: readOptionalString(patch.grokProjectUrl),
     }, deps.now()))
     deps.log.info('role-template:update', { templateId: result.id, patchKeys: ['name', 'description', 'systemPrompt'], personaLength: result.systemPrompt.length })
     await deps.broadcastStoreUpdated(store)
@@ -128,6 +130,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       systemPrompt: readOptionalString(message.systemPrompt),
       avatarColor: readOptionalString(message.avatarColor),
       chatGptGptsUrl: readOptionalString(message.chatGptGptsUrl),
+      grokProjectUrl: readOptionalString(message.grokProjectUrl),
     }, deps.newId('role'), timestamp))
     deps.log.info('role-create:stored', { chatId, roleId: result.id, source: templateId ? 'library' : 'temporary' })
     await deps.broadcastStoreUpdated(store)
@@ -172,6 +175,8 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
         modelSource: readModelSource(patch.modelSource),
         chatSite: readChatSite(patch.chatSite),
         externalModelId: readOptionalString(patch.externalModelId),
+        chatGptGptsUrl: readOptionalString(patch.chatGptGptsUrl),
+        grokProjectUrl: readOptionalString(patch.grokProjectUrl),
       }, deps.now())
       const siteChanged = previousChatSite !== updatedRole.chatSite
       if (siteChanged) deps.runtimeFrames.removeRole(updatedRole.chatId, updatedRole.id)
@@ -337,7 +342,7 @@ function getRawBatchSource(items: unknown[]): 'library' | 'temporary' | 'mixed' 
 }
 
 function readChatSite(value: unknown): ChatSite | undefined {
-  return value === 'chatgpt' || value === 'claude' || value === 'gemini' || value === 'deepseek' ? value : undefined
+  return value === 'chatgpt' || value === 'claude' || value === 'gemini' || value === 'deepseek' || value === 'grok' ? value : undefined
 }
 
 function readModelSource(value: unknown): 'site' | 'external' | undefined {

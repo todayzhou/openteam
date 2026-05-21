@@ -113,7 +113,7 @@ openteamcli run create-and-post --file task.json --wait
 }
 ```
 
-临时角色只属于当前群聊，不会写入人员库。
+临时角色只属于当前群聊，不会写入人员库。`chatSite` 可用值：`deepseek`、`chatgpt`、`gemini`、`claude`、`grok`。
 
 如果模拟真实公众人物、公司创始人或专家风格，必须在 `systemPrompt` 里明确：
 
