@@ -7,6 +7,16 @@ export function querySelectorFirst(selectors: string): HTMLElement | null {
   return null
 }
 
+export function querySelectorFirstMatching(selectors: string, predicate: (element: HTMLElement) => boolean): HTMLElement | null {
+  for (const selector of selectors.split(',').map(item => item.trim())) {
+    const elements = [...document.querySelectorAll<HTMLElement>(selector)]
+    const match = elements.find(predicate)
+    if (match) return match
+  }
+
+  return null
+}
+
 export function waitForElement(selectors: string, timeoutMs: number): Promise<HTMLElement> {
   const immediate = querySelectorFirst(selectors)
   if (immediate) return Promise.resolve(immediate)
@@ -33,8 +43,8 @@ export function waitForClickableButton(selectors: string, timeoutMs: number, err
   return new Promise((resolve, reject) => {
     const startedAt = Date.now()
     const timer = window.setInterval(() => {
-      const button = querySelectorFirst(selectors)
-      if (button && isClickableButton(button)) {
+      const button = querySelectorFirstMatching(selectors, isClickableButton)
+      if (button) {
         window.clearInterval(timer)
         resolve(button)
         return

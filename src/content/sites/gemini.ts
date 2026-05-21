@@ -74,8 +74,12 @@ export function createGeminiAdapter(options: GeminiAdapterOptions = {}): ChatSit
 
     if (!autoSend) return
 
-    const sendButton = await waitForClickableButton(GEMINI_SELECTORS.sendButton, inputTimeoutMs, 'Gemini 发送按钮暂不可用，请稍后重试')
-    sendButton.click()
+    try {
+      const sendButton = await waitForClickableButton(GEMINI_SELECTORS.sendButton, inputTimeoutMs, 'Gemini 发送按钮暂不可用，请稍后重试')
+      sendButton.click()
+    } catch (error) {
+      if (!tryKeyboardSubmit(editor)) throw error
+    }
   }
 
   return {
@@ -165,4 +169,27 @@ async function stopGeminiGenerating(): Promise<boolean> {
 
 function findGeminiStopButton(): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止/) && isClickableButton(button))
+}
+
+function tryKeyboardSubmit(editor: HTMLElement): boolean {
+  editor.focus()
+  return dispatchEnter(editor) || dispatchEnter(editor, { metaKey: true })
+}
+
+function dispatchEnter(editor: HTMLElement, options: { metaKey?: boolean } = {}): boolean {
+  const eventOptions = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    key: 'Enter',
+    code: 'Enter',
+    keyCode: 13,
+    which: 13,
+    metaKey: options.metaKey ?? false,
+  }
+
+  editor.dispatchEvent(new KeyboardEvent('keydown', eventOptions))
+  editor.dispatchEvent(new KeyboardEvent('keypress', eventOptions))
+  editor.dispatchEvent(new KeyboardEvent('keyup', eventOptions))
+  return true
 }

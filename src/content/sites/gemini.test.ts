@@ -52,6 +52,35 @@ describe('Gemini site adapter', () => {
     expect(clickListener).toHaveBeenCalledTimes(1)
   })
 
+  it('uses a later clickable Gemini send button when the first match stays disabled', async () => {
+    document.body.innerHTML = `
+      <rich-textarea><div contenteditable="true"></div></rich-textarea>
+      <button class="send-button" aria-label="Send" disabled>Old Send</button>
+      <button class="send-button" aria-label="Send">Live Send</button>
+    `
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('button')]
+    const clickListener = vi.fn()
+    buttons[1]?.addEventListener('click', clickListener)
+
+    await createGeminiAdapter({ inputTimeoutMs: 250 }).fillAndSend('hello', true)
+
+    expect(clickListener).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to keyboard submit when Gemini send button cannot be found', async () => {
+    document.body.innerHTML = '<rich-textarea><div contenteditable="true"></div></rich-textarea>'
+    const editor = document.querySelector<HTMLElement>('[contenteditable="true"]')!
+    const keydownListener = vi.fn((event: KeyboardEvent) => {
+      if (event.key === 'Enter') event.preventDefault()
+    })
+    editor.addEventListener('keydown', keydownListener)
+
+    await createGeminiAdapter({ inputTimeoutMs: 50 }).fillAndSend('hello', true)
+
+    expect(keydownListener).toHaveBeenCalled()
+    expect(keydownListener.mock.calls[0]?.[0]?.key).toBe('Enter')
+  })
+
   it('reads assistant replies from deepest Gemini response containers', () => {
     document.body.innerHTML = `
       <model-response>
