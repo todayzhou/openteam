@@ -255,7 +255,7 @@ function appendWelcomeMessage(
   markChatRead(store, chat)
 }
 
-function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
+export function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps: ChatHandlersDependencies): { chat: GroupChat; roles: GroupRole[] } {
   const timestamp = deps.now()
   const sourceChat = requireChat(store, sourceChatId)
   const chat: GroupChat = {
@@ -287,6 +287,9 @@ function duplicateChat(store: OpenTeamStore, sourceChatId: unknown, deps: ChatHa
       ...(sourceRole.description ? { description: sourceRole.description } : {}),
       ...(sourceRole.systemPrompt ? { systemPrompt: sourceRole.systemPrompt } : {}),
       ...(sourceRole.avatarColor ? { avatarColor: sourceRole.avatarColor } : {}),
+      ...(sourceRole.modelSource ? { modelSource: sourceRole.modelSource } : {}),
+      ...(sourceRole.chatSite ? { chatSite: sourceRole.chatSite } : {}),
+      ...(sourceRole.externalModelId ? { externalModelId: sourceRole.externalModelId } : {}),
       status: 'pending',
       contextCursor: 0,
       createdAt: timestamp,

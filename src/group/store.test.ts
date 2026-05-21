@@ -11,10 +11,11 @@ import {
   saveStore,
   updateStoreQueued,
 } from './store'
+import { duplicateChat } from '../background/chatHandlers'
 import { BUILTIN_ROLE_TEMPLATES } from './builtinRoleTemplates'
 import { DEFAULT_CUSTOM_ROLE_TEMPLATES } from './defaultCustomRoleTemplates'
 import { defaultLanguageForEnvironment } from '../shared/i18n'
-import type { GroupMessage, OpenTeamStore } from './types'
+import type { GroupMessage, GroupRole, OpenTeamStore, RoomMode } from './types'
 
 describe('group store', () => {
   let stored: Record<string, unknown>
@@ -761,6 +762,81 @@ describe('group store', () => {
     const store = await loadStore()
     expect(store.chatOrder).toEqual(['chat-1', 'chat-2', 'chat-3'])
     expect(Object.keys(store.chatsById)).toEqual(['chat-1', 'chat-2', 'chat-3'])
+  })
+
+  describe('chat duplication', () => {
+    it('preserves the full data contract (name, mode, role metadata, and model bindings) when duplicating a chat', () => {
+      const store = createDefaultStore()
+      const deps = {
+        newId: (prefix: string) => `${prefix}-${Math.random()}`,
+        now: () => Date.now(),
+        broadcastStoreUpdated: vi.fn(),
+        getChatStatusFromRoles: vi.fn(),
+        log: {
+          info: vi.fn(),
+          warn: vi.fn(),
+        },
+        runtimeFrames: {
+          removeRole: vi.fn(),
+        },
+      } as any
+
+      const sourceChatId = 'source-chat'
+      const sourceChatName = '核心专家组'
+      const sourceMode: RoomMode = 'collaborative'
+
+      store.chatsById[sourceChatId] = {
+        id: sourceChatId,
+        name: sourceChatName,
+        description: '这是一个测试副本的描述',
+        mode: sourceMode,
+        roleIds: ['role-1'],
+        messageIds: [],
+        nextMessageSeq: 1,
+        status: 'ready',
+        createdAt: 1,
+        updatedAt: 1,
+      }
+      store.chatOrder = [sourceChatId]
+
+      const sourceRole: GroupRole = {
+        id: 'role-1',
+        chatId: sourceChatId,
+        name: '首席架构师',
+        description: '负责系统设计',
+        systemPrompt: '你是一个架构师...',
+        avatarColor: '#FF0000',
+        modelSource: 'external',
+        chatSite: 'deepseek',
+        externalModelId: 'ext-model-123',
+        status: 'ready',
+        contextCursor: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+      store.rolesById['role-1'] = sourceRole
+
+      const { chat: newChat } = duplicateChat(store, sourceChatId, deps)
+
+      // 1. 验证群聊主体合约
+      expect(newChat.name).toContain(sourceChatName)
+      expect(newChat.mode).toBe(sourceMode)
+      expect(newChat.description).toBe('这是一个测试副本的描述')
+
+      // 2. 验证角色合约
+      const newRoleId = newChat.roleIds[0]
+      const newRole = store.rolesById[newRoleId]
+
+      expect(newRole).toBeDefined()
+      expect(newRole.name).toBe(sourceRole.name)
+      expect(newRole.description).toBe(sourceRole.description)
+      expect(newRole.systemPrompt).toBe(sourceRole.systemPrompt)
+      expect(newRole.avatarColor).toBe(sourceRole.avatarColor)
+      expect(newRole.modelSource).toBe(sourceRole.modelSource)
+      expect(newRole.chatSite).toBe(sourceRole.chatSite)
+      expect(newRole.externalModelId).toBe(sourceRole.externalModelId)
+      expect(newRole.chatId).toBe(newChat.id)
+    })
   })
 })
 
