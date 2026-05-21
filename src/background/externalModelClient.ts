@@ -101,7 +101,7 @@ async function* streamExternalModel(input: ExternalModelCompletionInput, fetchIm
       for await (const textPart of result.textStream) {
         if (textPart) yield textPart
       }
-      return 
+      return
     } catch (error: any) {
       attempt++
       const status = error.status || error.response?.status

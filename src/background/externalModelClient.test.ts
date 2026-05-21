@@ -47,7 +47,7 @@ describe('ExternalModelClient Stability Baseline', () => {
 
     const client = createExternalModelClient(mockFetch)
     const result = await client.complete({ model: mockConfig, prompt: 'Hi' })
-    
+
     expect(result.content).toBe('Hello World')
   })
 
@@ -65,7 +65,7 @@ describe('ExternalModelClient Stability Baseline', () => {
 
     const client = createExternalModelClient(mockFetch)
     const result = await client.complete({ model: mockConfig, prompt: 'Hi' })
-    
+
     expect(callCount).toBe(2)
     expect(result.content).toBe('Success after retry')
   }, 10000)
@@ -80,10 +80,10 @@ describe('ExternalModelClient Stability Baseline', () => {
     })
 
     const client = createExternalModelClient(mockFetch)
-    
+
     await expect(client.complete({ model: mockConfig, prompt: 'Hi' }))
       .rejects.toThrow(ExternalModelError)
-    
+
     expect(callCount).toBe(3)
   }, 10000)
 
@@ -95,10 +95,10 @@ describe('ExternalModelClient Stability Baseline', () => {
     })
 
     const client = createExternalModelClient(mockFetch)
-    
+
     await expect(client.complete({ model: mockConfig, prompt: 'Hi' }))
       .rejects.toThrow(ExternalModelError)
-    
+
     expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1)
   })
 })
