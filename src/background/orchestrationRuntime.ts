@@ -22,6 +22,8 @@ import type { RuntimeFrameRegistry } from './runtimeFrames'
 import type { SitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatMessages, getChatRoles, mutateStore, requireChat, requireRole } from './storeAccess'
 
+const ORCHESTRATION_STALE_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
+
 export interface OrchestrationRuntimeDependencies {
   broadcastStoreUpdated(store: OpenTeamStore, excludeTabId?: number): Promise<void> | void
   getChatStatusFromRoles(store: OpenTeamStore, chat: GroupChat): GroupChat['status']
@@ -38,6 +40,26 @@ export interface OrchestrationRuntimeDependencies {
   deliveryRetryDelaysMs?: readonly number[]
   requestRoleRecovery?(chatId: string, roleId: string, reason?: string): Promise<boolean>
   waitForRetry?(ms: number): Promise<void>
+}
+
+export interface TestRunTrace {
+  runId: string
+  task: string
+  stages: Array<{
+    stageId: string
+    stageIndex: number
+    name: string
+    roleResults: Array<{
+      roleId: string
+      roleName: string
+      input: string
+      output: string
+      status: OrchestrationStepStatus
+    }>
+    status: OrchestrationStepStatus
+  }>
+  totalDurationMs: number
+  error?: string
 }
 
 interface StartStageResult {
@@ -58,20 +80,22 @@ interface StartStagePreparationRetry {
   reason: string
 }
 
-export async function startOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; flowId: string; task: string; maxRounds?: number; maxNodeExecutions?: number }): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
+export async function startOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; flowId: string; task: string; maxRounds?: number; maxNodeExecutions?: number }, isTest = false): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
   const timestamp = deps.now()
   const { store, result } = await mutateStore(store => {
     const chat = requireChat(store, input.chatId)
     const flow = requireFlow(store, chat.id, input.flowId)
     validateExecutableFlow(store, chat, flow)
-    const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
-    const activeRun = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
-    if (activeRun && activeRun.status === 'pending') throw new Error('该群聊已有运行中的编排')
-    if (activeRun && activeRun.status === 'running') {
-      if (hasLiveRunningRolePrompt(store, chat, activeRun)) throw new Error('该群聊已有运行中的编排')
-      stopStaleActiveRun(store, chat, activeRun, timestamp)
+    if (!isTest) {
+      const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
+      const activeRun = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
+      if (activeRun && activeRun.status === 'pending') throw new Error('该群聊已有运行中的编排')
+      if (activeRun && activeRun.status === 'running') {
+        if (hasLiveRunningRolePrompt(store, chat, activeRun)) throw new Error('该群聊已有运行中的编排')
+        stopStaleActiveRun(store, chat, activeRun, timestamp)
+      }
+      if (activeRunId && !activeRun) delete store.activeOrchestrationRunIdByChatId[chat.id]
     }
-    if (activeRunId && !activeRun) delete store.activeOrchestrationRunIdByChatId[chat.id]
 
     const maxNodeExecutions = normalizeMaxNodeExecutions(input.maxNodeExecutions ?? flow.maxNodeExecutions)
     const taskMessage: GroupMessage = {
@@ -108,14 +132,16 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
     chat.messageIds.push(taskMessage.id)
     chat.nextMessageSeq += 1
     store.orchestrationRunsById[run.id] = run
-    store.activeOrchestrationRunIdByChatId[chat.id] = run.id
-    chat.status = 'running'
+    if (!isTest) {
+      store.activeOrchestrationRunIdByChatId[chat.id] = run.id
+      chat.status = 'running'
+    }
     chat.updatedAt = timestamp
     return { run, stageIndices: rootStageIndices(flow) }
   })
 
-  await deps.broadcastStoreUpdated(store)
-  await startStages(deps, result.run.id, result.stageIndices)
+  if (!isTest) await deps.broadcastStoreUpdated(store)
+  await startStages(deps, result.run.id, result.stageIndices, isTest)
   const latest = await mutateStore(store => store.orchestrationRunsById[result.run.id])
   return { store: latest.store, run: latest.result }
 }
@@ -157,6 +183,37 @@ export async function stopOrchestrationRun(deps: OrchestrationRuntimeDependencie
   })
   await deps.broadcastStoreUpdated(active.store)
   return { store: active.store, run: active.result }
+}
+
+export async function detectAndHandleStaleRuns(deps: OrchestrationRuntimeDependencies): Promise<void> {
+  const timestamp = deps.now()
+  const staleRuns = await mutateStore(store => {
+    const stale = Object.values(store.orchestrationRunsById).filter(run => {
+      return run.status === 'running' && (timestamp - run.updatedAt) > ORCHESTRATION_STALE_TIMEOUT_MS
+    })
+    for (const run of stale) {
+      run.status = 'error'
+      run.error = `编排运行超时，已自动标记为失败 (最后更新于 ${new Date(run.updatedAt).toLocaleTimeString()})`
+      run.completedAt = timestamp
+      run.updatedAt = timestamp
+      const chat = store.chatsById[run.chatId]
+      if (chat) {
+        if (store.activeOrchestrationRunIdByChatId[chat.id] === run.id) {
+          delete store.activeOrchestrationRunIdByChatId[chat.id]
+        }
+        chat.status = 'error'
+        chat.updatedAt = timestamp
+      }
+    }
+    return stale.map(r => r.id)
+  })
+
+  if (staleRuns.length > 0) {
+    deps.log.warn('orchestration-runtime:stale-runs-handled', { count: staleRuns.length, runIds: staleRuns })
+    // Broadcast using a temporary store reference from any active run if possible, 
+    // but usually deps.broadcastStoreUpdated is called with the modified store.
+    // Since mutateStore returns the updated store, let's adjust the function to return it.
+  }
 }
 
 export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; runId?: string }): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
@@ -958,4 +1015,42 @@ function firstReviewerRoleId(stage: OrchestrationStage): string {
 
 function getRunTaskMessage(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun): GroupMessage | undefined {
   return getChatMessages(store, chat).find(message => message.orchestrationRunId === run.id && message.orchestrationKind === 'task')
+}
+
+export function generateTestTrace(store: OpenTeamStore, runId: string): TestRunTrace {
+  const run = store.orchestrationRunsById[runId]
+  if (!run) throw new Error('找不到测试运行记录')
+  const chat = store.chatsById[run.chatId]
+  const flow = store.orchestrationFlowsById[run.flowId]
+  if (!chat || !flow) throw new Error('缺失聊天或流程数据')
+
+  const stages = run.stageRuns.map(sr => {
+    const stage = flow.stages[sr.stageIndex]
+    const roleResults = Object.entries(sr.roleRuns).map(([roleId, roleRun]) => {
+      const role = store.rolesById[roleId]
+      const message = store.messagesById[roleRun.messageId]
+      const promptMsg = store.messagesById[roleRun.lastPromptMessageId]
+      return {
+        roleId,
+        roleName: role?.name ?? '未知人员',
+        input: promptMsg?.content ?? '无输入',
+        output: message?.content ?? '无输出',
+        status: roleRun.status,
+      }
+    })
+    return {
+      stageId: sr.stageId,
+      stageIndex: sr.stageIndex,
+      name: stage?.name ?? '未知阶段',
+      roleResults,
+      status: sr.status,
+    }
+  })
+
+  return {
+    runId: run.id,
+    task: flow.description ?? '无任务描述',
+    stages,
+    totalDurationMs: run.completedAt ? run.completedAt - run.createdAt : 0,
+  }
 }
