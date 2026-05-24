@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { extractMarkdownFromDom } from '../content/sites/domMarkdown'
 import { DEFAULT_MESSAGE_HIGHLIGHT_COLOR, MESSAGE_HIGHLIGHT_COLORS, messageHighlightColorRgb, type MessageHighlightColor } from '../group/highlightColors'
 import { roleMentionLabel, roleMentionLabelOptionsFromSettings, roleModelLabel } from '../group/mentionParser'
 import type { GroupChat, GroupMessage, GroupRole, MessageHighlight, MessageReference, OpenTeamStore, OrchestrationReviewResult } from '../group/types'
@@ -262,7 +263,7 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function renderMarkdownMessageBody(body: HTMLElement, content: string): void {
     body.classList.add('markdown-body')
-    body.innerHTML = markdownRenderer.render(content)
+    body.innerHTML = markdownRenderer.render(normalizeAssistantMarkdown(content))
     for (const link of body.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       link.target = '_blank'
       link.rel = 'noreferrer'
@@ -281,6 +282,19 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
 
   function shouldRenderMarkdownMessage(message: GroupMessage): boolean {
     return message.contentFormat === 'markdown' || message.type === 'assistant'
+  }
+
+  function normalizeAssistantMarkdown(content: string): string {
+    if (!looksLikeHtmlFragment(content)) return content
+
+    const template = document.createElement('template')
+    template.innerHTML = content
+    const normalized = extractMarkdownFromDom(template.content)
+    return normalized || content
+  }
+
+  function looksLikeHtmlFragment(content: string): boolean {
+    return /<(table|thead|tbody|tr|th|td|pre|code|math|mi|mn|mo|msup|msub|mfrac|semantics|annotation|annotation-xml)\b/i.test(content)
   }
 
   function createMessageIconButton(label: string, icon: MessageActionIcon, onClick: (button: HTMLButtonElement) => void, options: { activateOnPointerDown?: boolean } = {}): HTMLButtonElement {

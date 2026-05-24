@@ -863,7 +863,7 @@ describe('team.html chat creation UI', () => {
     expect(source).toContain('renderPlainMessageBody(body, message.content)')
     expect(source).toContain('pill.append(document.createTextNode(message.content))')
     expect(source).toContain('MarkdownIt')
-    expect(source).toContain('body.innerHTML = markdownRenderer.render(content)')
+    expect(source).toContain('body.innerHTML = markdownRenderer.render(normalizeAssistantMarkdown(content))')
     expect(html).toMatch(/\.message-body\s*{[^}]*white-space:\s*pre-wrap;/s)
     expect(html).toContain('.message-body.markdown-body')
   })

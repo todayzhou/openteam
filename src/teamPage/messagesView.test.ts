@@ -167,6 +167,152 @@ describe('team page messages view boundary', () => {
     expect(messagesEl.querySelector('.markdown-body strong')?.textContent).toBe('重点')
   })
 
+  it('renders assistant html table fragments as visible markdown tables', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '<table><thead><tr><th>模型</th><th>结论</th></tr></thead><tbody><tr><td>Claude</td><td>可行</td></tr></tbody></table>',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: currentMessage => currentMessage.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    const table = messagesEl.querySelector('.markdown-body table')
+    expect(table).not.toBeNull()
+    expect(table?.textContent).toContain('模型')
+    expect(table?.textContent).toContain('Claude')
+    expect(table?.textContent).toContain('可行')
+  })
+
+  it('renders assistant math html fragments as visible text instead of blank output', () => {
+    const now = Date.now()
+    const chat: GroupChat = {
+      id: 'chat-1',
+      name: '群聊',
+      mode: 'independent',
+      roleIds: ['role-1'],
+      messageIds: ['msg-1'],
+      nextMessageSeq: 2,
+      status: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    }
+    const role: GroupRole = {
+      id: 'role-1',
+      chatId: chat.id,
+      name: '工程师',
+      status: 'ready',
+      contextCursor: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const message: GroupMessage = {
+      id: 'msg-1',
+      chatId: chat.id,
+      seq: 1,
+      type: 'assistant',
+      content: '<math><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></math>',
+      roleId: role.id,
+      roleName: role.name,
+      createdAt: now,
+      status: 'received',
+    }
+    const store: OpenTeamStore = {
+      ...createDefaultStore(),
+      currentChatId: chat.id,
+      chatOrder: [chat.id],
+      chatsById: { [chat.id]: chat },
+      rolesById: { [role.id]: role },
+      messagesById: { [message.id]: message },
+    }
+    const messagesEl = document.createElement('section')
+
+    createMessagesView({
+      state: createTeamPageState(),
+      getStore: () => store,
+      messagesEl,
+      getCurrentChat: () => chat,
+      getCurrentRoles: () => [role],
+      getCurrentMessages: () => [message],
+      emptyCard: () => document.createElement('div'),
+      openAddPersonDialog: vi.fn(),
+      roleToneClass: () => 'role-tone-1',
+      roleAvatarLabel: () => '工',
+      messageTitle: currentMessage => currentMessage.roleName ?? 'AI 人员',
+      focusRoleFrame: vi.fn(),
+      insertMention: vi.fn(),
+      setReference: vi.fn(),
+      resyncMessageReply: vi.fn(async () => undefined),
+      retryRoleReply: vi.fn(async () => undefined),
+      stopRoleReply: vi.fn(async () => undefined),
+      runCommand: vi.fn(async () => undefined),
+      render: vi.fn(),
+      showError: vi.fn(),
+      showSuccess: vi.fn(),
+      log: { warn: vi.fn() },
+    }).renderMessages()
+
+    expect(messagesEl.querySelector('.markdown-body')?.textContent?.replace(/\s+/g, '')).toContain('E=mc2')
+  })
+
   it('renders a direct iframe jump icon beside assistant site badges', () => {
     const now = Date.now()
     const chat: GroupChat = {

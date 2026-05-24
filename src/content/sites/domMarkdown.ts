@@ -6,6 +6,7 @@ export function extractMarkdownFromDom(node: Node): string {
 
 function block(node: Node, depth = 0): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
+  if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) return [...node.childNodes].map(child => block(child, depth)).join('')
   if (node.nodeType !== Node.ELEMENT_NODE) return ''
 
   const element = node as Element
