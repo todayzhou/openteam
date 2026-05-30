@@ -44,7 +44,7 @@ const { noteBoldEl, noteItalicEl, noteStrikeEl, noteBulletListEl, noteOrderedLis
 const { peopleLibrarySummaryEl, peopleLibraryListEl, peopleLibraryPaginationEl, peopleLibrarySearchEl, peopleLibraryCategoryFilterEl, peopleLibraryBuiltinTabEl, peopleLibraryCustomTabEl, addLibraryPeopleListEl, addPersonSearchEl, addPersonCategoryFilterEl, addPersonBuiltinTabEl, addPersonCustomTabEl } = teamDomRefs
 const { builtinTemplateDetailModalEl, builtinTemplateDetailTitleEl, builtinTemplateDetailMetaEl, builtinTemplateDetailPromptEl, closeBuiltinTemplateDetailEl, newTemplateEl, closePersonTemplateEl, closeAddPersonEl } = teamDomRefs
 const { openTemporaryPersonEl, closeTemporaryPersonEl, addRoleFormEl, addLibraryPeopleFormEl, addTemporaryPersonFormEl, peopleLibraryFormEl } = teamDomRefs
-const { templateSiteGeminiEl, templateSiteChatGptEl, templateSiteClaudeEl, templateSiteDeepSeekEl, templateSiteGrokEl, templateSiteExternalEl, templateExternalModelFieldEl, templateExternalModelSelectEl, templateChatGptGptsFieldEl, templateChatGptGptsUrlEl, templateGrokProjectFieldEl, templateGrokProjectUrlEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
+const { templateSiteGeminiEl, templateSiteChatGptEl, templateSiteClaudeEl, templateSiteDeepSeekEl, templateSiteGrokEl, templateSiteQwenEl, templateSiteExternalEl, templateExternalModelFieldEl, templateExternalModelSelectEl, templateChatGptGptsFieldEl, templateChatGptGptsUrlEl, templateGrokProjectFieldEl, templateGrokProjectUrlEl, temporaryPersonNameEl, temporaryPersonDescriptionEl, temporaryPersonPromptEl } = teamDomRefs
 const { togglePeopleDrawerEl, rolePanelEl, windowLauncherEl, windowResizeHandleEl } = teamDomRefs
 const log = teamPageLog
 const showError = createErrorPresenter(errorEl)
@@ -298,6 +298,7 @@ const peopleLibraryView = createPeopleLibraryView({
   templateSiteClaudeEl,
   templateSiteDeepSeekEl,
   templateSiteGrokEl,
+  templateSiteQwenEl,
   templateSiteExternalEl,
   templateExternalModelFieldEl,
   templateExternalModelSelectEl,
